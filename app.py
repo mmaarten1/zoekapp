@@ -1,3 +1,4 @@
+import os
 from flask import Flask, render_template_string, request
 import requests
 
@@ -104,4 +105,4 @@ def index():
     return render_template_string(HTML, bedrijven=bedrijven, stad=stad, categorie=categorie, extra=extra)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
