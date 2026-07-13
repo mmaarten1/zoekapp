@@ -1,76 +1,91 @@
 import os
+import json
 from flask import Flask, render_template_string, request
-import requests
 
 app = Flask(__name__)
 
-def zoek_bedrijven(stad, categorie, extra=""):
-    zoekvraag = categorie + " " + extra + " " + stad
-    url = "https://nominatim.openstreetmap.org/search"
-    params = {
-        "q": zoekvraag,
-        "format": "json",
-        "limit": 10,
-        "addressdetails": 1
-    }
-    headers = {"User-Agent": "zoekapp/1.0"}
-    response = requests.get(url, headers=headers, params=params)
-    return response.json()
+with open("bedrijven.json", "r", encoding="utf-8") as f:
+    ENF_BEDRIJVEN = json.load(f)
 
 HTML = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Zoekapp</title>
+    <title>Papierrecycling Zoekapp</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Segoe UI, Arial; background: #f0f4f8; }
-        .header { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: white; padding: 40px 20px; text-align: center; }
-        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: white; padding: 30px 20px; text-align: center; }
+        .header h1 { font-size: 2em; margin-bottom: 5px; }
         .header p { opacity: 0.8; }
-        .zoekbalk { background: white; padding: 25px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .zoekbalk input { padding: 12px 20px; width: 200px; border: 2px solid #e0e0e0; border-radius: 25px; font-size: 1em; outline: none; }
-        .zoekbalk input:focus { border-color: #1a73e8; }
-        .zoekbalk button { padding: 12px 30px; background: #1a73e8; color: white; border: none; border-radius: 25px; font-size: 1em; cursor: pointer; }
-        .inhoud { max-width: 1200px; margin: 30px auto; padding: 0 20px; display: flex; gap: 20px; }
-        .lijst { flex: 1; }
-        .kaart-container { flex: 1; }
-        #kaart { height: 500px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .stats { background: #1a73e8; color: white; padding: 15px 25px; border-radius: 10px; margin-bottom: 20px; }
-        .bedrijf { background: white; padding: 15px 20px; margin: 10px 0; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-left: 4px solid #1a73e8; cursor: pointer; transition: transform 0.2s; }
+        .zoekbalk { background: white; padding: 20px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .zoekbalk input, .zoekbalk select { padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 25px; font-size: 0.9em; outline: none; }
+        .zoekbalk input:focus, .zoekbalk select:focus { border-color: #1a73e8; }
+        .zoekbalk button { padding: 10px 25px; background: #1a73e8; color: white; border: none; border-radius: 25px; font-size: 0.9em; cursor: pointer; }
+        .inhoud { max-width: 1300px; margin: 20px auto; padding: 0 20px; display: flex; gap: 20px; }
+        .lijst { flex: 1; max-height: 600px; overflow-y: auto; }
+        .kaart-container { flex: 1.2; }
+        #kaart { height: 600px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .stats { background: #1a73e8; color: white; padding: 12px 20px; border-radius: 10px; margin-bottom: 15px; }
+        .bedrijf { background: white; padding: 12px 15px; margin: 8px 0; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-left: 4px solid #1a73e8; cursor: pointer; transition: transform 0.2s; }
         .bedrijf:hover { transform: translateX(5px); background: #e8f0fe; }
-        .bedrijf h3 { color: #1a73e8; margin-bottom: 5px; font-size: 1em; }
-        .bedrijf p { color: #666; font-size: 0.85em; }
-        .nummer { display: inline-block; background: #1a73e8; color: white; width: 26px; height: 26px; border-radius: 50%; text-align: center; line-height: 26px; margin-right: 8px; font-size: 0.85em; }
+        .bedrijf h3 { color: #1a73e8; margin-bottom: 4px; font-size: 0.95em; }
+        .bedrijf p { color: #666; font-size: 0.8em; }
+        .tag { display: inline-block; background: #e8f0fe; color: #1a73e8; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; margin: 2px; }
+        .nummer { display: inline-block; background: #1a73e8; color: white; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; margin-right: 6px; font-size: 0.8em; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Zoekapp</h1>
-        <p>Vind bedrijven slim en snel in elke stad</p>
+        <h1>🔍 Papierrecycling Zoekapp</h1>
+        <p>{{ totaal }} bedrijven in de database</p>
     </div>
     <div class="zoekbalk">
         <form method="POST" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
-            <input name="stad" placeholder="Stad" value="{{ stad }}">
-            <input name="categorie" placeholder="Categorie" value="{{ categorie }}">
-            <input name="extra" placeholder="Extra filter" value="{{ extra }}">
-            <button type="submit">Zoeken</button>
+            <input name="zoekterm" placeholder="Zoek op naam..." value="{{ zoekterm }}" style="width:200px;">
+            <input name="regio" placeholder="Regio (bijv. London)..." value="{{ regio }}" style="width:180px;">
+            <select name="klanttype">
+                <option value="">Alle klanttypes</option>
+                <option value="Commercial" {% if klanttype == "Commercial" %}selected{% endif %}>Commercial</option>
+                <option value="Industrial" {% if klanttype == "Industrial" %}selected{% endif %}>Industrial</option>
+                <option value="Residential" {% if klanttype == "Residential" %}selected{% endif %}>Residential</option>
+            </select>
+            <select name="materiaal">
+                <option value="">Alle materialen</option>
+                <option value="Paper" {% if materiaal == "Paper" %}selected{% endif %}>Paper</option>
+                <option value="Plastic" {% if materiaal == "Plastic" %}selected{% endif %}>Plastic</option>
+                <option value="Metal" {% if materiaal == "Metal" %}selected{% endif %}>Metal</option>
+                <option value="Glass" {% if materiaal == "Glass" %}selected{% endif %}>Glass</option>
+            </select>
+            <button type="submit">🔍 Zoeken</button>
         </form>
     </div>
     <div class="inhoud">
         <div class="lijst">
             {% if bedrijven %}
             <div class="stats">
-                {{ bedrijven|length }} resultaten voor {{ categorie }} in {{ stad }}
+                📊 {{ bedrijven|length }} bedrijven gevonden
             </div>
             {% for bedrijf in bedrijven %}
             <div class="bedrijf" onclick="flyTo({{ bedrijf.lat }}, {{ bedrijf.lon }})">
-                <h3><span class="nummer">{{ loop.index }}</span>{{ bedrijf.display_name.split(",")[0] }}</h3>
-                <p>{{ bedrijf.display_name }}</p>
+                <h3><span class="nummer">{{ loop.index }}</span>{{ bedrijf.naam }}</h3>
+                <p>📍 {{ bedrijf.regio }}</p>
+                {% if bedrijf.klanttype %}
+                <p>
+                {% for type in bedrijf.klanttype.split(",") %}
+                <span class="tag">{{ type.strip() }}</span>
+                {% endfor %}
+                {% if bedrijf.volume %}
+                <span class="tag">📦 {{ bedrijf.volume }} ton/jaar</span>
+                {% endif %}
+                </p>
+                {% endif %}
             </div>
             {% endfor %}
+            {% else %}
+            <p style="padding:20px; color:#666;">Geen bedrijven gevonden. Pas je filters aan.</p>
             {% endif %}
         </div>
         {% if bedrijven %}
@@ -78,12 +93,12 @@ HTML = '''
             <div id="kaart"></div>
         </div>
         <script>
-            var kaart = L.map("kaart").setView([{{ bedrijven[0].lat }}, {{ bedrijven[0].lon }}], 11);
+            var kaart = L.map("kaart").setView([{{ bedrijven[0].lat }}, {{ bedrijven[0].lon }}], 6);
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(kaart);
             {% for bedrijf in bedrijven %}
-            L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(kaart).bindPopup("{{ bedrijf.display_name.split(',')[0] }}");
+            L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(kaart).bindPopup("<b>{{ bedrijf.naam }}</b><br>{{ bedrijf.regio }}<br>{{ bedrijf.klanttype }}");
             {% endfor %}
-            function flyTo(lat, lon) { kaart.flyTo([lat, lon], 15); }
+            function flyTo(lat, lon) { kaart.flyTo([lat, lon], 12); }
         </script>
         {% endif %}
     </div>
@@ -93,16 +108,28 @@ HTML = '''
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    bedrijven = []
-    stad = ""
-    categorie = ""
-    extra = ""
+    zoekterm = ""
+    regio = ""
+    klanttype = ""
+    materiaal = ""
+    bedrijven = ENF_BEDRIJVEN
+
     if request.method == "POST":
-        stad = request.form["stad"]
-        categorie = request.form["categorie"]
-        extra = request.form.get("extra", "")
-        bedrijven = zoek_bedrijven(stad, categorie, extra)
-    return render_template_string(HTML, bedrijven=bedrijven, stad=stad, categorie=categorie, extra=extra)
+        zoekterm = request.form.get("zoekterm", "").lower()
+        regio = request.form.get("regio", "").lower()
+        klanttype = request.form.get("klanttype", "")
+        materiaal = request.form.get("materiaal", "")
+
+        if zoekterm:
+            bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
+        if regio:
+            bedrijven = [b for b in bedrijven if regio in b["regio"].lower()]
+        if klanttype:
+            bedrijven = [b for b in bedrijven if klanttype in b.get("klanttype", "")]
+        if materiaal:
+            bedrijven = [b for b in bedrijven if materiaal in b.get("materialen", "")]
+
+    return render_template_string(HTML, bedrijven=bedrijven, zoekterm=zoekterm, regio=regio, klanttype=klanttype, materiaal=materiaal, totaal=len(ENF_BEDRIJVEN))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
