@@ -7,6 +7,8 @@ app = Flask(__name__)
 with open("bedrijven.json", "r", encoding="utf-8") as f:
     ENF_BEDRIJVEN = json.load(f)
 
+LANDEN = sorted(set(b["land"] for b in ENF_BEDRIJVEN))
+
 HTML = '''
 <!DOCTYPE html>
 <html>
@@ -40,12 +42,17 @@ HTML = '''
 <body>
     <div class="header">
         <h1>🔍 Papierrecycling Zoekapp</h1>
-        <p>{{ totaal }} bedrijven in de database</p>
+        <p>{{ totaal }} bedrijven in {{ landen|length }} landen</p>
     </div>
     <div class="zoekbalk">
         <form method="POST" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
-            <input name="zoekterm" placeholder="Zoek op naam..." value="{{ zoekterm }}" style="width:200px;">
-            <input name="regio" placeholder="Regio (bijv. London)..." value="{{ regio }}" style="width:180px;">
+            <input name="zoekterm" placeholder="Zoek op naam..." value="{{ zoekterm }}" style="width:180px;">
+            <select name="land">
+                <option value="">Alle landen</option>
+                {% for l in landen %}
+                <option value="{{ l }}" {% if land == l %}selected{% endif %}>{{ l }}</option>
+                {% endfor %}
+            </select>
             <select name="klanttype">
                 <option value="">Alle klanttypes</option>
                 <option value="Commercial" {% if klanttype == "Commercial" %}selected{% endif %}>Commercial</option>
@@ -71,7 +78,7 @@ HTML = '''
             {% for bedrijf in bedrijven %}
             <div class="bedrijf" onclick="flyTo({{ bedrijf.lat }}, {{ bedrijf.lon }})">
                 <h3><span class="nummer">{{ loop.index }}</span>{{ bedrijf.naam }}</h3>
-                <p>📍 {{ bedrijf.regio }}</p>
+                <p>📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</p>
                 {% if bedrijf.klanttype %}
                 <p>
                 {% for type in bedrijf.klanttype.split(",") %}
@@ -85,7 +92,7 @@ HTML = '''
             </div>
             {% endfor %}
             {% else %}
-            <p style="padding:20px; color:#666;">Geen bedrijven gevonden. Pas je filters aan.</p>
+            <p style="padding:20px; color:#666;">Geen bedrijven gevonden.</p>
             {% endif %}
         </div>
         {% if bedrijven %}
@@ -93,10 +100,10 @@ HTML = '''
             <div id="kaart"></div>
         </div>
         <script>
-            var kaart = L.map("kaart").setView([{{ bedrijven[0].lat }}, {{ bedrijven[0].lon }}], 6);
+            var kaart = L.map("kaart").setView([{{ bedrijven[0].lat }}, {{ bedrijven[0].lon }}], 5);
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(kaart);
             {% for bedrijf in bedrijven %}
-            L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(kaart).bindPopup("<b>{{ bedrijf.naam }}</b><br>{{ bedrijf.regio }}<br>{{ bedrijf.klanttype }}");
+            L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(kaart).bindPopup("<b>{{ bedrijf.naam }}</b><br>{{ bedrijf.regio }}, {{ bedrijf.land }}");
             {% endfor %}
             function flyTo(lat, lon) { kaart.flyTo([lat, lon], 12); }
         </script>
@@ -109,27 +116,27 @@ HTML = '''
 @app.route("/", methods=["GET", "POST"])
 def index():
     zoekterm = ""
-    regio = ""
+    land = ""
     klanttype = ""
     materiaal = ""
     bedrijven = ENF_BEDRIJVEN
 
     if request.method == "POST":
         zoekterm = request.form.get("zoekterm", "").lower()
-        regio = request.form.get("regio", "").lower()
+        land = request.form.get("land", "")
         klanttype = request.form.get("klanttype", "")
         materiaal = request.form.get("materiaal", "")
 
         if zoekterm:
             bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
-        if regio:
-            bedrijven = [b for b in bedrijven if regio in b["regio"].lower()]
+        if land:
+            bedrijven = [b for b in bedrijven if b["land"] == land]
         if klanttype:
             bedrijven = [b for b in bedrijven if klanttype in b.get("klanttype", "")]
         if materiaal:
             bedrijven = [b for b in bedrijven if materiaal in b.get("materialen", "")]
 
-    return render_template_string(HTML, bedrijven=bedrijven, zoekterm=zoekterm, regio=regio, klanttype=klanttype, materiaal=materiaal, totaal=len(ENF_BEDRIJVEN))
+    return render_template_string(HTML, bedrijven=bedrijven, zoekterm=zoekterm, land=land, klanttype=klanttype, materiaal=materiaal, totaal=len(ENF_BEDRIJVEN), landen=LANDEN)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
