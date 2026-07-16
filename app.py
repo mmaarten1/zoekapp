@@ -37,6 +37,8 @@ HTML = '''
         .bedrijf p { color: #666; font-size: 0.8em; }
         .tag { display: inline-block; background: #e8f0fe; color: #1a73e8; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; margin: 2px; }
         .nummer { display: inline-block; background: #1a73e8; color: white; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; margin-right: 6px; font-size: 0.8em; }
+        .welkom { text-align: center; padding: 60px 20px; color: #666; }
+        .welkom h2 { color: #1a73e8; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -70,10 +72,10 @@ HTML = '''
         </form>
     </div>
     <div class="inhoud">
+        {% if bedrijven %}
         <div class="lijst">
-            {% if bedrijven %}
             <div class="stats">
-                📊 {{ bedrijven|length }} bedrijven gevonden
+                📊 {{ totaal_gevonden }} bedrijven gevonden, toon eerste {{ bedrijven|length }}
             </div>
             {% for bedrijf in bedrijven %}
             <div class="bedrijf" onclick="flyTo({{ bedrijf.lat }}, {{ bedrijf.lon }})">
@@ -91,11 +93,7 @@ HTML = '''
                 {% endif %}
             </div>
             {% endfor %}
-            {% else %}
-            <p style="padding:20px; color:#666;">Geen bedrijven gevonden.</p>
-            {% endif %}
         </div>
-        {% if bedrijven %}
         <div class="kaart-container">
             <div id="kaart"></div>
         </div>
@@ -107,6 +105,11 @@ HTML = '''
             {% endfor %}
             function flyTo(lat, lon) { kaart.flyTo([lat, lon], 12); }
         </script>
+        {% else %}
+        <div class="welkom" style="width:100%;">
+            <h2>Welkom bij de Papierrecycling Zoekapp</h2>
+            <p>Gebruik de filters hierboven om te zoeken in {{ totaal }} bedrijven wereldwijd</p>
+        </div>
         {% endif %}
     </div>
 </body>
@@ -119,13 +122,15 @@ def index():
     land = ""
     klanttype = ""
     materiaal = ""
-   bedrijven = [:200]
+    bedrijven = []
 
     if request.method == "POST":
         zoekterm = request.form.get("zoekterm", "").lower()
         land = request.form.get("land", "")
         klanttype = request.form.get("klanttype", "")
         materiaal = request.form.get("materiaal", "")
+
+        bedrijven = ENF_BEDRIJVEN
 
         if zoekterm:
             bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
@@ -136,7 +141,10 @@ def index():
         if materiaal:
             bedrijven = [b for b in bedrijven if materiaal in b.get("materialen", "")]
 
-    return render_template_string(HTML, bedrijven=bedrijven, zoekterm=zoekterm, land=land, klanttype=klanttype, materiaal=materiaal, totaal=len(ENF_BEDRIJVEN), landen=LANDEN)
+    totaal_gevonden = len(bedrijven)
+    bedrijven = bedrijven[:200]
+
+    return render_template_string(HTML, bedrijven=bedrijven, zoekterm=zoekterm, land=land, klanttype=klanttype, materiaal=materiaal, totaal=len(ENF_BEDRIJVEN), landen=LANDEN, totaal_gevonden=totaal_gevonden)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
