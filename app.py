@@ -119,7 +119,7 @@ def index():
     land = ""
     klanttype = ""
     materiaal = ""
-    bedrijven = ENF_BEDRIJVEN
+   bedrijven = [:200]
 
     if request.method == "POST":
         zoekterm = request.form.get("zoekterm", "").lower()
