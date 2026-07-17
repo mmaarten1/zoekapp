@@ -83,12 +83,14 @@ def haal_bedrijven_pagina(land, pagina=1):
                 link = cellen[0].find("a")
                 if link and "paper-mrf" in link.get("href", ""):
                     naam = link.text.strip()
+                    bedrijf_url = "https://www.enfpaper.com" + link.get("href", "").split("?")[0]
                     regio = cellen[1].text.strip()
                     klanttype = cellen[2].text.strip() if len(cellen) > 2 else ""
                     materialen = cellen[3].text.strip() if len(cellen) > 3 else ""
                     volume = cellen[5].text.strip() if len(cellen) > 5 else ""
                     bedrijven.append({
                         "naam": naam,
+                        "url": bedrijf_url,
                         "regio": regio,
                         "land": land.replace("-", " "),
                         "klanttype": klanttype,
