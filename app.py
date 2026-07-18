@@ -53,313 +53,603 @@ def haal_bedrijf_details(url):
 
 HTML = '''
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>RecycleFind - Global Recycling Intelligence</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RecycleFind — Global Recycling Intelligence</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: "Inter", sans-serif; background: #f0f4f8; color: #1e293b; min-height: 100vh; }
+        /* ============================================
+           DESIGN SYSTEM — RECYCLEFIND
+           ============================================ */
 
-        /* NAVBAR */
+        /* TOKENS */
+        :root {
+            /* Colors */
+            --brand-50:  #eff6ff;
+            --brand-100: #dbeafe;
+            --brand-200: #bfdbfe;
+            --brand-300: #93c5fd;
+            --brand-400: #60a5fa;
+            --brand-500: #3b82f6;
+            --brand-600: #2563eb;
+            --brand-700: #1d4ed8;
+            --brand-800: #1e40af;
+            --brand-900: #1e3a8a;
+
+            --gray-50:  #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --green-50:  #f0fdf4;
+            --green-500: #22c55e;
+            --green-600: #16a34a;
+
+            --orange-50:  #fff7ed;
+            --orange-500: #f97316;
+            --orange-600: #ea580c;
+
+            --red-50:  #fef2f2;
+            --red-500: #ef4444;
+
+            /* Typography */
+            --font: "Inter", -apple-system, sans-serif;
+            --text-xs:   0.7rem;
+            --text-sm:   0.8rem;
+            --text-base: 0.9rem;
+            --text-lg:   1.05rem;
+            --text-xl:   1.2rem;
+            --text-2xl:  1.5rem;
+            --text-3xl:  2rem;
+            --text-4xl:  2.8rem;
+            --text-5xl:  3.5rem;
+
+            /* Spacing */
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --space-8: 32px;
+            --space-10: 40px;
+            --space-12: 48px;
+            --space-16: 64px;
+
+            /* Radius */
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 20px;
+            --radius-full: 9999px;
+
+            /* Shadows */
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.1);
+            --shadow-xl: 0 16px 48px rgba(0,0,0,0.12);
+            --shadow-brand: 0 4px 14px rgba(37,99,235,0.25);
+
+            /* Transitions */
+            --transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        /* RESET */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+        /* ============================================
+           NAVBAR
+           ============================================ */
         .navbar {
-            background: #fff;
-            border-bottom: 1px solid #e2e8f0;
-            padding: 0 40px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
             position: sticky;
             top: 0;
-            z-index: 1000;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            z-index: 100;
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--gray-200);
+            height: 56px;
+            display: flex;
+            align-items: center;
+            padding: 0 var(--space-8);
+            gap: var(--space-8);
         }
-        .logo { font-size: 1.3em; font-weight: 800; color: #1e293b; letter-spacing: -0.5px; }
-        .logo span { color: #2563eb; }
-        .nav-stat { font-size: 0.82em; color: #94a3b8; }
-        .nav-stat strong { color: #2563eb; }
-
-        /* HERO */
-        .hero {
-            background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #2563eb 100%);
-            padding: 60px 40px 50px;
-            text-align: center;
+        .navbar-logo {
+            font-size: var(--text-lg);
+            font-weight: 800;
+            color: var(--gray-900);
+            letter-spacing: -0.5px;
+            text-decoration: none;
+            flex-shrink: 0;
         }
-        .hero-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.15);
-            border: 1px solid rgba(255,255,255,0.25);
-            color: #fff;
-            padding: 5px 14px;
-            border-radius: 20px;
-            font-size: 0.78em;
+        .navbar-logo em { color: var(--brand-600); font-style: normal; }
+        .navbar-divider { width: 1px; height: 20px; background: var(--gray-200); }
+        .navbar-stat { font-size: var(--text-xs); color: var(--gray-400); white-space: nowrap; }
+        .navbar-stat strong { color: var(--brand-600); font-weight: 600; }
+        .navbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
+        .btn-nav {
+            font-size: var(--text-sm);
             font-weight: 500;
-            margin-bottom: 20px;
+            padding: 6px 14px;
+            border-radius: var(--radius-sm);
+            border: none;
+            cursor: pointer;
+            font-family: var(--font);
+            transition: var(--transition);
+            text-decoration: none;
+        }
+        .btn-nav-ghost { background: transparent; color: var(--gray-600); }
+        .btn-nav-ghost:hover { background: var(--gray-100); color: var(--gray-900); }
+        .btn-nav-primary { background: var(--brand-600); color: #fff; }
+        .btn-nav-primary:hover { background: var(--brand-700); box-shadow: var(--shadow-brand); }
+
+        /* ============================================
+           HERO
+           ============================================ */
+        .hero {
+            background: linear-gradient(160deg, var(--brand-900) 0%, var(--brand-800) 40%, var(--brand-700) 100%);
+            padding: var(--space-16) var(--space-10) var(--space-12);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            pointer-events: none;
+        }
+        .hero-content { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: var(--brand-200);
+            padding: 5px 14px;
+            border-radius: var(--radius-full);
+            font-size: var(--text-xs);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: var(--space-5);
         }
         .hero h1 {
-            font-size: 2.8em;
-            font-weight: 800;
+            font-size: var(--text-5xl);
+            font-weight: 900;
             color: #fff;
-            margin-bottom: 12px;
-            letter-spacing: -1.5px;
-            line-height: 1.1;
+            letter-spacing: -2px;
+            line-height: 1.05;
+            margin-bottom: var(--space-4);
         }
-        .hero h1 span { color: #93c5fd; }
-        .hero p { color: rgba(255,255,255,0.8); font-size: 1em; margin-bottom: 36px; }
+        .hero h1 em { color: var(--brand-300); font-style: normal; }
+        .hero-sub {
+            color: rgba(255,255,255,0.65);
+            font-size: var(--text-lg);
+            margin-bottom: var(--space-8);
+            font-weight: 400;
+        }
 
-        /* ZOEKBALK */
-        .search-box {
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-            flex-wrap: wrap;
-            max-width: 950px;
+        /* ============================================
+           SEARCH
+           ============================================ */
+        .search-container {
+            background: rgba(255,255,255,0.07);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: var(--radius-xl);
+            padding: var(--space-5);
+            max-width: 860px;
             margin: 0 auto;
         }
-        .search-box input, .search-box select {
-            padding: 10px 14px;
+        .search-row {
+            display: flex;
+            gap: var(--space-2);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .search-input, .search-select {
             background: #fff;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            color: #1e293b;
-            font-size: 0.86em;
-            font-family: "Inter", sans-serif;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: 9px 13px;
+            font-size: var(--text-sm);
+            font-family: var(--font);
+            color: var(--gray-800);
             outline: none;
-            transition: all 0.2s;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: var(--transition);
         }
-        .search-box input { width: 190px; }
-        .search-box select { width: 160px; }
-        .search-box input:focus, .search-box select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-        .search-box input::placeholder { color: #94a3b8; }
+        .search-input { width: 200px; }
+        .search-input::placeholder { color: var(--gray-400); }
+        .search-select { width: 155px; cursor: pointer; }
+        .search-input:focus, .search-select:focus {
+            border-color: var(--brand-400);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
         .btn-search {
-            padding: 10px 22px;
-            background: #fff;
-            color: #2563eb;
+            background: var(--brand-500);
+            color: #fff;
             border: none;
-            border-radius: 8px;
-            font-size: 0.86em;
+            border-radius: var(--radius-sm);
+            padding: 9px 20px;
+            font-size: var(--text-sm);
             font-weight: 700;
+            font-family: var(--font);
             cursor: pointer;
-            font-family: "Inter", sans-serif;
-            transition: all 0.2s;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: var(--transition);
+            white-space: nowrap;
         }
-        .btn-search:hover { background: #eff6ff; transform: translateY(-1px); }
+        .btn-search:hover { background: var(--brand-400); transform: translateY(-1px); box-shadow: var(--shadow-brand); }
 
-        /* STATS BAR */
+        /* ============================================
+           STATS BAR
+           ============================================ */
         .stats-bar {
             background: #fff;
-            border-bottom: 1px solid #e2e8f0;
-            padding: 14px 40px;
+            border-bottom: 1px solid var(--gray-200);
+            padding: var(--space-4) var(--space-10);
             display: flex;
-            gap: 50px;
             justify-content: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            gap: var(--space-12);
         }
         .stat { text-align: center; }
-        .stat-num { font-size: 1.4em; font-weight: 700; color: #2563eb; }
-        .stat-label { font-size: 0.7em; color: #94a3b8; margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-num { font-size: var(--text-2xl); font-weight: 800; color: var(--brand-600); letter-spacing: -0.5px; }
+        .stat-label { font-size: var(--text-xs); color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; margin-top: 2px; }
 
-        /* MAIN */
+        /* ============================================
+           MAIN LAYOUT
+           ============================================ */
         .main {
-            max-width: 1400px;
-            margin: 24px auto;
-            padding: 0 24px;
+            max-width: 1440px;
+            margin: var(--space-6) auto;
+            padding: 0 var(--space-6);
             display: flex;
-            gap: 20px;
+            gap: var(--space-5);
+            align-items: flex-start;
         }
 
-        /* RESULTS */
-        .results-panel { width: 360px; flex-shrink: 0; }
-        .results-meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
+        /* ============================================
+           FILTERS SIDEBAR
+           ============================================ */
+        .filters-panel {
+            width: 220px;
+            flex-shrink: 0;
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            padding: var(--space-5);
+            box-shadow: var(--shadow-sm);
         }
-        .results-count { font-size: 0.82em; color: #94a3b8; }
-        .results-count strong { color: #2563eb; }
+        .filters-title {
+            font-size: var(--text-xs);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--gray-400);
+            margin-bottom: var(--space-4);
+        }
+        .filter-group { margin-bottom: var(--space-4); }
+        .filter-label {
+            font-size: var(--text-xs);
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: var(--space-2);
+            display: block;
+        }
+        .filter-select {
+            width: 100%;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: 7px 10px;
+            font-size: var(--text-sm);
+            font-family: var(--font);
+            color: var(--gray-700);
+            outline: none;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .filter-select:focus { border-color: var(--brand-400); background: #fff; }
+        .filter-divider { border: none; border-top: 1px solid var(--gray-100); margin: var(--space-4) 0; }
+        .btn-apply {
+            width: 100%;
+            background: var(--brand-600);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 9px;
+            font-size: var(--text-sm);
+            font-weight: 600;
+            font-family: var(--font);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .btn-apply:hover { background: var(--brand-700); }
+        .btn-reset {
+            width: 100%;
+            background: transparent;
+            color: var(--gray-400);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: 8px;
+            font-size: var(--text-xs);
+            font-family: var(--font);
+            cursor: pointer;
+            margin-top: var(--space-2);
+            transition: var(--transition);
+        }
+        .btn-reset:hover { color: var(--gray-600); border-color: var(--gray-300); }
+
+        /* ============================================
+           RESULTS PANEL
+           ============================================ */
+        .results-panel { width: 340px; flex-shrink: 0; }
+        .results-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-3);
+            padding: 0 2px;
+        }
+        .results-count { font-size: var(--text-sm); color: var(--gray-400); }
+        .results-count strong { color: var(--brand-600); font-weight: 700; }
         .results-list {
-            max-height: 700px;
+            max-height: 680px;
             overflow-y: auto;
             scrollbar-width: thin;
-            scrollbar-color: #cbd5e1 transparent;
+            scrollbar-color: var(--gray-200) transparent;
         }
 
-        /* BEDRIJFSKAART */
+        /* ============================================
+           COMPANY CARD
+           ============================================ */
         .company-card {
             background: #fff;
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            padding: 14px 16px;
-            margin-bottom: 8px;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            margin-bottom: var(--space-2);
             cursor: pointer;
-            transition: all 0.15s;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            transition: var(--transition);
         }
-        .company-card:hover { border-color: #2563eb; box-shadow: 0 4px 12px rgba(37,99,235,0.1); transform: translateY(-1px); }
-        .company-num {
+        .company-card:hover {
+            border-color: var(--brand-300);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+        .company-card-top { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-2); }
+        .company-index {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 20px;
-            height: 20px;
-            background: #2563eb;
-            color: white;
-            border-radius: 4px;
-            font-size: 0.7em;
+            width: 22px;
+            height: 22px;
+            min-width: 22px;
+            background: var(--brand-600);
+            color: #fff;
+            border-radius: 5px;
+            font-size: 0.65rem;
             font-weight: 700;
-            margin-right: 8px;
+            margin-top: 1px;
         }
-        .company-name {
-            font-size: 0.9em;
-            font-weight: 600;
-            color: #1e293b;
-            margin-bottom: 5px;
-            display: flex;
+        .company-name { font-size: var(--text-base); font-weight: 600; color: var(--gray-800); line-height: 1.3; }
+        .company-meta { font-size: var(--text-xs); color: var(--gray-400); margin-bottom: var(--space-2); padding-left: 34px; display: flex; align-items: center; gap: 4px; }
+        .company-tags { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 34px; }
+        .tag {
+            display: inline-flex;
             align-items: center;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.2px;
         }
-        .company-location { font-size: 0.76em; color: #94a3b8; margin-bottom: 7px; padding-left: 28px; }
-        .company-tags { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 28px; }
-        .tag { padding: 2px 7px; border-radius: 4px; font-size: 0.68em; font-weight: 500; }
-        .tag-blue { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
-        .tag-green { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
-        .tag-orange { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+        .tag-blue { background: var(--brand-50); color: var(--brand-700); border: 1px solid var(--brand-100); }
+        .tag-green { background: var(--green-50); color: var(--green-600); border: 1px solid #bbf7d0; }
+        .tag-orange { background: var(--orange-50); color: var(--orange-600); border: 1px solid #fed7aa; }
 
-        /* KAART */
-        .map-panel { flex: 1; }
-        #kaart { height: 748px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        /* ============================================
+           MAP
+           ============================================ */
+        .map-panel { flex: 1; min-width: 0; }
+        #kaart {
+            height: 720px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--gray-200);
+            box-shadow: var(--shadow-sm);
+        }
 
-        /* DETAIL PANEL */
+        /* ============================================
+           DETAIL DRAWER
+           ============================================ */
         .overlay {
             display: none;
             position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(15,23,42,0.4);
-            z-index: 2000;
-            backdrop-filter: blur(2px);
+            inset: 0;
+            background: rgba(15,23,42,0.35);
+            z-index: 200;
+            backdrop-filter: blur(3px);
         }
-        .detail-panel {
+        .drawer {
             position: fixed;
-            right: -500px;
             top: 0;
-            width: 440px;
+            right: -500px;
+            width: 460px;
             height: 100vh;
             background: #fff;
-            border-left: 1px solid #e2e8f0;
-            z-index: 2001;
+            border-left: 1px solid var(--gray-200);
+            box-shadow: var(--shadow-xl);
+            z-index: 201;
             overflow-y: auto;
-            transition: right 0.3s ease;
-            padding: 28px;
-            box-shadow: -4px 0 20px rgba(0,0,0,0.08);
+            transition: right 0.3s cubic-bezier(0.4,0,0.2,1);
         }
-        .detail-panel.open { right: 0; }
-        .detail-close {
+        .drawer.open { right: 0; }
+        .drawer-header {
+            padding: var(--space-6) var(--space-6) var(--space-4);
+            border-bottom: 1px solid var(--gray-100);
+            position: sticky;
+            top: 0;
+            background: #fff;
+            z-index: 1;
+        }
+        .drawer-close {
             position: absolute;
-            top: 18px; right: 18px;
-            background: #f1f5f9;
+            top: var(--space-4);
+            right: var(--space-4);
+            width: 28px;
+            height: 28px;
+            background: var(--gray-100);
             border: none;
-            color: #64748b;
-            width: 30px; height: 30px;
-            border-radius: 6px;
+            border-radius: var(--radius-sm);
+            color: var(--gray-500);
             cursor: pointer;
-            font-size: 1em;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
         }
-        .detail-close:hover { background: #e2e8f0; color: #1e293b; }
-        .detail-title { font-size: 1.2em; font-weight: 700; color: #1e293b; margin-bottom: 4px; padding-right: 36px; }
-        .detail-location { color: #94a3b8; font-size: 0.82em; margin-bottom: 18px; }
-        .detail-section { margin-bottom: 16px; }
-        .detail-label { font-size: 0.68em; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; margin-bottom: 4px; font-weight: 600; }
-        .detail-value { font-size: 0.88em; color: #334155; }
-        .detail-website {
+        .drawer-close:hover { background: var(--gray-200); color: var(--gray-800); }
+        .drawer-company-name { font-size: var(--text-xl); font-weight: 700; color: var(--gray-900); margin-bottom: 4px; padding-right: 36px; }
+        .drawer-company-loc { font-size: var(--text-sm); color: var(--gray-400); }
+        .drawer-body { padding: var(--space-5) var(--space-6); }
+        .drawer-section { margin-bottom: var(--space-5); }
+        .drawer-section-title {
+            font-size: var(--text-xs);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--gray-400);
+            margin-bottom: var(--space-3);
+        }
+        .drawer-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-2) 0;
+            border-bottom: 1px solid var(--gray-50);
+        }
+        .drawer-row:last-child { border-bottom: none; }
+        .drawer-row-label { font-size: var(--text-sm); color: var(--gray-400); font-weight: 500; }
+        .drawer-row-value { font-size: var(--text-sm); color: var(--gray-700); font-weight: 500; text-align: right; }
+        .drawer-divider { border: none; border-top: 1px solid var(--gray-100); margin: var(--space-4) 0; }
+        .btn-website {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            background: #2563eb;
-            color: white;
-            padding: 8px 14px;
-            border-radius: 6px;
+            gap: var(--space-2);
+            background: var(--brand-600);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
             text-decoration: none;
-            font-size: 0.82em;
+            font-size: var(--text-sm);
             font-weight: 600;
-            margin-top: 8px;
-            transition: background 0.2s;
+            transition: var(--transition);
+            margin-right: var(--space-2);
         }
-        .detail-website:hover { background: #1d4ed8; }
-        .detail-enf {
+        .btn-website:hover { background: var(--brand-700); box-shadow: var(--shadow-brand); }
+        .btn-enf {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            background: #f1f5f9;
-            color: #64748b;
-            padding: 8px 14px;
-            border-radius: 6px;
+            gap: var(--space-2);
+            background: var(--gray-100);
+            color: var(--gray-600);
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
             text-decoration: none;
-            font-size: 0.82em;
+            font-size: var(--text-sm);
             font-weight: 600;
-            margin-top: 8px;
-            margin-left: 6px;
+            transition: var(--transition);
         }
-        .detail-enf:hover { background: #e2e8f0; color: #1e293b; }
-        .detail-divider { border: none; border-top: 1px solid #f1f5f9; margin: 14px 0; }
+        .btn-enf:hover { background: var(--gray-200); color: var(--gray-800); }
+        .score-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            font-size: var(--text-sm);
+            font-weight: 800;
+        }
+        .score-high { background: var(--green-50); color: var(--green-600); }
+        .score-mid { background: var(--orange-50); color: var(--orange-600); }
 
-        /* WELKOM */
-        .welcome { width: 100%; text-align: center; padding: 80px 20px; }
-        .welcome h2 { font-size: 1.4em; color: #1e293b; margin-bottom: 10px; font-weight: 600; }
-        .welcome p { color: #94a3b8; font-size: 0.9em; }
+        /* ============================================
+           WELCOME STATE
+           ============================================ */
+        .welcome-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-16);
+            text-align: center;
+        }
+        .welcome-icon { font-size: 3em; margin-bottom: var(--space-4); }
+        .welcome-title { font-size: var(--text-2xl); font-weight: 700; color: var(--gray-800); margin-bottom: var(--space-2); }
+        .welcome-sub { font-size: var(--text-base); color: var(--gray-400); max-width: 400px; }
     </style>
 </head>
 <body>
 
+<!-- NAVBAR -->
 <nav class="navbar">
-    <div class="logo">Recycle<span>Find</span></div>
-    <div class="nav-stat"><strong>{{ totaal }}</strong> companies · <strong>{{ landen|length }}</strong> countries</div>
+    <a href="/" class="navbar-logo">Recycle<em>Find</em></a>
+    <div class="navbar-divider"></div>
+    <span class="navbar-stat"><strong>{{ totaal }}</strong> companies · <strong>{{ landen|length }}</strong> countries</span>
+    <div class="navbar-right">
+        <a href="#" class="btn-nav btn-nav-ghost">Sign in</a>
+        <a href="#" class="btn-nav btn-nav-primary">Get started</a>
+    </div>
 </nav>
 
-<div class="hero">
-    <div class="hero-badge">🌍 Global Recycling Intelligence</div>
-    <h1>Find <span>Recycling</span> Companies Worldwide</h1>
-    <p>Search {{ totaal }} verified paper recycling companies across {{ landen|length }} countries</p>
-    <form method="POST" id="searchForm">
-        <div class="search-box">
-            <input name="zoekterm" placeholder="Company name..." value="{{ zoekterm }}">
-            <select name="land" id="landSelect" onchange="updateRegio()">
-                <option value="">All Countries</option>
-                {% for l in landen %}
-                <option value="{{ l }}" {% if land == l %}selected{% endif %}>{{ l }}</option>
-                {% endfor %}
-            </select>
-            <select name="regio" id="regioSelect">
-                <option value="">All Regions</option>
-                {% if land and land in regio_per_land %}
-                {% for r in regio_per_land[land] %}
-                <option value="{{ r }}" {% if regio == r %}selected{% endif %}>{{ r }}</option>
-                {% endfor %}
-                {% endif %}
-            </select>
-            <select name="klanttype">
-                <option value="">All Customer Types</option>
-                <option value="Commercial" {% if klanttype == "Commercial" %}selected{% endif %}>Commercial</option>
-                <option value="Industrial" {% if klanttype == "Industrial" %}selected{% endif %}>Industrial</option>
-                <option value="Residential" {% if klanttype == "Residential" %}selected{% endif %}>Residential</option>
-            </select>
-            <select name="materiaal">
-                <option value="">All Materials</option>
-                <option value="Paper" {% if materiaal == "Paper" %}selected{% endif %}>Paper</option>
-                <option value="Plastic" {% if materiaal == "Plastic" %}selected{% endif %}>Plastic</option>
-                <option value="Metal" {% if materiaal == "Metal" %}selected{% endif %}>Metal</option>
-                <option value="Glass" {% if materiaal == "Glass" %}selected{% endif %}>Glass</option>
-            </select>
-            <button type="submit" class="btn-search">🔍 Search</button>
-        </div>
-    </form>
-</div>
+<!-- HERO -->
+<section class="hero">
+    <div class="hero-content">
+        <div class="hero-badge">🌍 Global Recycling Intelligence Platform</div>
+        <h1>Find the right<br><em>recycling partners</em><br>worldwide</h1>
+        <p class="hero-sub">Search {{ totaal }} verified companies across {{ landen|length }} countries with AI-powered filters</p>
+        <form method="POST" id="searchForm">
+            <div class="search-container">
+                <div class="search-row">
+                    <input class="search-input" name="zoekterm" placeholder="🔍  Search company name..." value="{{ zoekterm }}">
+                    <select class="search-select" name="land" id="landSelect" onchange="updateRegio()">
+                        <option value="">All Countries</option>
+                        {% for l in landen %}
+                        <option value="{{ l }}" {% if land == l %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                    <select class="search-select" name="regio" id="regioSelect">
+                        <option value="">All Regions</option>
+                        {% if land and land in regio_per_land %}
+                        {% for r in regio_per_land[land] %}
+                        <option value="{{ r }}" {% if regio == r %}selected{% endif %}>{{ r }}</option>
+                        {% endfor %}
+                        {% endif %}
+                    </select>
+                    <button type="submit" class="btn-search">Search →</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</section>
 
+<!-- STATS BAR -->
 <div class="stats-bar">
     <div class="stat">
         <div class="stat-num">{{ totaal }}</div>
@@ -370,15 +660,69 @@ HTML = '''
         <div class="stat-label">Countries</div>
     </div>
     <div class="stat">
-        <div class="stat-num">100%</div>
-        <div class="stat-label">Verified</div>
+        <div class="stat-num">Free</div>
+        <div class="stat-label">To Search</div>
+    </div>
+    <div class="stat">
+        <div class="stat-num">Live</div>
+        <div class="stat-label">Data</div>
     </div>
 </div>
 
+<!-- MAIN -->
 <div class="main">
+
     {% if bedrijven %}
+    <!-- FILTERS -->
+    <form method="POST" id="filterForm">
+        <input type="hidden" name="zoekterm" value="{{ zoekterm }}">
+        <input type="hidden" name="land" value="{{ land }}">
+        <input type="hidden" name="regio" value="{{ regio }}">
+        <aside class="filters-panel">
+            <div class="filters-title">Filters</div>
+
+            <div class="filter-group">
+                <label class="filter-label">Customer Type</label>
+                <select class="filter-select" name="klanttype">
+                    <option value="">All types</option>
+                    <option value="Commercial" {% if klanttype == "Commercial" %}selected{% endif %}>Commercial</option>
+                    <option value="Industrial" {% if klanttype == "Industrial" %}selected{% endif %}>Industrial</option>
+                    <option value="Residential" {% if klanttype == "Residential" %}selected{% endif %}>Residential</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label class="filter-label">Material</label>
+                <select class="filter-select" name="materiaal">
+                    <option value="">All materials</option>
+                    <option value="Paper" {% if materiaal == "Paper" %}selected{% endif %}>Paper</option>
+                    <option value="Plastic" {% if materiaal == "Plastic" %}selected{% endif %}>Plastic</option>
+                    <option value="Metal" {% if materiaal == "Metal" %}selected{% endif %}>Metal</option>
+                    <option value="Glass" {% if materiaal == "Glass" %}selected{% endif %}>Glass</option>
+                    <option value="Wood" {% if materiaal == "Wood" %}selected{% endif %}>Wood</option>
+                    <option value="Electronic" {% if materiaal == "Electronic" %}selected{% endif %}>Electronic</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label class="filter-label">Annual Volume</label>
+                <select class="filter-select" name="volume_filter">
+                    <option value="">Any volume</option>
+                    <option value="small">Under 1,000 t/y</option>
+                    <option value="medium">1,000 – 10,000 t/y</option>
+                    <option value="large">Over 10,000 t/y</option>
+                </select>
+            </div>
+
+            <hr class="filter-divider">
+            <button type="submit" class="btn-apply">Apply Filters</button>
+            <a href="/" class="btn-reset" style="display:block;text-align:center;text-decoration:none;margin-top:6px;padding:8px;font-size:var(--text-xs);color:var(--gray-400);">Reset all</a>
+        </aside>
+    </form>
+
+    <!-- RESULTS -->
     <div class="results-panel">
-        <div class="results-meta">
+        <div class="results-header">
             <div class="results-count">
                 <strong>{{ bedrijven|length }}</strong> of <strong>{{ totaal_gevonden }}</strong> results
             </div>
@@ -386,46 +730,46 @@ HTML = '''
         <div class="results-list">
             {% for bedrijf in bedrijven %}
             <div class="company-card"
-                onclick="showDetail('{{ bedrijf.naam|replace("'","") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }})">
-                <div class="company-name">
-                    <span class="company-num">{{ loop.index }}</span>
-                    {{ bedrijf.naam }}
+                onclick="openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }})">
+                <div class="company-card-top">
+                    <span class="company-index">{{ loop.index }}</span>
+                    <span class="company-name">{{ bedrijf.naam }}</span>
                 </div>
-                <div class="company-location">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</div>
+                <div class="company-meta">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</div>
                 <div class="company-tags">
-                    {% if bedrijf.klanttype %}
-                    {% for type in bedrijf.klanttype.split(",") %}
-                    <span class="tag tag-blue">{{ type.strip() }}</span>
-                    {% endfor %}
-                    {% endif %}
-                    {% if bedrijf.materialen %}
-                    {% for mat in bedrijf.materialen.split(",")[:2] %}
-                    <span class="tag tag-green">{{ mat.strip() }}</span>
-                    {% endfor %}
-                    {% endif %}
-                    {% if bedrijf.volume %}
-                    <span class="tag tag-orange">{{ bedrijf.volume }} t/y</span>
-                    {% endif %}
+                    {% if bedrijf.klanttype %}{% for t in bedrijf.klanttype.split(",")[:2] %}<span class="tag tag-blue">{{ t.strip() }}</span>{% endfor %}{% endif %}
+                    {% if bedrijf.materialen %}{% for m in bedrijf.materialen.split(",")[:2] %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
+                    {% if bedrijf.volume %}<span class="tag tag-orange">{{ bedrijf.volume }} t/y</span>{% endif %}
                 </div>
             </div>
             {% endfor %}
         </div>
     </div>
+
+    <!-- MAP -->
     <div class="map-panel">
         <div id="kaart"></div>
     </div>
+
     {% else %}
-    <div class="welcome">
-        <h2>Search for Recycling Companies</h2>
-        <p>Use the filters above to search {{ totaal }} companies worldwide</p>
+    <div class="welcome-state">
+        <div class="welcome-icon">🔍</div>
+        <div class="welcome-title">Search for recycling companies</div>
+        <div class="welcome-sub">Use the search bar or filters above to find companies across {{ landen|length }} countries</div>
     </div>
     {% endif %}
+
 </div>
 
-<div class="overlay" id="overlay" onclick="closeDetail()"></div>
-<div class="detail-panel" id="detailPanel">
-    <button class="detail-close" onclick="closeDetail()">✕</button>
-    <div id="detailContent"></div>
+<!-- DETAIL DRAWER -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+    <div class="drawer-header">
+        <button class="drawer-close" onclick="closeDrawer()">✕</button>
+        <div class="drawer-company-name" id="drawerName"></div>
+        <div class="drawer-company-loc" id="drawerLoc"></div>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
 </div>
 
 <script>
@@ -433,74 +777,81 @@ var regioPer = {{ regio_per_land|tojson }};
 
 function updateRegio() {
     var land = document.getElementById("landSelect").value;
-    var select = document.getElementById("regioSelect");
-    select.innerHTML = "<option value=''>All Regions</option>";
+    var sel = document.getElementById("regioSelect");
+    sel.innerHTML = "<option value=''>All Regions</option>";
     if (land && regioPer[land]) {
         regioPer[land].forEach(function(r) {
-            var opt = document.createElement("option");
-            opt.value = r;
-            opt.text = r;
-            select.appendChild(opt);
+            var o = document.createElement("option");
+            o.value = r; o.text = r;
+            sel.appendChild(o);
         });
     }
 }
 
 {% if bedrijven %}
 var kaart = L.map("kaart").setView([{{ bedrijven[0].lat }}, {{ bedrijven[0].lon }}], 5);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(kaart);
-
-{% for bedrijf in bedrijven %}
-L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}])
-    .addTo(kaart)
-    .bindPopup("<b>{{ bedrijf.naam|replace('"','') }}</b><br>{{ bedrijf.regio }}, {{ bedrijf.land }}")
-    .on("click", function() {
-        showDetail("{{ bedrijf.naam|replace("'","") }}", "{{ bedrijf.regio }}", "{{ bedrijf.land }}", "{{ bedrijf.url }}", "{{ bedrijf.klanttype }}", "{{ bedrijf.materialen }}", "{{ bedrijf.volume }}", {{ bedrijf.lat }}, {{ bedrijf.lon }});
-    });
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(kaart);
+{% for b in bedrijven %}
+L.marker([{{ b.lat }}, {{ b.lon }}]).addTo(kaart)
+    .bindPopup("<b>{{ b.naam|replace('"','') }}</b><br><small>{{ b.regio }}, {{ b.land }}</small>")
+    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }}); });
 {% endfor %}
 {% endif %}
 
-function showDetail(naam, regio, land, url, klanttype, materialen, volume, lat, lon) {
-    {% if bedrijven %}kaart.flyTo([lat, lon], 12);{% endif %}
-    document.getElementById("overlay").style.display = "block";
-    document.getElementById("detailPanel").classList.add("open");
-    document.getElementById("detailContent").innerHTML = `
-        <div class="detail-title">${naam}</div>
-        <div class="detail-location">📍 ${regio}, ${land}</div>
-        <hr class="detail-divider">
-        <div class="detail-section"><div class="detail-label">Customer Type</div><div class="detail-value">${klanttype || "Not specified"}</div></div>
-        <div class="detail-section"><div class="detail-label">Materials</div><div class="detail-value">${materialen || "Not specified"}</div></div>
-        ${volume ? `<div class="detail-section"><div class="detail-label">Annual Volume</div><div class="detail-value">${volume} tons/year</div></div>` : ""}
-        <hr class="detail-divider">
-        <div style="color:#94a3b8;font-size:0.82em;">⏳ Loading details...</div>
-        <hr class="detail-divider">
-        <a href="${url}" target="_blank" class="detail-enf">View on ENF →</a>
+function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon) {
+    {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
+    document.getElementById("drawerName").textContent = naam;
+    document.getElementById("drawerLoc").textContent = "📍 " + regio + ", " + land;
+    document.getElementById("drawerBody").innerHTML = `
+        <div class="drawer-section">
+            <div class="drawer-section-title">Company Info</div>
+            <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div>
+        </div>
+        <hr class="drawer-divider">
+        <div class="drawer-section">
+            <div class="drawer-section-title">Contact & Details</div>
+            <div style="color:var(--gray-400);font-size:var(--text-sm);padding:var(--space-2) 0;">⏳ Loading details...</div>
+        </div>
+        <hr class="drawer-divider">
+        <a href="${url}" target="_blank" class="btn-enf">View on ENF →</a>
     `;
+    document.getElementById("overlay").style.display = "block";
+    document.getElementById("drawer").classList.add("open");
+
     fetch("/details?url=" + encodeURIComponent(url))
         .then(r => r.json())
         .then(data => {
-            var extra = "";
-            if (data.website) extra += `<div class="detail-section"><div class="detail-label">Website</div><a href="${data.website}" target="_blank" class="detail-website">🌐 Visit Website</a></div>`;
-            if (data.telefoon) extra += `<div class="detail-section"><div class="detail-label">Phone</div><div class="detail-value">${data.telefoon}</div></div>`;
-            if (data.medewerkers) extra += `<div class="detail-section"><div class="detail-label">Employees</div><div class="detail-value">${data.medewerkers}</div></div>`;
-            if (data.adres) extra += `<div class="detail-section"><div class="detail-label">Address</div><div class="detail-value">${data.adres}${data.stad ? ", "+data.stad : ""}</div></div>`;
-            document.getElementById("detailContent").innerHTML = `
-                <div class="detail-title">${naam}</div>
-                <div class="detail-location">📍 ${regio}, ${land}</div>
-                <hr class="detail-divider">
-                ${extra || "<div style='color:#94a3b8;font-size:0.82em;'>No additional details available</div>"}
-                <hr class="detail-divider">
-                <div class="detail-section"><div class="detail-label">Customer Type</div><div class="detail-value">${klanttype || "Not specified"}</div></div>
-                <div class="detail-section"><div class="detail-label">Materials</div><div class="detail-value">${materialen || "Not specified"}</div></div>
-                ${volume ? `<div class="detail-section"><div class="detail-label">Annual Volume</div><div class="detail-value">${volume} tons/year</div></div>` : ""}
-                <hr class="detail-divider">
-                <a href="${url}" target="_blank" class="detail-enf">View on ENF →</a>
+            var contactHTML = "";
+            if (data.website) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Website</span><span class="drawer-row-value"><a href="${data.website}" target="_blank" style="color:var(--brand-600);font-weight:600;">${data.website.replace("https://","").replace("http://","").split("/")[0]}</a></span></div>`;
+            if (data.telefoon) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value">${data.telefoon}</span></div>`;
+            if (data.adres) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value">${data.adres}${data.stad?", "+data.stad:""}</span></div>`;
+            if (data.medewerkers) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Employees</span><span class="drawer-row-value">${data.medewerkers}</span></div>`;
+            if (!contactHTML) contactHTML = `<div style="color:var(--gray-400);font-size:var(--text-sm);">No additional details available</div>`;
+
+            document.getElementById("drawerBody").innerHTML = `
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Company Info</div>
+                    <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype||"—"}</span></div>
+                    <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen||"—"}</span></div>
+                    <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume?volume+" t/y":"—"}</span></div>
+                </div>
+                <hr class="drawer-divider">
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Contact & Details</div>
+                    ${contactHTML}
+                </div>
+                <hr class="drawer-divider">
+                ${data.website?`<a href="${data.website}" target="_blank" class="btn-website">🌐 Visit Website</a>`:""}
+                <a href="${url}" target="_blank" class="btn-enf">ENF Profile →</a>
             `;
         });
 }
 
-function closeDetail() {
+function closeDrawer() {
     document.getElementById("overlay").style.display = "none";
-    document.getElementById("detailPanel").classList.remove("open");
+    document.getElementById("drawer").classList.remove("open");
 }
 </script>
 
@@ -513,42 +864,35 @@ def details():
     url = request.args.get("url", "")
     if not url or "enfpaper" not in url:
         return jsonify({})
-    data = haal_bedrijf_details(url)
-    return jsonify(data)
+    return jsonify(haal_bedrijf_details(url))
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    zoekterm = ""
-    land = ""
-    regio = ""
-    klanttype = ""
-    materiaal = ""
+    zoekterm = land = regio = klanttype = materiaal = ""
     bedrijven = []
 
     if request.method == "POST":
         zoekterm = request.form.get("zoekterm", "").lower()
-        land = request.form.get("land", "")
-        regio = request.form.get("regio", "")
+        land     = request.form.get("land", "")
+        regio    = request.form.get("regio", "")
         klanttype = request.form.get("klanttype", "")
         materiaal = request.form.get("materiaal", "")
 
         bedrijven = ENF_BEDRIJVEN
-
-        if zoekterm:
-            bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
-        if land:
-            bedrijven = [b for b in bedrijven if b["land"] == land]
-        if regio:
-            bedrijven = [b for b in bedrijven if b["regio"] == regio]
-        if klanttype:
-            bedrijven = [b for b in bedrijven if klanttype in b.get("klanttype", "")]
-        if materiaal:
-            bedrijven = [b for b in bedrijven if materiaal in b.get("materialen", "")]
+        if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
+        if land:      bedrijven = [b for b in bedrijven if b["land"] == land]
+        if regio:     bedrijven = [b for b in bedrijven if b["regio"] == regio]
+        if klanttype: bedrijven = [b for b in bedrijven if klanttype in b.get("klanttype","")]
+        if materiaal: bedrijven = [b for b in bedrijven if materiaal in b.get("materialen","")]
 
     totaal_gevonden = len(bedrijven)
     bedrijven = bedrijven[:200]
 
-    return render_template_string(HTML, bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio, klanttype=klanttype, materiaal=materiaal, totaal=len(ENF_BEDRIJVEN), landen=LANDEN, totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND)
+    return render_template_string(HTML,
+        bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
+        klanttype=klanttype, materiaal=materiaal,
+        totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
+        totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
