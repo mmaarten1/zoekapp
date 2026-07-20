@@ -607,6 +607,47 @@ HTML = '''
 </head>
 <body>
 
+<div class="ai-search-box">
+  <input type="text" id="aiSearchInput" placeholder="Bijv. papierbedrijven in Duitsland met meer dan 50 werknemers" />
+  <button id="aiSearchButton">Zoeken</button>
+</div>
+<div id="aiSearchResults"></div>
+<script>
+  const input = document.getElementById('aiSearchInput');
+  const button = document.getElementById('aiSearchButton');
+  const resultsDiv = document.getElementById('aiSearchResults');
+  async function aiSearch(query) {
+    const res = await fetch('/api/ai-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    return await res.json();
+  }
+  async function handleSearch() {
+    const query = input.value.trim();
+    if (!query) return;
+    resultsDiv.innerHTML = '<p>Zoeken...</p>';
+    try {
+      const data = await aiSearch(query);
+      if (data.error) {
+        resultsDiv.innerHTML = `<p>Fout: ${data.error}</p>`;
+        return;
+      }
+      let html = `<p>${data.total} resultaten gevonden</p>`;
+      data.results.forEach(company => {
+        html += `<div class="company-card"><h3>${company.naam}</h3><p>${company.land || ''} - ${company.regio || ''}</p></div>`;
+      });
+      resultsDiv.innerHTML = html;
+    } catch (err) {
+      resultsDiv.innerHTML = '<p>Er ging iets mis.</p>';
+      console.error(err);
+    }
+  }
+  button.addEventListener('click', handleSearch);
+  input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearch(); });
+</script>
+
 <!-- NAVBAR -->
 <nav class="navbar">
     <a href="/" class="navbar-logo">Recycle<em>Find</em></a>
@@ -865,6 +906,25 @@ def details():
     if not url or "enfpaper" not in url:
         return jsonify({})
     return jsonify(haal_bedrijf_details(url))
+
+@app.route("/api/ai-search", methods=["POST"])
+def ai_search():
+    from ai_filter import parse_search_query, apply_filters
+
+    data = request.get_json()
+    query = data.get("query", "").strip()
+
+    if not query:
+        return jsonify({"error": "Geen zoekopdracht opgegeven"}), 400
+
+    filters = parse_search_query(query)
+    results = apply_filters(ENF_BEDRIJVEN, filters)
+
+    return jsonify({
+        "results": results[:200],
+        "total": len(results),
+        "detected_filters": filters,
+    })
 
 @app.route("/", methods=["GET", "POST"])
 def index():
