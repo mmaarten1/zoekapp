@@ -480,7 +480,7 @@ HTML = '''
             position: fixed;
             inset: 0;
             background: rgba(15,23,42,0.35);
-            z-index: 200;
+            z-index: 9999;
             backdrop-filter: blur(3px);
         }
         .drawer {
@@ -492,7 +492,7 @@ HTML = '''
             background: #fff;
             border-left: 1px solid var(--gray-200);
             box-shadow: var(--shadow-xl);
-            z-index: 201;
+            z-index: 10000;
             overflow-y: auto;
             transition: right 0.3s cubic-bezier(0.4,0,0.2,1);
         }
@@ -840,6 +840,7 @@ L.marker([{{ b.lat }}, {{ b.lon }}]).addTo(kaart)
 {% endif %}
 
 function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon) {
+window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materialen: materialen, volume: volume};
     {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
     document.getElementById("drawerName").textContent = naam;
     document.getElementById("drawerLoc").textContent = "📍 " + regio + ", " + land;
@@ -848,7 +849,10 @@ function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, 
             <div class="drawer-section-title">Company Info</div>
             <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
             <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div><hr class="drawer-divider">
+<div class="drawer-section-title">AI Uitrusting-analyse</div>
+<button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;">AI Analyseren</button>
+<div id="equipmentResults" style="margin-top:12px;"></div>
         </div>
         <hr class="drawer-divider">
         <div class="drawer-section">
@@ -877,6 +881,10 @@ function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, 
                     <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype||"—"}</span></div>
                     <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen||"—"}</span></div>
                     <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume?volume+" t/y":"—"}</span></div>
+                    <hr class="drawer-divider">
+<div class="drawer-section-title">AI Uitrusting-analyse</div>
+<button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;">AI Analyseren</button>
+<div id="equipmentResults" style="margin-top:12px;"></div>
                 </div>
                 <hr class="drawer-divider">
                 <div class="drawer-section">
@@ -890,6 +898,56 @@ function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, 
         });
 }
 
+async function analyseUitrusting() {
+    const btn = document.getElementById("equipmentBtn");
+    const resultsDiv = document.getElementById("equipmentResults");
+    btn.disabled = true;
+    btn.innerText = "Bezig met analyseren...";
+    resultsDiv.innerHTML = "";
+
+    try {
+        const res = await fetch('/api/company-analysis', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(window.currentDrawerData || {})
+        });
+        const data = await res.json();
+
+        const labels = {
+            baler: "Baler",
+            mrf: "MRF",
+            transfer_station: "Transfer Station",
+            loading_ramp: "Loading Ramp",
+            weighbridge: "Weighbridge",
+            walking_floor: "Walking Floor",
+            containers: "Containers",
+            shredder: "Shredder",
+            sorteerinstallatie: "Sorteerinstallatie"
+        };
+
+        let html = "";
+        for (const key in labels) {
+            const pct = data[key] || 0;
+            html += `
+                <div style="margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;font-size:13px;">
+                        <span>${labels[key]}</span><span>${pct}%</span>
+                    </div>
+                    <div style="background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden;">
+                        <div style="background:#2563eb;height:100%;width:${pct}%;"></div>
+                    </div>
+                </div>`;
+        }
+        resultsDiv.innerHTML = html;
+
+    } catch (err) {
+        resultsDiv.innerHTML = "<p>Er ging iets mis bij de analyse.</p>";
+        console.error(err);
+    }
+
+    btn.disabled = false;
+    btn.innerText = "AI Analyseren";
+}
 function closeDrawer() {
     document.getElementById("overlay").style.display = "none";
     document.getElementById("drawer").classList.remove("open");
@@ -925,6 +983,14 @@ def ai_search():
         "total": len(results),
         "detected_filters": filters,
     })
+@app.route("/api/company-analysis", methods=["POST"])
+def company_analysis():
+    from ai_filter import analyseer_uitrusting
+
+    data = request.get_json()
+    resultaat = analyseer_uitrusting(data)
+
+    return jsonify(resultaat)
 
 @app.route("/", methods=["GET", "POST"])
 def index():
