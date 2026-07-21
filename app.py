@@ -2,9 +2,39 @@ import os
 import json
 from flask import Flask, render_template_string, request, jsonify
 import requests
+import uuid
+import datetime
+
+NOTITIES_FILE = "notities.json"
+
+def laad_notities():
+    try:
+        with open(NOTITIES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_notities(data):
+    with open(NOTITIES_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def get_user_id():
+    return request.cookies.get("user_id") or getattr(request, "nieuw_user_id", "") or ""
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
+@app.before_request
+def zorg_voor_user_id():
+    if not request.cookies.get("user_id"):
+        request.nieuw_user_id = str(uuid.uuid4())
+    else:
+        request.nieuw_user_id = None
+
+@app.after_request
+def zet_user_cookie(response):
+    if getattr(request, "nieuw_user_id", None):
+        response.set_cookie("user_id", request.nieuw_user_id, max_age=60*60*24*365*5)
+    return response
 
 with open("bedrijven.json", "r", encoding="utf-8") as f:
     ENF_BEDRIJVEN = json.load(f)
@@ -853,6 +883,15 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
 <div class="drawer-section-title">AI Uitrusting-analyse</div>
 <button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;">AI Analyseren</button>
 <div id="equipmentResults" style="margin-top:12px;"></div>
+<hr class="drawer-divider">
+<div class="drawer-section-title">Notities</div>
+<div id="notitiesLijst" style="margin-bottom:12px;"></div>
+<textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+<div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+    <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
+    <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
+    <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
+</div>
         </div>
         <hr class="drawer-divider">
         <div class="drawer-section">
@@ -860,10 +899,11 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
             <div style="color:var(--gray-400);font-size:var(--text-sm);padding:var(--space-2) 0;">⏳ Loading details...</div>
         </div>
         <hr class="drawer-divider">
-        <a href="${url}" target="_blank" class="btn-enf">View on ENF →</a>
+      <a href="${url}" target="_blank" class="btn-enf" style="display:none;">Laden...</a>
     `;
     document.getElementById("overlay").style.display = "block";
     document.getElementById("drawer").classList.add("open");
+    laadNotities();
 
     fetch("/details?url=" + encodeURIComponent(url))
         .then(r => r.json())
@@ -885,6 +925,15 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
 <div class="drawer-section-title">AI Uitrusting-analyse</div>
 <button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;">AI Analyseren</button>
 <div id="equipmentResults" style="margin-top:12px;"></div>
+<hr class="drawer-divider">
+<div class="drawer-section-title">Notities</div>
+<div id="notitiesLijst" style="margin-bottom:12px;"></div>
+<textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+<div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+    <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
+    <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
+    <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
+</div>
                 </div>
                 <hr class="drawer-divider">
                 <div class="drawer-section">
@@ -893,8 +942,9 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
                 </div>
                 <hr class="drawer-divider">
                 ${data.website?`<a href="${data.website}" target="_blank" class="btn-website">🌐 Visit Website</a>`:""}
-                <a href="${url}" target="_blank" class="btn-enf">ENF Profile →</a>
+                <a href="${url}" target="_blank" class="btn-enf" style="display:none;">Bron →</a>
             `;
+            laadNotities();
         });
 }
 
@@ -948,6 +998,52 @@ async function analyseUitrusting() {
     btn.disabled = false;
     btn.innerText = "AI Analyseren";
 }
+async function laadNotities() {
+    const bedrijf = window.currentDrawerData.naam;
+    const lijstDiv = document.getElementById("notitiesLijst");
+    if (!lijstDiv) return;
+    lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Laden...</p>";
+    try {
+        const res = await fetch("/api/notities?bedrijf=" + encodeURIComponent(bedrijf));
+        const notities = await res.json();
+        if (notities.length === 0) {
+            lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Nog geen notities.</p>";
+            return;
+        }
+        let html = "";
+        notities.forEach(n => {
+            const badge = n.type === "team" ? "🟢 Team" : "🔒 Privé";
+            html += `
+                <div style="background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;">
+                    <div style="color:#334155;">${n.tekst}</div>
+                    <div style="color:#94a3b8;font-size:11px;margin-top:4px;">${badge} · ${n.timestamp}</div>
+                </div>`;
+        });
+        lijstDiv.innerHTML = html;
+    } catch (err) {
+        lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>Kon notities niet laden.</p>";
+    }
+}
+
+async function voegNotitieToe() {
+    const input = document.getElementById("notitieInput");
+    const tekst = input.value.trim();
+    if (!tekst) return;
+    const type_ = document.querySelector('input[name="notitieType"]:checked').value;
+    const bedrijf = window.currentDrawerData.naam;
+
+    try {
+        await fetch("/api/notities", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({bedrijf: bedrijf, tekst: tekst, type: type_})
+        });
+        input.value = "";
+        laadNotities();
+    } catch (err) {
+        alert("Er ging iets mis bij het opslaan.");
+    }
+}
 function closeDrawer() {
     document.getElementById("overlay").style.display = "none";
     document.getElementById("drawer").classList.remove("open");
@@ -983,6 +1079,40 @@ def ai_search():
         "total": len(results),
         "detected_filters": filters,
     })
+@app.route("/api/notities", methods=["GET"])
+def get_notities():
+    bedrijf = request.args.get("bedrijf", "")
+    user_id = get_user_id()
+    alle = laad_notities()
+    lijst = alle.get(bedrijf, [])
+    zichtbaar = [n for n in lijst if n["type"] == "team" or n["user_id"] == user_id]
+    return jsonify(zichtbaar)
+
+@app.route("/api/notities", methods=["POST"])
+def add_notitie():
+    data = request.get_json()
+    bedrijf = data.get("bedrijf", "")
+    tekst = data.get("tekst", "").strip()
+    type_ = data.get("type", "team")
+    user_id = get_user_id()
+
+    if not bedrijf or not tekst:
+        return jsonify({"error": "Bedrijf en tekst zijn verplicht"}), 400
+
+    alle = laad_notities()
+    if bedrijf not in alle:
+        alle[bedrijf] = []
+
+    nieuwe_notitie = {
+        "tekst": tekst,
+        "type": type_,
+        "user_id": user_id,
+        "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    }
+    alle[bedrijf].append(nieuwe_notitie)
+    bewaar_notities(alle)
+
+    return jsonify(nieuwe_notitie)
 @app.route("/api/company-analysis", methods=["POST"])
 def company_analysis():
     from ai_filter import analyseer_uitrusting
