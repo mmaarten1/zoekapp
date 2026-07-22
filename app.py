@@ -15,6 +15,18 @@ def laad_users():
             return json.load(f)
     except:
         return {}
+STATUS_FILE = "status.json"
+
+def laad_status():
+    try:
+        with open(STATUS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_status(data):
+    with open(STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)    
 
 def laad_notities():
     try:
@@ -940,6 +952,15 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
     document.getElementById("drawerBody").innerHTML = `
         <div class="drawer-section">
             <div class="drawer-section-title">Company Info</div>
+            <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
+    <select id="statusSelect" onchange="wijzigStatus()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+        <option value="">Geen status</option>
+        <option value="klant">🟢 Klant</option>
+        <option value="potentie">🟡 Potentie</option>
+        <option value="in_proces">🔵 In Proces</option>
+        <option value="geen_interesse">⚪ Geen Interesse</option>
+    </select>
+</span></div>
             <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
             <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
             <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div><hr class="drawer-divider">
@@ -967,6 +988,7 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
     document.getElementById("overlay").style.display = "block";
     document.getElementById("drawer").classList.add("open");
     laadNotities();
+    laadStatus();
 
     fetch("/details?url=" + encodeURIComponent(url))
         .then(r => r.json())
@@ -986,6 +1008,15 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
             document.getElementById("drawerBody").innerHTML = `
                 <div class="drawer-section">
                     <div class="drawer-section-title">Company Info</div>
+                    <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
+    <select id="statusSelect" onchange="wijzigStatus()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+        <option value="">Geen status</option>
+        <option value="klant">🟢 Klant</option>
+        <option value="potentie">🟡 Potentie</option>
+        <option value="in_proces">🔵 In Proces</option>
+        <option value="geen_interesse">⚪ Geen Interesse</option>
+    </select>
+</span></div>
                     <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype||"—"}</span></div>
                     <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen||"—"}</span></div>
                     <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume?volume+" t/y":"—"}</span></div>
@@ -1013,6 +1044,7 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
                 <a href="${url}" target="_blank" class="btn-enf" style="display:none;">Bron →</a>
             `;
             laadNotities();
+            laadStatus();
         });
 }
 
@@ -1112,6 +1144,33 @@ async function voegNotitieToe() {
         alert("Er ging iets mis bij het opslaan.");
     }
 }
+async function laadStatus() {
+    const bedrijf = window.currentDrawerData.naam;
+    const select = document.getElementById("statusSelect");
+    if (!select) return;
+    try {
+        const res = await fetch("/api/status?bedrijf=" + encodeURIComponent(bedrijf));
+        const data = await res.json();
+        select.value = data.status || "";
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function wijzigStatus() {
+    const bedrijf = window.currentDrawerData.naam;
+    const select = document.getElementById("statusSelect");
+    const nieuweStatus = select.value;
+    try {
+        await fetch("/api/status", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({bedrijf: bedrijf, status: nieuweStatus})
+        });
+    } catch (err) {
+        alert("Er ging iets mis bij het opslaan van de status.");
+    }
+}
 function closeDrawer() {
     document.getElementById("overlay").style.display = "none";
     document.getElementById("drawer").classList.remove("open");
@@ -1196,6 +1255,23 @@ def ai_search():
         "total": len(results),
         "detected_filters": filters,
     })
+@app.route("/api/status", methods=["GET"])
+def get_status():
+    bedrijf = request.args.get("bedrijf", "")
+    alle = laad_status()
+    return jsonify({"status": alle.get(bedrijf, "")})
+
+@app.route("/api/status", methods=["POST"])
+def set_status():
+    data = request.get_json()
+    bedrijf = data.get("bedrijf", "")
+    nieuwe_status = data.get("status", "")
+    if not bedrijf:
+        return jsonify({"error": "Bedrijf is verplicht"}), 400
+    alle = laad_status()
+    alle[bedrijf] = nieuwe_status
+    bewaar_status(alle)
+    return jsonify({"status": nieuwe_status})
 @app.route("/api/notities", methods=["GET"])
 def get_notities():
     bedrijf = request.args.get("bedrijf", "")
