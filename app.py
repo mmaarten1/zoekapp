@@ -1,11 +1,20 @@
 import os
 import json
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
+from werkzeug.security import check_password_hash
 import requests
 import uuid
 import datetime
 
 NOTITIES_FILE = "notities.json"
+USERS_FILE = "users.json"
+
+def laad_users():
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
 
 def laad_notities():
     try:
@@ -57,7 +66,13 @@ def geocode_adres(adres, stad):
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "verander-dit-later-in-iets-geheims")
 @app.before_request
+@app.before_request
+def vereis_login():
+    toegestaan = ["login", "static"]
+    if request.endpoint not in toegestaan and not session.get("ingelogd"):
+        return redirect(url_for("login"))
 def zorg_voor_user_id():
     if not request.cookies.get("user_id"):
         request.nieuw_user_id = str(uuid.uuid4())
@@ -1107,6 +1122,55 @@ function closeDrawer() {
 </html>
 '''
 
+LOGIN_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Inloggen — RecycleFind</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #1e3a8a; height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; }
+        .box { background: white; padding: 40px; border-radius: 14px; width: 320px; box-shadow: 0 16px 48px rgba(0,0,0,0.2); }
+        h1 { font-size: 20px; margin-bottom: 20px; color: #1e293b; }
+        input { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .fout { color: #ef4444; font-size: 13px; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>RecycleFind — Inloggen</h1>
+        {% if fout %}<div class="fout">{{ fout }}</div>{% endif %}
+        <form method="POST">
+            <input type="text" name="gebruikersnaam" placeholder="Gebruikersnaam" required>
+            <input type="password" name="wachtwoord" placeholder="Wachtwoord" required>
+            <button type="submit">Inloggen</button>
+        </form>
+    </div>
+</body>
+</html>
+'''
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    fout = None
+    if request.method == "POST":
+        gebruikersnaam = request.form.get("gebruikersnaam", "")
+        wachtwoord = request.form.get("wachtwoord", "")
+        users = laad_users()
+        if gebruikersnaam in users and check_password_hash(users[gebruikersnaam], wachtwoord):
+            session["ingelogd"] = True
+            session["gebruikersnaam"] = gebruikersnaam
+            return redirect(url_for("index"))
+        else:
+            fout = "Onjuiste gebruikersnaam of wachtwoord."
+    return render_template_string(LOGIN_HTML, fout=fout)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 @app.route("/details")
 def details():
     url = request.args.get("url", "")
