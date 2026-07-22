@@ -20,6 +20,40 @@ def bewaar_notities(data):
 
 def get_user_id():
     return request.cookies.get("user_id") or getattr(request, "nieuw_user_id", "") or ""
+GEOCODE_CACHE_FILE = "geocode_cache.json"
+
+def laad_geocode_cache():
+    try:
+        with open(GEOCODE_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_geocode_cache(data):
+    with open(GEOCODE_CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def geocode_adres(adres, stad):
+    query = ", ".join([x for x in [adres, stad] if x])
+    if not query:
+        return None
+    cache = laad_geocode_cache()
+    if query in cache:
+        return cache[query]
+    try:
+        headers = {"User-Agent": "RecycleFind/1.0"}
+        params = {"q": query, "format": "json", "limit": 1}
+        resp = requests.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers, timeout=8)
+        resultaten = resp.json()
+        if resultaten:
+            lat = float(resultaten[0]["lat"])
+            lon = float(resultaten[0]["lon"])
+            cache[query] = {"lat": lat, "lon": lon}
+            bewaar_geocode_cache(cache)
+            return cache[query]
+    except Exception as e:
+        print(f"Geocode error: {e}")
+    return None
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
@@ -71,12 +105,20 @@ def haal_bedrijf_details(url):
                 details["medewerkers"] = lines[i+1]
             if "Type of Recycled" in line and i+1 < len(lines):
                 details["materialen_detail"] = lines[i+1]
+
         adres_tag = soup.find("span", {"itemprop": "streetAddress"})
         stad_tag = soup.find("span", {"itemprop": "addressLocality"})
         if adres_tag:
             details["adres"] = adres_tag.get_text(strip=True)
         if stad_tag:
             details["stad"] = stad_tag.get_text(strip=True)
+
+        if details.get("adres") and details.get("stad"):
+            geo = geocode_adres(details["adres"], details["stad"])
+            if geo:
+                details["lat_precies"] = geo["lat"]
+                details["lon_precies"] = geo["lon"]
+
         return details
     except:
         return {}
@@ -90,6 +132,9 @@ HTML = '''
     <title>RecycleFind — Global Recycling Intelligence</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         /* ============================================
@@ -862,11 +907,14 @@ function updateRegio() {
 {% if bedrijven %}
 var kaart = L.map("kaart").setView([{{ bedrijven[0].lat }}, {{ bedrijven[0].lon }}], 5);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(kaart);
+var clusterGroep = L.markerClusterGroup();
 {% for b in bedrijven %}
-L.marker([{{ b.lat }}, {{ b.lon }}]).addTo(kaart)
+L.marker([{{ b.lat }}, {{ b.lon }}])
     .bindPopup("<b>{{ b.naam|replace('"','') }}</b><br><small>{{ b.regio }}, {{ b.land }}</small>")
-    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }}); });
+    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }}); })
+    .addTo(clusterGroep);
 {% endfor %}
+kaart.addLayer(clusterGroep);
 {% endif %}
 
 function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon) {
@@ -914,6 +962,11 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
             if (data.adres) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value">${data.adres}${data.stad?", "+data.stad:""}</span></div>`;
             if (data.medewerkers) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Employees</span><span class="drawer-row-value">${data.medewerkers}</span></div>`;
             if (!contactHTML) contactHTML = `<div style="color:var(--gray-400);font-size:var(--text-sm);">No additional details available</div>`;
+            if (data.lat_precies && data.lon_precies) {
+                kaart.flyTo([data.lat_precies, data.lon_precies], 17);
+                L.marker([data.lat_precies, data.lon_precies]).addTo(kaart)
+                    .bindPopup("<b>" + naam + "</b>").openPopup();
+            }
 
             document.getElementById("drawerBody").innerHTML = `
                 <div class="drawer-section">
