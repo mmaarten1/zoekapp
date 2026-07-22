@@ -1,3 +1,22 @@
 {
-  "maarten": "scrypt:32768:8:1$Ct4NCSyMkzaduKqe$9d51545dc4d12553e78232b4ecf0eedb74775f8d2e81426d455264dba5cda37841056b97306b019916f41b6ae44f061a977fb73d3678d2540a2e268da72e3330"
+  "maarten": {
+    "wachtwoord": "scrypt:32768:8:1$Ct4NCSyMkzaduKqe$9d51545dc4d12553e78232b4ecf0eedb74775f8d2e81426d455264dba5cda37841056b97306b019916f41b6ae44f061a977fb73d3678d2540a2e268da72e3330",
+    "team": "papier-nl"
+  },
+  "test1_uk": {
+    "wachtwoord": "scrypt:32768:8:1$TeIkrkuDHVKfgMS2$0655f9e072e06d61ec6451a54fbde01ffd9422239214255d0479d0f2afcbb1d40373960b98806291f2f6ffeb898c62ae1df9ee203136f3818e52ea769c6d2b57",
+    "team": "uk"
+  },
+  "test2_uk": {
+    "wachtwoord": "scrypt:32768:8:1$ZDh9z9SJRDu4rbea$83a60555f1c85f065ee95b8f9c2f71d1c4043685d9c54d7aaf144093b9ee11d8d6acde963a5fb7088b904140e8f9cd18f9dc453838a5dda135d5f5d15e0edb6b",
+    "team": "uk"
+  },
+  "test1_de": {
+    "wachtwoord": "scrypt:32768:8:1$YfUGdFU7W2O8TBUh$3cceb495dcf9920cf485ef6069e6d4dff797dc7776188c50067836720743c360bad271146e384481a2a9b37730a77fb31e2821061d5aab73699acac85ff58ed7",
+    "team": "germany"
+  },
+  "test2_de": {
+    "wachtwoord": "scrypt:32768:8:1$fMAdRPIR18cEBcjd$bd2fdd8d6b5f1eb76db004cafe7790657497d6014d454b85ddac324611bbd35eb582950efede0a5604e71040c8b8d97027dfa36d56a44ff12b253d0280e2673b",
+    "team": "germany"
+  }
 }

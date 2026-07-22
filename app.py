@@ -26,7 +26,20 @@ def laad_status():
 
 def bewaar_status(data):
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)    
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+MELDINGEN_FILE = "meldingen.json"
+
+def laad_meldingen():
+    try:
+        with open(MELDINGEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_meldingen(data):
+    with open(MELDINGEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 def laad_notities():
     try:
@@ -756,7 +769,10 @@ HTML = '''
     <div class="navbar-divider"></div>
     <span class="navbar-stat"><strong>{{ totaal }}</strong> companies · <strong>{{ landen|length }}</strong> countries</span>
     <div class="navbar-right">
-        <a href="#" class="btn-nav btn-nav-ghost">Sign in</a>
+       <button onclick="toonMeldingen()" style="position:relative;background:none;border:none;cursor:pointer;font-size:18px;margin-right:8px;">
+    🔔<span id="meldingBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:white;font-size:10px;font-weight:700;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;"></span>
+</button>
+         <a href="#" class="btn-nav btn-nav-ghost">Sign in</a>
         <a href="#" class="btn-nav btn-nav-primary">Get started</a>
     </div>
 </nav>
@@ -904,6 +920,10 @@ HTML = '''
 
 </div>
 
+<div id="meldingenPaneel" style="display:none;position:fixed;top:60px;right:20px;width:340px;max-height:400px;overflow-y:auto;background:white;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:9998;padding:12px;">
+    <div style="font-weight:700;margin-bottom:8px;">Meldingen</div>
+    <div id="meldingenLijst"></div>
+</div>
 <!-- DETAIL DRAWER -->
 <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
 <div class="drawer" id="drawer">
@@ -976,6 +996,15 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
     <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
     <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
 </div>
+<hr class="drawer-divider" style="margin:12px 0;">
+<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Stuur melding naar:</div>
+<select id="meldingOntvanger" style="width:100%;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:6px;">
+    <option value="">Kies persoon/team...</option>
+</select>
+<div style="display:flex;gap:8px;">
+    <input type="text" id="meldingTekst" placeholder="Melding..." style="flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+    <button onclick="stuurMelding()" style="padding:6px 14px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Stuur</button>
+</div>
         </div>
         <hr class="drawer-divider">
         <div class="drawer-section">
@@ -989,6 +1018,7 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
     document.getElementById("drawer").classList.add("open");
     laadNotities();
     laadStatus();
+    vulMeldingDropdowns();
 
     fetch("/details?url=" + encodeURIComponent(url))
         .then(r => r.json())
@@ -1033,6 +1063,15 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
     <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
     <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
 </div>
+<hr class="drawer-divider" style="margin:12px 0;">
+<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Stuur melding naar:</div>
+<select id="meldingOntvanger" style="width:100%;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:6px;">
+    <option value="">Kies persoon/team...</option>
+</select>
+<div style="display:flex;gap:8px;">
+    <input type="text" id="meldingTekst" placeholder="Melding..." style="flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+    <button onclick="stuurMelding()" style="padding:6px 14px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Stuur</button>
+</div>
                 </div>
                 <hr class="drawer-divider">
                 <div class="drawer-section">
@@ -1045,6 +1084,7 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
             `;
             laadNotities();
             laadStatus();
+            vulMeldingDropdowns();
         });
 }
 
@@ -1171,6 +1211,108 @@ async function wijzigStatus() {
         alert("Er ging iets mis bij het opslaan van de status.");
     }
 }
+async function laadMeldingenBadge() {
+    try {
+        const res = await fetch("/api/meldingen");
+        const meldingen = await res.json();
+        const ongelezen = meldingen.filter(m => !m.gelezen).length;
+        const badge = document.getElementById("meldingBadge");
+        if (ongelezen > 0) {
+            badge.style.display = "flex";
+            badge.innerText = ongelezen;
+        } else {
+            badge.style.display = "none";
+        }
+    } catch (err) { console.error(err); }
+}
+
+async function toonMeldingen() {
+    const paneel = document.getElementById("meldingenPaneel");
+    const lijstDiv = document.getElementById("meldingenLijst");
+    const isOpen = paneel.style.display === "block";
+    paneel.style.display = isOpen ? "none" : "block";
+    if (isOpen) return;
+
+    try {
+        const res = await fetch("/api/meldingen");
+        const meldingen = await res.json();
+        if (meldingen.length === 0) {
+            lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Geen meldingen.</p>";
+            return;
+        }
+        let html = "";
+        meldingen.slice().reverse().forEach(m => {
+            html += `
+                <div style="background:${m.gelezen ? '#f8fafc' : '#eff6ff'};border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;cursor:pointer;" onclick="markeerGelezen('${m.id}')">
+                    <div style="color:#334155;">${m.tekst}</div>
+                    <div style="color:#94a3b8;font-size:11px;margin-top:4px;">van ${m.van} · ${m.bedrijf || ''} · ${m.timestamp}</div>
+                </div>`;
+        });
+        lijstDiv.innerHTML = html;
+    } catch (err) { console.error(err); }
+    laadMeldingenBadge();
+}
+
+async function markeerGelezen(id) {
+    await fetch("/api/meldingen/" + id + "/lezen", {method: "POST"});
+    toonMeldingen();
+    laadMeldingenBadge();
+}
+
+laadMeldingenBadge();
+setInterval(laadMeldingenBadge, 30000);
+async function vulMeldingDropdowns() {
+    try {
+        const res = await fetch("/api/gebruikers");
+        const gebruikers = await res.json();
+        const teams = [...new Set(gebruikers.map(g => g.team).filter(t => t))];
+        document.querySelectorAll("#meldingOntvanger").forEach(select => {
+            let html = "<option value=''>Kies persoon/team...</option>";
+            if (teams.length) {
+                html += "<optgroup label='Teams'>";
+                teams.forEach(t => html += `<option value='team:${t}'>Team: ${t}</option>`);
+                html += "</optgroup>";
+            }
+            html += "<optgroup label='Personen'>";
+            gebruikers.forEach(g => html += `<option value='persoon:${g.gebruikersnaam}'>${g.gebruikersnaam}</option>`);
+            html += "</optgroup>";
+            select.innerHTML = html;
+        });
+    } catch (err) { console.error(err); }
+}
+
+async function stuurMelding() {
+    const selects = document.querySelectorAll("#meldingOntvanger");
+    const inputs = document.querySelectorAll("#meldingTekst");
+    let select, input;
+    selects.forEach((s, i) => { if (s.offsetParent !== null) { select = s; input = inputs[i]; } });
+    if (!select || !input) return;
+
+    const keuze = select.value;
+    const tekst = input.value.trim();
+    if (!keuze || !tekst) return;
+
+    const [type, waarde] = keuze.split(":");
+    const bedrijf = window.currentDrawerData.naam;
+
+    try {
+        await fetch("/api/meldingen", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                tekst: tekst,
+                bedrijf: bedrijf,
+                voor_team: type === "team" ? waarde : "",
+                voor_gebruiker: type === "persoon" ? waarde : ""
+            })
+        });
+        input.value = "";
+        select.value = "";
+        alert("Melding verstuurd!");
+    } catch (err) {
+        alert("Er ging iets mis.");
+    }
+}
 function closeDrawer() {
     document.getElementById("overlay").style.display = "none";
     document.getElementById("drawer").classList.remove("open");
@@ -1218,9 +1360,10 @@ def login():
         gebruikersnaam = request.form.get("gebruikersnaam", "")
         wachtwoord = request.form.get("wachtwoord", "")
         users = laad_users()
-        if gebruikersnaam in users and check_password_hash(users[gebruikersnaam], wachtwoord):
+        if gebruikersnaam in users and check_password_hash(users[gebruikersnaam]["wachtwoord"], wachtwoord):
             session["ingelogd"] = True
             session["gebruikersnaam"] = gebruikersnaam
+            session["team"] = users[gebruikersnaam].get("team", "")
             return redirect(url_for("index"))
         else:
             fout = "Onjuiste gebruikersnaam of wachtwoord."
@@ -1230,6 +1373,55 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+@app.route("/api/gebruikers", methods=["GET"])
+def get_gebruikers():
+    users = laad_users()
+    lijst = [{"gebruikersnaam": naam, "team": info.get("team", "")} for naam, info in users.items()]
+    return jsonify(lijst)
+
+@app.route("/api/meldingen", methods=["GET"])
+def get_meldingen():
+    gebruiker = session.get("gebruikersnaam", "")
+    team = session.get("team", "")
+    alle = laad_meldingen()
+    van_mij = [m for m in alle if m["voor_gebruiker"] == gebruiker or (m["voor_team"] and m["voor_team"] == team)]
+    return jsonify(van_mij)
+
+@app.route("/api/meldingen", methods=["POST"])
+def add_melding():
+    data = request.get_json()
+    tekst = data.get("tekst", "").strip()
+    bedrijf = data.get("bedrijf", "")
+    voor_gebruiker = data.get("voor_gebruiker", "")
+    voor_team = data.get("voor_team", "")
+    van = session.get("gebruikersnaam", "")
+
+    if not tekst or (not voor_gebruiker and not voor_team):
+        return jsonify({"error": "Tekst en ontvanger zijn verplicht"}), 400
+
+    alle = laad_meldingen()
+    nieuwe = {
+        "id": str(uuid.uuid4()),
+        "tekst": tekst,
+        "bedrijf": bedrijf,
+        "van": van,
+        "voor_gebruiker": voor_gebruiker,
+        "voor_team": voor_team,
+        "gelezen": False,
+        "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    }
+    alle.append(nieuwe)
+    bewaar_meldingen(alle)
+    return jsonify(nieuwe)
+
+@app.route("/api/meldingen/<melding_id>/lezen", methods=["POST"])
+def markeer_gelezen(melding_id):
+    alle = laad_meldingen()
+    for m in alle:
+        if m["id"] == melding_id:
+            m["gelezen"] = True
+    bewaar_meldingen(alle)
+    return jsonify({"ok": True})
 @app.route("/details")
 def details():
     url = request.args.get("url", "")

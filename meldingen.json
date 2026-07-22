@@ -1,0 +1,42 @@
+[
+  {
+    "id": "ee454b57-c26a-41c8-8827-fc81eb9a7bf6",
+    "tekst": "Test",
+    "bedrijf": "Bristol Waste Company",
+    "van": "maarten",
+    "voor_gebruiker": "",
+    "voor_team": "uk",
+    "gelezen": false,
+    "timestamp": "22-07-2026 11:35"
+  },
+  {
+    "id": "cced8aca-e99c-4eb2-bd18-6d296ee8078a",
+    "tekst": "Test",
+    "bedrijf": "Bristol Waste Company",
+    "van": "maarten",
+    "voor_gebruiker": "maarten",
+    "voor_team": "",
+    "gelezen": true,
+    "timestamp": "22-07-2026 11:35"
+  },
+  {
+    "id": "3ac155d7-0eb0-4d74-aaee-cf59c40d1b8b",
+    "tekst": "Test",
+    "bedrijf": "Bristol Waste Company",
+    "van": "maarten",
+    "voor_gebruiker": "maarten",
+    "voor_team": "",
+    "gelezen": false,
+    "timestamp": "22-07-2026 12:42"
+  },
+  {
+    "id": "4e778df3-c3cf-4b86-94e2-b7fb9a34500d",
+    "tekst": "Test",
+    "bedrijf": "Ambiente S.p.A.",
+    "van": "maarten",
+    "voor_gebruiker": "maarten",
+    "voor_team": "",
+    "gelezen": true,
+    "timestamp": "22-07-2026 13:33"
+  }
+]
