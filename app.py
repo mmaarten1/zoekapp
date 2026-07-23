@@ -67,6 +67,15 @@ def bewaar_geocode_cache(data):
     with open(GEOCODE_CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+import math
+
+def bereken_afstand_km(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
 def geocode_adres(adres, stad):
     query = ", ".join([x for x in [adres, stad] if x])
     if not query:
@@ -929,6 +938,13 @@ HTML = '''
 
 </div>
 
+<div id="fabriekAnalysePaneel" style="display:none;position:fixed;top:60px;right:20px;width:380px;max-height:600px;overflow-y:auto;background:white;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:9998;padding:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-weight:700;" id="fabriekAnalyseTitel">Leveranciers</div>
+        <button onclick="document.getElementById('fabriekAnalysePaneel').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:16px;">✕</button>
+    </div>
+    <div id="fabriekAnalyseLijst"></div>
+</div>
 <div id="meldingenPaneel" style="display:none;position:fixed;top:60px;right:20px;width:340px;max-height:400px;overflow-y:auto;background:white;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:9998;padding:12px;">
     <div style="font-weight:700;margin-bottom:8px;">Meldingen</div>
     <div id="meldingenLijst"></div>
@@ -980,7 +996,7 @@ var fabriekIcon = L.divIcon({
 {% for f in papierfabrieken %}
 L.marker([{{ f.lat }}, {{ f.lon }}], {icon: fabriekIcon})
     .addTo(kaart)
-    .bindPopup("<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small>");
+.bindPopup('<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small><br><button data-fabriek="{{ f.naam }}" onclick="toonFabriekAnalyse(this.dataset.fabriek)" style="margin-top:6px;padding:4px 10px;background:#ea580c;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Toon leveranciers</button>');
 {% endfor %}
 {% endif %}
 
@@ -1333,6 +1349,43 @@ async function stuurMelding() {
         alert("Er ging iets mis.");
     }
 }
+async function toonFabriekAnalyse(fabriekNaam) {
+    const paneel = document.getElementById("fabriekAnalysePaneel");
+    const titel = document.getElementById("fabriekAnalyseTitel");
+    const lijstDiv = document.getElementById("fabriekAnalyseLijst");
+    paneel.style.display = "block";
+    titel.innerText = "🏭 " + fabriekNaam;
+    lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Laden...</p>";
+
+    try {
+        const res = await fetch("/api/fabriek-analyse?fabriek=" + encodeURIComponent(fabriekNaam));
+        const resultaten = await res.json();
+        if (resultaten.error) {
+            lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>" + resultaten.error + "</p>";
+            return;
+        }
+        if (resultaten.length === 0) {
+            lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Geen passende leveranciers gevonden.</p>";
+            return;
+        }
+        let html = "";
+        resultaten.forEach((r, i) => {
+            html += `
+                <div style="background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;font-size:13px;">
+                    <div style="font-weight:600;color:#1e293b;">${i+1}. ${r.naam}</div>
+                    <div style="color:#64748b;font-size:12px;margin-top:2px;">${r.regio}, ${r.land}</div>
+                    <div style="display:flex;justify-content:space-between;margin-top:6px;">
+                        <span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-size:11px;">${r.gedeelde_materialen}</span>
+                        <span style="font-weight:700;color:#ea580c;">${r.afstand_km} km</span>
+                    </div>
+                </div>`;
+        });
+        lijstDiv.innerHTML = html;
+    } catch (err) {
+        lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>Er ging iets mis.</p>";
+        console.error(err);
+    }
+}
 function closeDrawer() {
     document.getElementById("overlay").style.display = "none";
     document.getElementById("drawer").classList.remove("open");
@@ -1393,6 +1446,35 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+@app.route("/api/fabriek-analyse", methods=["GET"])
+def fabriek_analyse():
+    naam = request.args.get("fabriek", "")
+    fabriek = next((f for f in PAPIERFABRIEKEN if f["naam"] == naam), None)
+    if not fabriek or "lat" not in fabriek:
+        return jsonify({"error": "Fabriek niet gevonden"}), 404
+
+    fabriek_materialen = [m.strip().lower() for m in fabriek.get("materialen", "").split(",")]
+
+    resultaten = []
+    for b in ENF_BEDRIJVEN:
+        if "lat" not in b or "lon" not in b:
+            continue
+        bedrijf_materialen = [m.strip().lower() for m in b.get("materialen", "").split(",")]
+        gedeeld = [m for m in fabriek_materialen if m in bedrijf_materialen]
+        if not gedeeld:
+            continue
+        afstand = bereken_afstand_km(fabriek["lat"], fabriek["lon"], b["lat"], b["lon"])
+        resultaten.append({
+            "naam": b["naam"],
+            "land": b["land"],
+            "regio": b["regio"],
+            "materialen": b.get("materialen", ""),
+            "gedeelde_materialen": ", ".join(gedeeld),
+            "afstand_km": round(afstand, 1)
+        })
+
+    resultaten.sort(key=lambda x: x["afstand_km"])
+    return jsonify(resultaten[:25])
 @app.route("/api/gebruikers", methods=["GET"])
 def get_gebruikers():
     users = laad_users()
