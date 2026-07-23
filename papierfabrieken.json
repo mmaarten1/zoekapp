@@ -1,0 +1,22 @@
+[
+  {"naam": "UPM Shotton Mill", "land": "United Kingdom", "stad": "Deeside", "materialen": "Paper, OCC"},
+  {"naam": "DS Smith Kemsley Mill", "land": "United Kingdom", "stad": "Sittingbourne", "materialen": "Paper, OCC, Mixed Paper"},
+  {"naam": "Smurfit Kappa Townsend Hook", "land": "United Kingdom", "stad": "Snodland", "materialen": "Paper, OCC"},
+  {"naam": "Stora Enso Maxau", "land": "Germany", "stad": "Karlsruhe", "materialen": "Paper, OCC, Kraft"},
+  {"naam": "UPM Schongau", "land": "Germany", "stad": "Schongau", "materialen": "Paper, Mixed Paper"},
+  {"naam": "Progroup Eisfeld", "land": "Germany", "stad": "Eisfeld", "materialen": "Paper, OCC"},
+  {"naam": "Smurfit Kappa Roermond", "land": "Netherlands", "stad": "Roermond", "materialen": "Paper, OCC"},
+  {"naam": "DS Smith De Hoop", "land": "Netherlands", "stad": "Eerbeek", "materialen": "Paper, OCC, Mixed Paper"},
+  {"naam": "Cartiere Burgo", "land": "Italy", "stad": "Verzuolo", "materialen": "Paper, SOP"},
+  {"naam": "Lucart Group", "land": "Italy", "stad": "Porcari", "materialen": "Paper, Mixed Paper"},
+  {"naam": "Saica Paper", "land": "Spain", "stad": "Zaragoza", "materialen": "Paper, OCC"},
+  {"naam": "Smurfit Kappa Nervion", "land": "Spain", "stad": "Rentería", "materialen": "Paper, OCC"},
+  {"naam": "International Paper Saillat", "land": "France", "stad": "Saillat-sur-Vienne", "materialen": "Paper, OCC"},
+  {"naam": "VPK Packaging", "land": "France", "stad": "Oudegem", "materialen": "Paper, OCC"},
+  {"naam": "Mondi Świecie", "land": "Poland", "stad": "Świecie", "materialen": "Paper, OCC, Kraft"},
+  {"naam": "Progroup Sandersdorf-Brehna", "land": "Germany", "stad": "Sandersdorf-Brehna", "materialen": "Paper, OCC"},
+  {"naam": "Smurfit Kappa Piteå", "land": "Sweden", "stad": "Piteå", "materialen": "Paper, Kraft"},
+  {"naam": "Stora Enso Skoghall", "land": "Sweden", "stad": "Skoghall", "materialen": "Paper, OCC"},
+  {"naam": "DS Smith Ovacık", "land": "Turkey", "stad": "Ovacık", "materialen": "Paper, OCC"},
+  {"naam": "Hamburger Containerboard", "land": "Austria", "stad": "Pitten", "materialen": "Paper, OCC"}
+]

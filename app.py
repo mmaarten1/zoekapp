@@ -112,6 +112,15 @@ def zet_user_cookie(response):
 
 with open("bedrijven.json", "r", encoding="utf-8") as f:
     ENF_BEDRIJVEN = json.load(f)
+with open("papierfabrieken.json", "r", encoding="utf-8") as f:
+    PAPIERFABRIEKEN = json.load(f)
+
+for fabriek in PAPIERFABRIEKEN:
+    if "lat" not in fabriek or "lon" not in fabriek:
+        geo = geocode_adres(fabriek.get("stad", ""), fabriek.get("land", ""))
+        if geo:
+            fabriek["lat"] = geo["lat"]
+            fabriek["lon"] = geo["lon"]
 
 LANDEN = sorted(set(b["land"] for b in ENF_BEDRIJVEN))
 
@@ -962,6 +971,17 @@ L.marker([{{ b.lat }}, {{ b.lon }}])
     .addTo(clusterGroep);
 {% endfor %}
 kaart.addLayer(clusterGroep);
+var fabriekIcon = L.divIcon({
+    html: '<div style="background:#ea580c;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.3);border:2px solid white;">🏭</div>',
+    className: '',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+});
+{% for f in papierfabrieken %}
+L.marker([{{ f.lat }}, {{ f.lon }}], {icon: fabriekIcon})
+    .addTo(kaart)
+    .bindPopup("<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small>");
+{% endfor %}
 {% endif %}
 
 function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon) {
@@ -1533,7 +1553,8 @@ def index():
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
         klanttype=klanttype, materiaal=materiaal,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
-        totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND)
+        totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
+        papierfabrieken=PAPIERFABRIEKEN)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
