@@ -41,6 +41,20 @@ def bewaar_meldingen(data):
     with open(MELDINGEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+FOTOS_FILE = "fotos.json"
+FOTOS_MAP = "fotos_uploads"
+
+def laad_fotos():
+    try:
+        with open(FOTOS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_fotos(data):
+    with open(FOTOS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 def laad_notities():
     try:
         with open(NOTITIES_FILE, "r", encoding="utf-8") as f:
@@ -102,11 +116,12 @@ from bs4 import BeautifulSoup
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "verander-dit-later-in-iets-geheims")
 @app.before_request
-@app.before_request
 def vereis_login():
-    toegestaan = ["login", "static"]
+    toegestaan = ["login", "static", "forwarder_upload"]
     if request.endpoint not in toegestaan and not session.get("ingelogd"):
         return redirect(url_for("login"))
+
+@app.before_request
 def zorg_voor_user_id():
     if not request.cookies.get("user_id"):
         request.nieuw_user_id = str(uuid.uuid4())
@@ -130,6 +145,119 @@ for fabriek in PAPIERFABRIEKEN:
         if geo:
             fabriek["lat"] = geo["lat"]
             fabriek["lon"] = geo["lon"]
+def laad_transport_data():
+    try:
+        with open("transport_prijzen.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+TRANSPORT_DATA = laad_transport_data()
+
+def vind_transport_tarieven_dichtbij(lat, lon, straal_km=40):
+    resultaat = {}
+    if not lat or not lon:
+        return resultaat
+    for forwarder, steden in TRANSPORT_DATA.items():
+        dichtstbijzijnde = None
+        for record in steden:
+            geo = geocode_adres(record["stad"], "")
+            if not geo:
+                continue
+            afstand = bereken_afstand_km(lat, lon, geo["lat"], geo["lon"])
+            if afstand <= straal_km and (dichtstbijzijnde is None or afstand < dichtstbijzijnde["afstand"]):
+                dichtstbijzijnde = {"stad": record["stad"], "tarieven": record["tarieven"], "afstand": round(afstand, 1)}
+        if dichtstbijzijnde:
+            resultaat[forwarder] = dichtstbijzijnde
+    return resultaat
+
+def laad_forwarder_wachtwoorden():
+    try:
+        with open("forwarder_wachtwoorden.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+UPLOAD_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Transportprijzen uploaden</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; padding: 40px; }
+        .box { background: white; padding: 30px; border-radius: 12px; max-width: 420px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { font-size: 18px; margin-bottom: 16px; }
+        input, select { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+        .succes { background: #f0fdf4; color: #16a34a; }
+        .fout { background: #fef2f2; color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Transportprijzen uploaden</h1>
+        {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
+        <form method="POST" enctype="multipart/form-data">
+            <input type="text" name="forwarder" placeholder="Forwarder naam (bv. MSC)" required>
+            <input type="password" name="wachtwoord" placeholder="Wachtwoord" required>
+            <input type="file" name="bestand" accept=".xlsx,.xls" required>
+            <button type="submit">Uploaden</button>
+        </form>
+    </div>
+</body>
+</html>
+'''
+
+@app.route("/forwarder-upload", methods=["GET", "POST"])
+def forwarder_upload():
+    bericht = None
+    succes = False
+    if request.method == "POST":
+        forwarder = request.form.get("forwarder", "").strip()
+        wachtwoord = request.form.get("wachtwoord", "")
+        bestand = request.files.get("bestand")
+
+        wachtwoorden = laad_forwarder_wachtwoorden()
+        if forwarder not in wachtwoorden or wachtwoorden[forwarder] != wachtwoord:
+            bericht = "Onjuiste forwarder-naam of wachtwoord."
+        elif not bestand:
+            bericht = "Geen bestand geselecteerd."
+        else:
+            try:
+                import pandas as pd
+                df = pd.read_excel(bestand, header=1)
+                df = df.dropna(how="all", axis=1)
+                df = df.dropna(how="all", axis=0)
+                kolommen = list(df.columns)
+                stad_kolom = kolommen[0]
+
+                records = []
+                for _, rij in df.iterrows():
+                    stad = str(rij[stad_kolom]).strip()
+                    if not stad or stad.lower() == "nan":
+                        continue
+                    tarieven = {}
+                    for kolom in kolommen[1:]:
+                        waarde = rij[kolom]
+                        if pd.isna(waarde):
+                            continue
+                        tarieven[str(kolom).strip()] = str(waarde).strip()
+                    records.append({"stad": stad, "tarieven": tarieven})
+
+                global TRANSPORT_DATA
+                TRANSPORT_DATA = laad_transport_data()
+                TRANSPORT_DATA[forwarder] = records
+                with open("transport_prijzen.json", "w", encoding="utf-8") as f:
+                    json.dump(TRANSPORT_DATA, f, ensure_ascii=False, indent=2)
+
+                bericht = f"Gelukt! {len(records)} steden geimporteerd voor {forwarder}."
+                succes = True
+            except Exception as e:
+                bericht = f"Er ging iets mis: {e}"
+
+    return render_template_string(UPLOAD_HTML, bericht=bericht, succes=succes)
 
 LANDEN = sorted(set(b["land"] for b in ENF_BEDRIJVEN))
 
@@ -978,7 +1106,10 @@ function updateRegio() {
 
 {% if bedrijven %}
 var kaart = L.map("kaart").setView([{{ bedrijven[0].lat }}, {{ bedrijven[0].lon }}], 5);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(kaart);
+var straatKaart = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"});
+var satellietKaart = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {attribution:"© Esri"});
+straatKaart.addTo(kaart);
+L.control.layers({"Kaart": straatKaart, "Satelliet": satellietKaart}).addTo(kaart);
 var clusterGroep = L.markerClusterGroup();
 {% for b in bedrijven %}
 L.marker([{{ b.lat }}, {{ b.lon }}])
@@ -993,15 +1124,15 @@ var fabriekIcon = L.divIcon({
     iconSize: [32, 32],
     iconAnchor: [16, 16]
 });
-{% for f in papierfabrieken %}
+{% for f in papierfabrieken %}{% if f.lat and f.lon %}
 L.marker([{{ f.lat }}, {{ f.lon }}], {icon: fabriekIcon})
     .addTo(kaart)
 .bindPopup('<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small><br><button data-fabriek="{{ f.naam }}" onclick="toonFabriekAnalyse(this.dataset.fabriek)" style="margin-top:6px;padding:4px 10px;background:#ea580c;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Toon leveranciers</button>');
-{% endfor %}
+{% endif %}{% endfor %}
 {% endif %}
 
 function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon) {
-window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materialen: materialen, volume: volume};
+window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon};
     {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
     document.getElementById("drawerName").textContent = naam;
     document.getElementById("drawerLoc").textContent = "📍 " + regio + ", " + land;
@@ -1045,6 +1176,12 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
         <hr class="drawer-divider">
         <div class="drawer-section">
             <div class="drawer-section-title">Contact & Details</div>
+            <div id="transportInfo"></div>
+            <hr class="drawer-divider">
+<div class="drawer-section-title">Foto's</div>
+<div id="fotosLijst" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+<input type="file" id="fotoInput" accept="image/*" style="display:none;" onchange="uploadFoto()">
+<button onclick="document.getElementById('fotoInput').click()" style="padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">📷 Foto toevoegen</button>
             <div style="color:var(--gray-400);font-size:var(--text-sm);padding:var(--space-2) 0;">⏳ Loading details...</div>
         </div>
         <hr class="drawer-divider">
@@ -1053,12 +1190,19 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
     document.getElementById("overlay").style.display = "block";
     document.getElementById("drawer").classList.add("open");
     laadNotities();
+    laadTransport();
     laadStatus();
     vulMeldingDropdowns();
+    laadFotos();
 
     fetch("/details?url=" + encodeURIComponent(url))
         .then(r => r.json())
         .then(data => {
+        window.currentDrawerData.stad = data.stad || "";
+            if (data.lat_precies && data.lon_precies) {
+                window.currentDrawerData.lat = data.lat_precies;
+                window.currentDrawerData.lon = data.lon_precies;
+            }
             var contactHTML = "";
             if (data.website) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Website</span><span class="drawer-row-value"><a href="${data.website}" target="_blank" style="color:var(--brand-600);font-weight:600;">${data.website.replace("https://","").replace("http://","").split("/")[0]}</a></span></div>`;
             if (data.telefoon) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value">${data.telefoon}</span></div>`;
@@ -1112,6 +1256,12 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
                 <hr class="drawer-divider">
                 <div class="drawer-section">
                     <div class="drawer-section-title">Contact & Details</div>
+                    <div id="transportInfo"></div>
+                    <hr class="drawer-divider">
+<div class="drawer-section-title">Foto's</div>
+<div id="fotosLijst" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+<input type="file" id="fotoInput" accept="image/*" style="display:none;" onchange="uploadFoto()">
+<button onclick="document.getElementById('fotoInput').click()" style="padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">📷 Foto toevoegen</button>
                     ${contactHTML}
                 </div>
                 <hr class="drawer-divider">
@@ -1119,8 +1269,10 @@ window.currentDrawerData = {naam: naam, land: land, klanttype: klanttype, materi
                 <a href="${url}" target="_blank" class="btn-enf" style="display:none;">Bron →</a>
             `;
             laadNotities();
+            laadTransport();
             laadStatus();
             vulMeldingDropdowns();
+                        laadFotos();
         });
 }
 
@@ -1350,6 +1502,10 @@ async function stuurMelding() {
     }
 }
 async function toonFabriekAnalyse(fabriekNaam) {
+if (window.actieveRelatieLijnen) {
+        window.actieveRelatieLijnen.forEach(lijn => kaart.removeLayer(lijn));
+    }
+    window.actieveRelatieLijnen = [];
     const paneel = document.getElementById("fabriekAnalysePaneel");
     const titel = document.getElementById("fabriekAnalyseTitel");
     const lijstDiv = document.getElementById("fabriekAnalyseLijst");
@@ -1381,10 +1537,121 @@ async function toonFabriekAnalyse(fabriekNaam) {
                 </div>`;
         });
         lijstDiv.innerHTML = html;
+        const fabriek = {{ papierfabrieken|tojson }}.find(f => f.naam === fabriekNaam);
+        if (fabriek) {
+            resultaten.slice(0, 10).forEach(r => {
+                const leverancier = {{ bedrijven|tojson if bedrijven else '[]' }}.find(b => b.naam === r.naam);
+                if (leverancier) {
+                    const kleur = r.afstand_km < 50 ? "#16a34a" : r.afstand_km < 150 ? "#2563eb" : "#94a3b8";
+                    const dikte = Math.max(1, 5 - Math.floor(r.afstand_km / 100));
+                    const lijn = L.polyline(
+                        [[fabriek.lat, fabriek.lon], [leverancier.lat, leverancier.lon]],
+                        {color: kleur, weight: dikte, opacity: 0.6, dashArray: r.afstand_km > 150 ? "6,6" : null}
+                    ).addTo(kaart);
+                    window.actieveRelatieLijnen.push(lijn);
+                }
+            });
+        }
     } catch (err) {
         lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>Er ging iets mis.</p>";
         console.error(err);
     }
+}
+
+async function laadTransport() {
+    const lat = window.currentDrawerData.lat;
+    const lon = window.currentDrawerData.lon;
+    const div = document.getElementById("transportInfo");
+    if (!div) return;
+    if (!lat || !lon) { div.innerHTML = ""; return; }
+
+    try {
+        const res = await fetch("/api/transport?lat=" + lat + "&lon=" + lon);
+        const data = await res.json();
+        const forwarders = Object.keys(data);
+        if (forwarders.length === 0) {
+            div.innerHTML = "";
+            return;
+        }
+
+        const alleBestemmingen = [...new Set(forwarders.flatMap(fw => Object.keys(data[fw].tarieven)))].sort();
+
+        let html = "<hr class='drawer-divider'><div class='drawer-section-title'>Logistiek</div>";
+        html += "<div style='font-size:11px;color:#94a3b8;margin-bottom:6px;'>";
+        html += forwarders.map(fw => `${fw}: nabij ${data[fw].stad} (${data[fw].afstand} km)`).join(" · ");
+        html += "</div>";
+        html += "<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;font-size:12px;'>";
+        html += "<tr><th style='text-align:left;padding:6px 8px;color:#94a3b8;font-weight:600;border-bottom:1px solid #e2e8f0;'>Bestemming</th>";
+        forwarders.forEach(fw => {
+            html += `<th style='text-align:right;padding:6px 8px;color:#94a3b8;font-weight:600;border-bottom:1px solid #e2e8f0;'>${fw}</th>`;
+        });
+        html += "</tr>";
+
+        alleBestemmingen.forEach(bestemming => {
+            const prijzen = forwarders.map(fw => {
+                const ruw = data[fw].tarieven[bestemming];
+                const getal = ruw ? parseFloat(String(ruw).replace(/[^0-9.]/g, "")) : null;
+                return { fw, ruw, getal };
+            });
+            const geldig = prijzen.filter(p => p.getal !== null && !isNaN(p.getal));
+            const laagste = geldig.length ? Math.min(...geldig.map(p => p.getal)) : null;
+
+            html += `<tr><td style='padding:6px 8px;color:#334155;border-bottom:1px solid #f1f5f9;'>${bestemming}</td>`;
+            prijzen.forEach(p => {
+                const isLaagste = p.getal === laagste && geldig.length > 1;
+                const stijl = isLaagste
+                    ? "font-weight:700;color:#16a34a;background:#f0fdf4;"
+                    : "color:#64748b;";
+                html += `<td style='text-align:right;padding:6px 8px;border-bottom:1px solid #f1f5f9;${stijl}'>${p.ruw || "—"}</td>`;
+            });
+            html += "</tr>";
+        });
+
+        html += "</table></div>";
+        div.innerHTML = html;
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function laadFotos() {
+    const bedrijf = window.currentDrawerData.naam;
+    const lijstDiv = document.getElementById("fotosLijst");
+    if (!lijstDiv) return;
+    try {
+        const res = await fetch("/api/fotos?bedrijf=" + encodeURIComponent(bedrijf));
+        const fotos = await res.json();
+        let html = "";
+        fotos.forEach(f => {
+            html += `<img src="/fotos_uploads/${f.bestandsnaam}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;cursor:pointer;" onclick="window.open('/fotos_uploads/${f.bestandsnaam}', '_blank')" title="Door ${f.geupload_door} op ${f.timestamp}">`;
+        });
+        lijstDiv.innerHTML = html;
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function uploadFoto() {
+    const input = document.getElementById("fotoInput");
+    const bestand = input.files[0];
+    if (!bestand) return;
+
+    const formData = new FormData();
+    formData.append("bedrijf", window.currentDrawerData.naam);
+    formData.append("foto", bestand);
+
+    try {
+        const res = await fetch("/api/fotos", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.error) {
+            alert(data.error);
+        } else {
+            laadFotos();
+        }
+    } catch (err) {
+        alert("Er ging iets mis bij het uploaden.");
+    }
+    input.value = "";
 }
 function closeDrawer() {
     document.getElementById("overlay").style.display = "none";
@@ -1475,6 +1742,48 @@ def fabriek_analyse():
 
     resultaten.sort(key=lambda x: x["afstand_km"])
     return jsonify(resultaten[:25])
+@app.route("/api/fotos", methods=["GET"])
+def get_fotos():
+    bedrijf = request.args.get("bedrijf", "")
+    alle = laad_fotos()
+    return jsonify(alle.get(bedrijf, []))
+
+@app.route("/api/fotos", methods=["POST"])
+def upload_foto():
+    bedrijf = request.form.get("bedrijf", "")
+    bestand = request.files.get("foto")
+
+    if not bedrijf or not bestand:
+        return jsonify({"error": "Bedrijf en foto zijn verplicht"}), 400
+
+    if not os.path.exists(FOTOS_MAP):
+        os.makedirs(FOTOS_MAP)
+
+    extensie = bestand.filename.rsplit(".", 1)[-1].lower()
+    if extensie not in ["jpg", "jpeg", "png", "gif", "webp"]:
+        return jsonify({"error": "Alleen afbeeldingen toegestaan (jpg, png, gif, webp)"}), 400
+
+    bestandsnaam = f"{uuid.uuid4()}.{extensie}"
+    pad = os.path.join(FOTOS_MAP, bestandsnaam)
+    bestand.save(pad)
+
+    alle = laad_fotos()
+    if bedrijf not in alle:
+        alle[bedrijf] = []
+    alle[bedrijf].append({
+        "bestandsnaam": bestandsnaam,
+        "geupload_door": session.get("gebruikersnaam", ""),
+        "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    })
+    bewaar_fotos(alle)
+
+    return jsonify({"ok": True, "bestandsnaam": bestandsnaam})
+
+from flask import send_from_directory
+
+@app.route("/fotos_uploads/<bestandsnaam>")
+def get_foto_bestand(bestandsnaam):
+    return send_from_directory(FOTOS_MAP, bestandsnaam)
 @app.route("/api/gebruikers", methods=["GET"])
 def get_gebruikers():
     users = laad_users()
@@ -1549,6 +1858,12 @@ def ai_search():
         "total": len(results),
         "detected_filters": filters,
     })
+@app.route("/api/transport", methods=["GET"])
+def get_transport():
+    lat = request.args.get("lat", type=float)
+    lon = request.args.get("lon", type=float)
+    return jsonify(vind_transport_tarieven_dichtbij(lat, lon))
+
 @app.route("/api/status", methods=["GET"])
 def get_status():
     bedrijf = request.args.get("bedrijf", "")
