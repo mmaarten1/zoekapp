@@ -134,10 +134,21 @@ def zet_user_cookie(response):
         response.set_cookie("user_id", request.nieuw_user_id, max_age=60*60*24*365*5)
     return response
 
+TENANT_ID = os.environ.get("TENANT_ID", "peute")
+
 with open("bedrijven.json", "r", encoding="utf-8") as f:
     ENF_BEDRIJVEN = json.load(f)
 with open("papierfabrieken.json", "r", encoding="utf-8") as f:
     PAPIERFABRIEKEN = json.load(f)
+
+_bedrijven_gewijzigd = False
+for _b in ENF_BEDRIJVEN:
+    if "bedrijf_id" not in _b:
+        _b["bedrijf_id"] = TENANT_ID
+        _bedrijven_gewijzigd = True
+if _bedrijven_gewijzigd:
+    with open("bedrijven.json", "w", encoding="utf-8") as f:
+        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
 
 for fabriek in PAPIERFABRIEKEN:
     if "lat" not in fabriek or "lon" not in fabriek:
@@ -244,10 +255,121 @@ IMPORT_HTML = '''
             <tr><td>Voorbeeld BV</td><td>Leverancier</td><td>Netherlands</td><td>Rotterdam</td><td>Kade 12</td><td>+31 10 1234567</td><td>Paper, Plastic</td><td>Commercial</td><td>5000</td><td>ISO 9001, FSC</td></tr>
             <tr><td>Fabriek XYZ</td><td>Fabriek</td><td>Germany</td><td>Hamburg</td><td></td><td></td><td>Paper, OCC</td><td></td><td></td></tr>
         </table>
+        <a href="/importeer-osm" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#ea580c;">→ Of importeer automatisch vanuit OpenStreetMap (gratis, geen bestand nodig)</a>
     </div>
 </body>
 </html>
 '''
+
+OSM_LANDEN = {
+    "Netherlands": "NL", "Germany": "DE", "Belgium": "BE", "France": "FR",
+    "United Kingdom": "GB", "Spain": "ES", "Italy": "IT", "Poland": "PL",
+    "Austria": "AT", "Switzerland": "CH", "Portugal": "PT", "Sweden": "SE",
+    "Norway": "NO", "Denmark": "DK", "Finland": "FI", "Ireland": "IE",
+    "Czech Republic": "CZ", "Hungary": "HU", "Greece": "GR", "Romania": "RO",
+    "United States": "US", "Canada": "CA", "Australia": "AU", "Brazil": "BR",
+    "Mexico": "MX", "India": "IN", "China": "CN", "Japan": "JP",
+}
+
+OSM_IMPORT_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>OpenStreetMap importeren</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; padding: 40px; }
+        .box { background: white; padding: 30px; border-radius: 12px; max-width: 480px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { font-size: 18px; margin-bottom: 8px; }
+        p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+        select, button { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        button { background: #ea580c; color: white; border: none; cursor: pointer; font-weight: 600; }
+        .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+        .succes { background: #f0fdf4; color: #16a34a; }
+        .fout { background: #fef2f2; color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Bedrijven importeren via OpenStreetMap</h1>
+        <p>Haalt gratis, publiek beschikbare recyclingbedrijven (schroothandels, recyclingcentra) op uit OpenStreetMap voor het gekozen land. Kan 10-60 seconden duren.</p>
+        {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
+        <form method="POST">
+            <select name="land" required>
+                {% for naam in landen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
+            </select>
+            <button type="submit">Importeren vanuit OpenStreetMap</button>
+        </form>
+    </div>
+</body>
+</html>
+'''
+
+@app.route("/importeer-osm", methods=["GET", "POST"])
+def importeer_osm():
+    bericht = None
+    succes = False
+    if request.method == "POST":
+        land_naam = request.form.get("land", "")
+        iso = OSM_LANDEN.get(land_naam)
+        if not iso:
+            bericht = "Onbekend land."
+        else:
+            try:
+                query = (
+                    '[out:json][timeout:60];'
+                    f'area["ISO3166-1"="{iso}"][admin_level=2]->.a;'
+                    '('
+                    'node["shop"="scrap_yard"](area.a);'
+                    'way["shop"="scrap_yard"](area.a);'
+                    'node["amenity"="recycling"]["recycling_type"="centre"](area.a);'
+                    'way["amenity"="recycling"]["recycling_type"="centre"](area.a);'
+                    ');'
+                    'out center tags;'
+                )
+                resp = requests.get(
+                    "https://overpass-api.de/api/interpreter",
+                    params={"data": query},
+                    headers={"User-Agent": "RecycleFind/1.0"},
+                    timeout=90
+                )
+                elementen = resp.json().get("elements", [])
+
+                bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
+                aantal_nieuw = 0
+                for el in elementen:
+                    tags = el.get("tags", {})
+                    naam = tags.get("name", "").strip()
+                    if not naam:
+                        continue
+                    lat = el.get("lat") or el.get("center", {}).get("lat")
+                    lon = el.get("lon") or el.get("center", {}).get("lon")
+                    if not lat or not lon:
+                        continue
+                    stad = tags.get("addr:city", "")
+                    sleutel = (naam.strip().lower(), land_naam.strip().lower(), stad.strip().lower())
+                    if sleutel in bestaande:
+                        continue
+                    bestaande.add(sleutel)
+                    ENF_BEDRIJVEN.append({
+                        "naam": naam, "land": land_naam, "regio": stad,
+                        "materialen": "Metal" if tags.get("shop") == "scrap_yard" else "",
+                        "klanttype": "", "volume": "", "url": "",
+                        "lat": lat, "lon": lon,
+                        "adres": tags.get("addr:street", ""), "telefoon": tags.get("phone", tags.get("contact:phone", "")),
+                        "bedrijf_id": TENANT_ID,
+                    })
+                    aantal_nieuw += 1
+
+                with open("bedrijven.json", "w", encoding="utf-8") as f:
+                    json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
+                bericht = f"Gelukt! {aantal_nieuw} nieuwe bedrijven toegevoegd uit OpenStreetMap voor {land_naam} ({len(elementen)} gevonden, rest was al aanwezig of zonder naam)."
+                succes = True
+            except Exception as e:
+                bericht = f"Er ging iets mis: {e}"
+
+    return render_template_string(OSM_IMPORT_HTML, bericht=bericht, succes=succes, landen=sorted(OSM_LANDEN.keys()))
 
 @app.route("/importeer", methods=["GET", "POST"])
 def importeer_bedrijven():
@@ -329,7 +451,8 @@ def importeer_bedrijven():
                             "naam": naam, "land": land, "regio": stad,
                             "materialen": materialen, "klanttype": klanttype,
                             "volume": volume, "url": "", "lat": lat, "lon": lon,
-                            "adres": adres, "telefoon": telefoon, "certificeringen": certificeringen
+                            "adres": adres, "telefoon": telefoon, "certificeringen": certificeringen,
+                            "bedrijf_id": TENANT_ID
                         })
                         aantal_bedrijven += 1
 
@@ -1038,6 +1161,22 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         .eenvoudige-tabel th { text-align: left; padding: 10px 14px; background: var(--gray-50); font-size: var(--text-xs); text-transform: uppercase; color: var(--gray-400); border-bottom: 1px solid var(--gray-200); }
         .eenvoudige-tabel td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); font-size: var(--text-sm); color: var(--gray-700); }
         .lege-staat { text-align: center; padding: var(--space-16); color: var(--gray-400); }
+        .dg-rij-2 { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px; }
+        .dg-rij-2 > div { flex:1; min-width:280px; }
+        .dg-kaart-titel { font-size:0.78rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:16px; font-weight:700; }
+        .dg-bar-rij { display:flex; align-items:center; gap:10px; margin-bottom:13px; font-size:0.82rem; }
+        .dg-bar-label { width:110px; flex-shrink:0; }
+        .dg-bar-track { flex:1; background:var(--gray-100); border-radius:6px; height:9px; overflow:hidden; }
+        .dg-bar-fill { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); height:100%; border-radius:6px; }
+        .dg-bar-getal { width:34px; text-align:right; color:var(--brand-700); font-weight:700; }
+        .dg-activiteit-item { padding:11px 0; border-bottom:1px solid var(--gray-100); font-size:0.83rem; color:var(--gray-700); }
+        .dg-activiteit-item:last-child { border-bottom:none; }
+        .dg-activiteit-item small { color:var(--gray-400); display:block; margin-top:3px; }
+        .mat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; }
+        .mat-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:20px; text-decoration:none; display:block; transition:var(--transition); }
+        .mat-kaart:hover { border-color:var(--brand-300); box-shadow:var(--shadow-md); transform:translateY(-2px); }
+        .mat-naam { font-size:1.05rem; font-weight:700; color:var(--gray-800); margin-bottom:4px; }
+        .mat-sub { font-size:0.78rem; color:var(--gray-400); margin-bottom:12px; }
     </style>
 </head>
 """
@@ -2844,6 +2983,35 @@ def toggle_opgeslagen():
     bewaar_opgeslagen(lijst)
     return jsonify({"opgeslagen": opgeslagen})
 
+SNAPSHOTS_FILE = "snapshots.json"
+
+def laad_snapshots():
+    try:
+        with open(SNAPSHOTS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def maak_dagelijkse_snapshot():
+    vandaag = datetime.date.today().isoformat()
+    snapshots = laad_snapshots()
+    if snapshots and snapshots[-1]["datum"] == vandaag:
+        return snapshots
+    status_alle = laad_status()
+    nieuw = {
+        "datum": vandaag,
+        "totaal": len(ENF_BEDRIJVEN),
+        "landen": len(LANDEN),
+        "klant": sum(1 for s in status_alle.values() if s == "klant"),
+        "potentie": sum(1 for s in status_alle.values() if s == "potentie"),
+        "in_proces": sum(1 for s in status_alle.values() if s == "in_proces"),
+    }
+    snapshots.append(nieuw)
+    snapshots = snapshots[-365:]
+    with open(SNAPSHOTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(snapshots, f, ensure_ascii=False, indent=2)
+    return snapshots
+
 def bepaal_continent(land):
     land = (land or "").strip()
     europa = {"Netherlands","Germany","Belgium","France","United Kingdom","Spain","Italy","Portugal","Austria","Switzerland","Poland","Czech Republic","Hungary","Sweden","Norway","Finland","Denmark","Ireland","Greece","Romania","Bulgaria","Croatia","Slovenia","Slovakia","Ukraine","Belarus","Estonia","Latvia","Lithuania","Luxembourg","Serbia","Bosnia and Herzegovina","Iceland","Malta","Cyprus"}
@@ -2860,6 +3028,16 @@ def bepaal_continent(land):
 
 @app.route("/dashboard")
 def dashboard():
+    snapshots = maak_dagelijkse_snapshot()
+    groei_pct = None
+    groei_periode = None
+    if len(snapshots) >= 2:
+        eerste = snapshots[0]
+        laatste = snapshots[-1]
+        if eerste["totaal"] > 0:
+            groei_pct = round((laatste["totaal"] - eerste["totaal"]) / eerste["totaal"] * 100, 1)
+            groei_periode = eerste["datum"]
+
     status_alle = laad_status()
     aantal_klant = sum(1 for s in status_alle.values() if s == "klant")
     aantal_potentie = sum(1 for s in status_alle.values() if s == "potentie")
@@ -2956,9 +3134,12 @@ def dashboard():
 </style>
 
 <div class="page-title">Dashboard</div>
+{% if groei_pct is none %}
+<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.82rem;">📈 Groeitracking is vandaag gestart — kom over een paar dagen terug voor een echt groeicijfer.</p>
+{% endif %}
 
 <div class="dg-grid">
-    <div class="dg-kaart"><div class="dg-icoon">🏢</div><div class="dg-getal">{{ totaal }}</div><div class="dg-label">Bedrijven</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">🏢</div><div class="dg-getal">{{ totaal }}</div><div class="dg-label">Bedrijven</div>{% if groei_pct is not none %}<div style="font-size:0.72rem;font-weight:700;margin-top:4px;color:{{ 'var(--green-600)' if groei_pct >= 0 else 'var(--red-500)' }};">{{ '+' if groei_pct >= 0 else '' }}{{ groei_pct }}% sinds {{ groei_periode }}</div>{% endif %}</div>
     <div class="dg-kaart"><div class="dg-icoon">🌍</div><div class="dg-getal">{{ landen|length }}</div><div class="dg-label">Landen</div></div>
     <div class="dg-kaart"><div class="dg-icoon">📦</div><div class="dg-getal">{{ volume_klant|int }}</div><div class="dg-label">t/j bij klanten</div></div>
     <div class="dg-kaart"><div class="dg-icoon">🟢</div><div class="dg-getal">{{ klant }}</div><div class="dg-label">Klant</div></div>
@@ -3074,7 +3255,8 @@ dKaart.addLayer(dCluster);
         klant=aantal_klant, potentie=aantal_potentie, proces=aantal_proces, geen=aantal_geen,
         status_totaal=status_totaal, top_materialen=top_materialen, max_materiaal=max_materiaal,
         volume_klant=volume_klant, openstaand=openstaand, kaart_bedrijven=kaart_bedrijven,
-        donut_segmenten=donut_segmenten, regio_kaarten=regio_kaarten)
+        donut_segmenten=donut_segmenten, regio_kaarten=regio_kaarten,
+        groei_pct=groei_pct, groei_periode=groei_periode)
 
 @app.route("/inzichten")
 def inzichten():
@@ -3088,52 +3270,69 @@ def inzichten():
 
     top_landen = sorted(per_land.items(), key=lambda x: -x[1])[:10]
     top_materialen = sorted(per_materiaal.items(), key=lambda x: -x[1])[:10]
+    max_land = max([a for _, a in top_landen], default=1)
+    max_mat = max([a for _, a in top_materialen], default=1)
 
     inhoud = """
     <div class="page-title">Inzichten</div>
-    <div style="display:flex;gap:24px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:300px;">
-            <h3 style="margin-bottom:12px;color:var(--gray-600);font-size:14px;">Top 10 landen</h3>
-            <table class="eenvoudige-tabel">
-                <tr><th>Land</th><th>Bedrijven</th></tr>
-                {% for land, aantal in top_landen %}
-                <tr><td>{{ land }}</td><td>{{ aantal }}</td></tr>
-                {% endfor %}
-            </table>
+    <div class="dg-rij-2">
+        <div class="info-kaart">
+            <div class="dg-kaart-titel">Top 10 landen</div>
+            {% for land, aantal in top_landen %}
+            <a href="/?land={{ land }}" class="dg-bar-rij" style="text-decoration:none;">
+                <span class="dg-bar-label" style="color:var(--gray-700);">{{ land }}</span>
+                <div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (aantal/max_land*100)|round(1) }}%"></div></div>
+                <span class="dg-bar-getal">{{ aantal }}</span>
+            </a>
+            {% else %}
+            <div class="lege-staat">Nog geen data.</div>
+            {% endfor %}
         </div>
-        <div style="flex:1;min-width:300px;">
-            <h3 style="margin-bottom:12px;color:var(--gray-600);font-size:14px;">Top 10 materialen</h3>
-            <table class="eenvoudige-tabel">
-                <tr><th>Materiaal</th><th>Bedrijven</th></tr>
-                {% for mat, aantal in top_materialen %}
-                <tr><td>{{ mat }}</td><td>{{ aantal }}</td></tr>
-                {% endfor %}
-            </table>
+        <div class="info-kaart">
+            <div class="dg-kaart-titel">Top 10 materialen</div>
+            {% for mat, aantal in top_materialen %}
+            <a href="/?materiaal={{ mat }}" class="dg-bar-rij" style="text-decoration:none;">
+                <span class="dg-bar-label" style="color:var(--gray-700);">{{ mat }}</span>
+                <div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (aantal/max_mat*100)|round(1) }}%"></div></div>
+                <span class="dg-bar-getal">{{ aantal }}</span>
+            </a>
+            {% else %}
+            <div class="lege-staat">Nog geen data.</div>
+            {% endfor %}
         </div>
     </div>
     """
     pagina = render_simple_page("Inzichten", "inzichten", inhoud)
-    return render_template_string(pagina, top_landen=top_landen, top_materialen=top_materialen)
+    return render_template_string(pagina, top_landen=top_landen, top_materialen=top_materialen, max_land=max_land, max_mat=max_mat)
 
 @app.route("/contacten")
 def contacten():
     status_alle = laad_status()
-    labels = {"klant": "🟢 Klant", "potentie": "🟡 Potentie", "in_proces": "🔵 In Proces", "geen_interesse": "⚪ Geen Interesse"}
+    labels = {"klant": ("🟢 Klant","var(--green-600)"), "potentie": ("🟡 Potentie","var(--brand-600)"), "in_proces": ("🔵 In Proces","#3b82f6"), "geen_interesse": ("⚪ Geen Interesse","var(--gray-400)")}
     contacten_lijst = []
     for b in ENF_BEDRIJVEN:
         s = status_alle.get(b["naam"], "")
         if s:
-            contacten_lijst.append({"naam": b["naam"], "land": b["land"], "regio": b.get("regio",""), "status": labels.get(s, s)})
+            label, kleur = labels.get(s, (s, "var(--gray-400)"))
+            contacten_lijst.append({"naam": b["naam"], "land": b["land"], "regio": b.get("regio",""), "materialen": b.get("materialen",""), "status_label": label, "status_kleur": kleur})
 
     inhoud = """
     <div class="page-title">Contacten</div>
     {% if contacten_lijst %}
-    <table class="eenvoudige-tabel">
-        <tr><th>Naam</th><th>Locatie</th><th>Status</th></tr>
+    <div class="mat-grid">
         {% for c in contacten_lijst %}
-        <tr><td>{{ c.naam }}</td><td>{{ c.regio }}, {{ c.land }}</td><td>{{ c.status }}</td></tr>
+        <a href="/bedrijf/{{ c.naam|urlencode }}" class="mat-kaart" style="padding:16px 20px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div class="mat-naam" style="margin-bottom:2px;">{{ c.naam }}</div>
+                <span style="font-size:0.7rem;font-weight:700;color:{{ c.status_kleur }};white-space:nowrap;">{{ c.status_label }}</span>
+            </div>
+            <div class="mat-sub" style="margin-bottom:8px;">📍 {{ c.regio }}, {{ c.land }}</div>
+            <div class="company-tags" style="padding-left:0;">
+                {% if c.materialen %}{% for m in c.materialen.split(",")[:3] %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
+            </div>
+        </a>
         {% endfor %}
-    </table>
+    </div>
     {% else %}
     <div class="lege-staat">Nog geen bedrijven met een status. Zet een status via het paneel op de zoekpagina.</div>
     {% endif %}
@@ -3149,14 +3348,19 @@ def opslagen():
     inhoud = """
     <div class="page-title">Opgeslagen bedrijven</div>
     {% if lijst %}
-    <table class="eenvoudige-tabel">
-        <tr><th>Naam</th><th>Locatie</th><th>Materialen</th></tr>
+    <div class="mat-grid">
         {% for b in lijst %}
-        <tr><td>{{ b.naam }}</td><td>{{ b.regio }}, {{ b.land }}</td><td>{{ b.materialen }}</td></tr>
+        <a href="/bedrijf/{{ b.naam|urlencode }}" class="mat-kaart" style="padding:16px 20px;">
+            <div class="mat-naam" style="margin-bottom:2px;">⭐ {{ b.naam }}</div>
+            <div class="mat-sub" style="margin-bottom:8px;">📍 {{ b.regio }}, {{ b.land }}</div>
+            <div class="company-tags" style="padding-left:0;">
+                {% if b.materialen %}{% for m in b.materialen.split(",")[:3] %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
+            </div>
+        </a>
         {% endfor %}
-    </table>
+    </div>
     {% else %}
-    <div class="lege-staat">Nog geen bedrijven opgeslagen.</div>
+    <div class="lege-staat">Nog geen bedrijven opgeslagen. Klik op het sterretje bij een bedrijf om het hier te laten verschijnen.</div>
     {% endif %}
     """
     pagina = render_simple_page("Opgeslagen", "opslagen", inhoud)
@@ -3175,12 +3379,15 @@ def notities_overzicht():
     inhoud = """
     <div class="page-title">Notities</div>
     {% if rijen %}
-    <table class="eenvoudige-tabel">
-        <tr><th>Bedrijf</th><th>Notitie</th><th>Datum</th></tr>
+    <div class="info-kaart" style="max-width:700px;">
         {% for r in rijen %}
-        <tr><td>{{ r.bedrijf }}</td><td>{{ r.tekst }}</td><td>{{ r.timestamp }}</td></tr>
+        <div class="dg-activiteit-item">
+            <a href="/bedrijf/{{ r.bedrijf|urlencode }}" style="color:var(--gray-800);font-weight:700;text-decoration:none;">{{ r.bedrijf }}</a><br>
+            {{ r.tekst }}
+            <small>{{ r.timestamp }}</small>
+        </div>
         {% endfor %}
-    </table>
+    </div>
     {% else %}
     <div class="lege-staat">Nog geen teamnotities.</div>
     {% endif %}
