@@ -233,15 +233,15 @@ IMPORT_HTML = '''
 <body>
     <div class="box">
         <h1>Bedrijven / Fabrieken importeren</h1>
-        <p>Kolommen: Naam, Type (Leverancier/Klant/Fabriek), Land, Stad, Adres, Telefoonnummer, Materialen, Klanttype, Volume</p>
+        <p>Kolommen: Naam, Type (Leverancier/Klant/Fabriek), Land, Stad, Adres, Telefoonnummer, Materialen, Klanttype, Volume, Certificeringen</p>
         {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
         <form method="POST" enctype="multipart/form-data">
             <input type="file" name="bestand" accept=".xlsx,.xls" required>
             <button type="submit">Importeren</button>
         </form>
         <table>
-            <tr><th>Naam</th><th>Type</th><th>Land</th><th>Stad</th><th>Adres</th><th>Telefoonnummer</th><th>Materialen</th><th>Klanttype</th><th>Volume</th></tr>
-            <tr><td>Voorbeeld BV</td><td>Leverancier</td><td>Netherlands</td><td>Rotterdam</td><td>Kade 12</td><td>+31 10 1234567</td><td>Paper, Plastic</td><td>Commercial</td><td>5000</td></tr>
+            <tr><th>Naam</th><th>Type</th><th>Land</th><th>Stad</th><th>Adres</th><th>Telefoonnummer</th><th>Materialen</th><th>Klanttype</th><th>Volume</th><th>Certificeringen</th></tr>
+            <tr><td>Voorbeeld BV</td><td>Leverancier</td><td>Netherlands</td><td>Rotterdam</td><td>Kade 12</td><td>+31 10 1234567</td><td>Paper, Plastic</td><td>Commercial</td><td>5000</td><td>ISO 9001, FSC</td></tr>
             <tr><td>Fabriek XYZ</td><td>Fabriek</td><td>Germany</td><td>Hamburg</td><td></td><td></td><td>Paper, OCC</td><td></td><td></td></tr>
         </table>
     </div>
@@ -292,6 +292,9 @@ def importeer_bedrijven():
                     telefoon = str(rij.get("Telefoonnummer", "")).strip()
                     if telefoon.lower() == "nan":
                         telefoon = ""
+                    certificeringen = str(rij.get("Certificeringen", "")).strip()
+                    if certificeringen.lower() == "nan":
+                        certificeringen = ""
                     volume_raw = rij.get("Volume", "")
                     volume = "" if pd.isna(volume_raw) else str(volume_raw).strip()
 
@@ -326,7 +329,7 @@ def importeer_bedrijven():
                             "naam": naam, "land": land, "regio": stad,
                             "materialen": materialen, "klanttype": klanttype,
                             "volume": volume, "url": "", "lat": lat, "lon": lon,
-                            "adres": adres, "telefoon": telefoon
+                            "adres": adres, "telefoon": telefoon, "certificeringen": certificeringen
                         })
                         aantal_bedrijven += 1
 
@@ -1042,8 +1045,11 @@ PAGINA_HOOFD = """<!DOCTYPE html>
 def sidebar_html(actief):
     items = [
         ("zoeken", "/", "🔍", "Zoeken"),
+        ("wereldkaart", "/wereldkaart", "🌍", "World Map"),
         ("dashboard", "/dashboard", "📊", "Dashboard"),
         ("inzichten", "/inzichten", "📈", "Inzichten"),
+        ("materialen", "/materialen", "🧱", "Materials"),
+        ("certificeringen", "/certificeringen", "🏅", "Certifications"),
         ("contacten", "/contacten", "👥", "Contacten"),
         ("opslagen", "/opslagen", "⭐", "Opslagen"),
         ("notities", "/notities-overzicht", "📝", "Notities"),
@@ -1457,6 +1463,7 @@ HTML = '''
         .tag-blue { background: var(--brand-50); color: var(--brand-700); border: 1px solid var(--brand-100); }
         .tag-green { background: var(--green-50); color: var(--green-600); border: 1px solid #bbf7d0; }
         .tag-orange { background: var(--orange-50); color: var(--orange-600); border: 1px solid #fed7aa; }
+        .tag-purple { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
 
         /* ============================================
            MAP
@@ -1698,8 +1705,11 @@ HTML = '''
     <a href="/" class="sidebar-logo">Recycle<em>Find</em></a>
     <nav class="sidebar-nav">
         <a href="/" class="sidebar-link active"><span class="icoon">🔍</span> Zoeken</a>
+        <a href="/wereldkaart" class="sidebar-link"><span class="icoon">🌍</span> World Map</a>
         <a href="/dashboard" class="sidebar-link"><span class="icoon">📊</span> Dashboard</a>
         <a href="/inzichten" class="sidebar-link"><span class="icoon">📈</span> Inzichten</a>
+        <a href="/materialen" class="sidebar-link"><span class="icoon">🧱</span> Materials</a>
+        <a href="/certificeringen" class="sidebar-link"><span class="icoon">🏅</span> Certifications</a>
         <a href="/contacten" class="sidebar-link"><span class="icoon">👥</span> Contacten</a>
         <a href="/opslagen" class="sidebar-link"><span class="icoon">⭐</span> Opslagen</a>
         <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">📝</span> Notities</a>
@@ -1855,7 +1865,7 @@ HTML = '''
         <div class="results-list">
             {% for bedrijf in bedrijven %}
             <div class="company-card"
-                onclick="openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}')">
+                onclick="openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}', '{{ bedrijf.certificeringen|default("", true)|replace("'","&#39;") }}')">
                 <div class="company-card-top">
                     <span class="company-index">{{ loop.index }}</span>
                     <span class="company-name" style="flex:1;">{{ bedrijf.naam }}{% if bedrijf.adres or bedrijf.telefoon %}<span class="verificatie-badge">✓ Geverifieerd</span>{% endif %}</span>
@@ -1866,6 +1876,7 @@ HTML = '''
                 <div class="company-tags">
                     {% if bedrijf.klanttype %}{% for t in bedrijf.klanttype.split(",")[:2] %}<span class="tag tag-blue">{{ t.strip() }}</span>{% endfor %}{% endif %}
                     {% if bedrijf.materialen %}{% for m in bedrijf.materialen.split(",")[:2] %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
+                    {% if bedrijf.certificeringen %}{% for c in bedrijf.certificeringen.split(",")[:2] %}<span class="tag tag-purple">🏅 {{ c.strip() }}</span>{% endfor %}{% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -1935,7 +1946,7 @@ var clusterGroep = L.markerClusterGroup();
 {% for b in bedrijven %}
 L.marker([{{ b.lat }}, {{ b.lon }}])
     .bindPopup("<b>{{ b.naam|replace('"','') }}</b><br><small>{{ b.regio }}, {{ b.land }}</small>")
-    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }},"{{ b.adres|default('', true)|replace("'","&#39;") }}","{{ b.telefoon|default('', true) }}"); })
+    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }},"{{ b.adres|default('', true)|replace("'","&#39;") }}","{{ b.telefoon|default('', true) }}","{{ b.certificeringen|default('', true)|replace("'","&#39;") }}"); })
     .addTo(clusterGroep);
 {% endfor %}
 kaart.addLayer(clusterGroep);
@@ -1996,7 +2007,8 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
 </span></div>
         <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
         <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
-        <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div>`;
+        <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div>
+        ${window.currentDrawerData && window.currentDrawerData.certificeringen ? `<div class="drawer-row"><span class="drawer-row-label">Certificeringen</span><span class="drawer-row-value">🏅 ${window.currentDrawerData.certificeringen}</span></div>` : ""}`;
 
     const logistiek = `<div id="transportInfo"><div style="color:var(--gray-400);font-size:var(--text-sm);">Laden...</div></div>`;
 
@@ -2055,11 +2067,11 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
     return tabbalk + paneelInfo + paneelLogistiek + paneelCommercieel;
 }
 
-function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon, adres, telefoon) {
-    window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon, adres: adres || "", telefoon: telefoon || ""};
+function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon, adres, telefoon, certificeringen) {
+    window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon, adres: adres || "", telefoon: telefoon || "", certificeringen: certificeringen || ""};
     {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
     document.getElementById("drawerName").textContent = naam;
-    document.getElementById("drawerLoc").textContent = "📍 " + regio + ", " + land;
+    document.getElementById("drawerLoc").innerHTML = "📍 " + regio + ", " + land + ' · <a href="/bedrijf/' + encodeURIComponent(naam) + '" style="color:var(--brand-600);font-weight:600;text-decoration:none;">Volledig profiel →</a>';
     document.getElementById("drawerBody").innerHTML = bouwDrawerBody(klanttype, materialen, volume, `<div style="color:var(--gray-400);font-size:var(--text-sm);">⏳ Loading details...</div>`, "");
     document.getElementById("overlay").style.display = "block";
     document.getElementById("drawer").classList.add("open");
@@ -2776,6 +2788,10 @@ def index():
         regio    = request.form.get("regio", "")
         klanttype = request.form.get("klanttype", "")
         materiaal = request.form.get("materiaal", "")
+    else:
+        zoekterm = request.args.get("zoekterm", "").lower()
+        land     = request.args.get("land", "")
+        materiaal = request.args.get("materiaal", "")
 
     bedrijven = ENF_BEDRIJVEN
     if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
@@ -3185,6 +3201,384 @@ def instellingen():
     """
     pagina = render_simple_page("Instellingen", "instellingen", inhoud)
     return render_template_string(pagina, gebruikersnaam=session.get("gebruikersnaam",""), team=session.get("team",""))
+
+@app.route("/certificeringen")
+def certificeringen_pagina():
+    per_cert = {}
+    for b in ENF_BEDRIJVEN:
+        for c in [x.strip() for x in b.get("certificeringen", "").split(",") if x.strip()]:
+            per_cert.setdefault(c, []).append(b)
+
+    cert_lijst = sorted(per_cert.items(), key=lambda x: -len(x[1]))
+
+    inhoud = """
+<style>
+.cert-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+.cert-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:20px; }
+.cert-titel { font-size:1.05rem; font-weight:700; color:var(--gray-800); margin-bottom:2px; }
+.cert-aantal { font-size:0.78rem; color:var(--gray-400); margin-bottom:12px; }
+.cert-bedrijf { font-size:0.82rem; padding:6px 0; border-bottom:1px solid var(--gray-100); }
+.cert-bedrijf:last-child { border-bottom:none; }
+.cert-bedrijf a { color:var(--gray-700); text-decoration:none; font-weight:600; }
+.cert-bedrijf a:hover { color:var(--brand-600); }
+</style>
+
+<div class="page-title">Certifications</div>
+
+{% if cert_lijst %}
+<div class="cert-grid">
+    {% for cert, bedrijven_lijst in cert_lijst %}
+    <div class="cert-kaart">
+        <div class="cert-titel">🏅 {{ cert }}</div>
+        <div class="cert-aantal">{{ bedrijven_lijst|length }} bedrijven</div>
+        {% for b in bedrijven_lijst[:5] %}
+        <div class="cert-bedrijf"><a href="/bedrijf/{{ b.naam|urlencode }}">{{ b.naam }}</a><br><span style="color:var(--gray-400);">{{ b.regio }}, {{ b.land }}</span></div>
+        {% endfor %}
+        {% if bedrijven_lijst|length > 5 %}<div style="font-size:0.76rem;color:var(--gray-400);margin-top:6px;">+ {{ bedrijven_lijst|length - 5 }} meer</div>{% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">
+    Nog geen bedrijven met certificeringen. Voeg de kolom "Certificeringen" toe bij je volgende Excel-import (bv. "ISO 9001, FSC") om deze pagina te vullen.
+</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Certifications", "certificeringen", inhoud)
+    return render_template_string(pagina, cert_lijst=cert_lijst)
+
+@app.route("/materialen")
+def materialen():
+    per_materiaal = {}
+    per_materiaal_landen = {}
+    for b in ENF_BEDRIJVEN:
+        for m in [x.strip() for x in b.get("materialen", "").split(",") if x.strip()]:
+            per_materiaal[m] = per_materiaal.get(m, 0) + 1
+            per_materiaal_landen.setdefault(m, set()).add(b.get("land",""))
+
+    materialen_lijst = sorted(per_materiaal.items(), key=lambda x: -x[1])
+    max_aantal = max([a for _, a in materialen_lijst], default=1)
+    materialen_data = [
+        {"naam": naam, "aantal": aantal, "landen": len(per_materiaal_landen.get(naam, [])), "pct": round(aantal/max_aantal*100,1)}
+        for naam, aantal in materialen_lijst
+    ]
+
+    iconen = {"Paper":"📄","Plastic":"🧴","Metal":"🔩","Glass":"🍾","Wood":"🪵","Organic":"🌱","Electronic":"💻"}
+
+    inhoud = """
+<style>
+.mat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; }
+.mat-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:20px; text-decoration:none; display:block; transition:var(--transition); }
+.mat-kaart:hover { border-color:var(--brand-300); box-shadow:var(--shadow-md); transform:translateY(-2px); }
+.mat-icoon { font-size:1.8rem; margin-bottom:10px; }
+.mat-naam { font-size:1.05rem; font-weight:700; color:var(--gray-800); margin-bottom:4px; }
+.mat-sub { font-size:0.78rem; color:var(--gray-400); margin-bottom:12px; }
+.mat-bar-track { background:var(--gray-100); border-radius:6px; height:7px; overflow:hidden; }
+.mat-bar-fill { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); height:100%; }
+.mat-getal { font-weight:800; color:var(--brand-700); font-size:1.3rem; }
+</style>
+
+<div class="page-title">Materials</div>
+<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:24px;font-size:0.88rem;">{{ materialen_data|length }} materiaaltypen gevonden over {{ totaal }} bedrijven. Klik op een materiaal om gefilterd te zoeken.</p>
+
+<div class="mat-grid">
+    {% for m in materialen_data %}
+    <a href="/?materiaal={{ m.naam }}" class="mat-kaart">
+        <div class="mat-icoon">{{ iconen.get(m.naam, "♻️") }}</div>
+        <div class="mat-naam">{{ m.naam }}</div>
+        <div class="mat-sub">{{ m.landen }} landen</div>
+        <div class="mat-getal">{{ m.aantal }}</div>
+        <div class="mat-bar-track" style="margin-top:8px;"><div class="mat-bar-fill" style="width:{{ m.pct }}%"></div></div>
+    </a>
+    {% else %}
+    <div class="lege-staat">Nog geen materiaaldata.</div>
+    {% endfor %}
+</div>
+    """
+    pagina = render_simple_page("Materials", "materialen", inhoud)
+    return render_template_string(pagina, materialen_data=materialen_data, iconen=iconen, totaal=len(ENF_BEDRIJVEN))
+
+@app.route("/wereldkaart")
+def wereldkaart():
+    status_alle = laad_status()
+    kaart_data = [
+        {"naam": b["naam"], "land": b["land"], "regio": b.get("regio",""), "lat": b["lat"], "lon": b["lon"],
+         "materialen": b.get("materialen",""), "volume": b.get("volume",""), "status": status_alle.get(b["naam"],"")}
+        for b in ENF_BEDRIJVEN if b.get("lat") and b.get("lon")
+    ]
+
+    inhoud = """
+<style>
+.wk-layout { display:flex; gap:20px; height:calc(100vh - 128px); }
+.wk-filters { width:240px; flex-shrink:0; background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:18px; overflow-y:auto; }
+.wk-map-wrap { flex:1; border-radius:14px; overflow:hidden; border:1px solid var(--gray-200); position:relative; }
+#wereldKaart { width:100%; height:100%; }
+.wk-stat { display:flex; justify-content:space-between; padding:6px 0; font-size:0.82rem; color:var(--gray-600); border-bottom:1px solid var(--gray-100); }
+.wk-stat strong { color:var(--brand-700); }
+.wk-legenda { display:flex; align-items:center; gap:6px; font-size:0.78rem; color:var(--gray-500); margin-top:4px; }
+.wk-legenda span.stip { width:9px; height:9px; border-radius:50%; display:inline-block; }
+</style>
+
+<div class="page-title">World Map</div>
+
+<div class="wk-layout">
+    <aside class="wk-filters">
+        <div class="filters-title" style="margin-bottom:14px;">🎚️ Filters</div>
+        <div class="filter-group">
+            <label class="filter-label">Land</label>
+            <select class="filter-select" id="wkLand" onchange="wkFilter()">
+                <option value="">Alle landen</option>
+                {% for l in landen %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Materiaal</label>
+            <select class="filter-select" id="wkMateriaal" onchange="wkFilter()">
+                <option value="">Alle materialen</option>
+                <option value="Paper">Paper</option>
+                <option value="Plastic">Plastic</option>
+                <option value="Metal">Metal</option>
+                <option value="Glass">Glass</option>
+                <option value="Wood">Wood</option>
+                <option value="Organic">Organic</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Status</label>
+            <select class="filter-select" id="wkStatus" onchange="wkFilter()">
+                <option value="">Alle statussen</option>
+                <option value="klant">🟢 Klant</option>
+                <option value="potentie">🟡 Potentie</option>
+                <option value="in_proces">🔵 In Proces</option>
+            </select>
+        </div>
+        <hr class="filter-divider">
+        <div class="wk-stat">Zichtbaar op kaart<strong id="wkAantal">0</strong></div>
+        <div class="wk-stat">Totaal bedrijven<strong>{{ kaart_data|length }}</strong></div>
+        <hr class="filter-divider">
+        <div class="wk-legenda"><span class="stip" style="background:#22c55e;"></span> Klant</div>
+        <div class="wk-legenda"><span class="stip" style="background:#f59e0b;"></span> Potentie</div>
+        <div class="wk-legenda"><span class="stip" style="background:#3b82f6;"></span> In proces</div>
+        <div class="wk-legenda"><span class="stip" style="background:#ea580c;"></span> Geen status</div>
+    </aside>
+    <div class="wk-map-wrap">
+        <div id="wereldKaart"></div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+var ALLE_BEDRIJVEN_WK = {{ kaart_data|tojson }};
+var wkKaart = L.map("wereldKaart").setView([30, 10], 2);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(wkKaart);
+var wkKleur = {"klant":"#22c55e","potentie":"#f59e0b","in_proces":"#3b82f6","geen_interesse":"#6b7280","":"#ea580c"};
+var wkCluster = null;
+
+function wkFilter() {
+    var land = document.getElementById("wkLand").value;
+    var mat = document.getElementById("wkMateriaal").value;
+    var status = document.getElementById("wkStatus").value;
+
+    if (wkCluster) wkKaart.removeLayer(wkCluster);
+    wkCluster = L.markerClusterGroup({
+        iconCreateFunction: function(cluster) {
+            return L.divIcon({
+                html: '<div style="background:#ea580c;color:#fff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);">' + cluster.getChildCount() + '</div>',
+                className: '', iconSize: [34, 34]
+            });
+        }
+    });
+
+    var zichtbaar = 0;
+    ALLE_BEDRIJVEN_WK.forEach(function(b) {
+        if (land && b.land !== land) return;
+        if (mat && b.materialen.indexOf(mat) === -1) return;
+        if (status && b.status !== status) return;
+        zichtbaar++;
+        var kleur = wkKleur[b.status] || wkKleur[""];
+        var marker = L.circleMarker([b.lat, b.lon], {radius:6, color:"#fff", weight:1, fillColor:kleur, fillOpacity:0.9});
+        var popup = "<b>" + b.naam + "</b><br><small>" + b.regio + ", " + b.land + "</small>";
+        popup += "<br><small>" + (b.materialen || "—") + "</small>";
+        if (b.volume) popup += "<br><small>" + b.volume + " t/jaar</small>";
+        popup += '<br><a href="/bedrijf/' + encodeURIComponent(b.naam) + '" style="color:#ea580c;font-weight:600;">Bekijk profiel →</a>';
+        marker.bindPopup(popup);
+        wkCluster.addLayer(marker);
+    });
+    wkKaart.addLayer(wkCluster);
+    document.getElementById("wkAantal").textContent = zichtbaar;
+}
+wkFilter();
+</script>
+    """
+    pagina = render_simple_page("World Map", "wereldkaart", inhoud)
+    return render_template_string(pagina, landen=LANDEN, kaart_data=kaart_data)
+
+@app.route("/bedrijf/<naam>")
+def bedrijf_profiel(naam):
+    bedrijf = next((b for b in ENF_BEDRIJVEN if b["naam"] == naam), None)
+    if not bedrijf:
+        inhoud = '<div class="page-title">Niet gevonden</div><div class="lege-staat">Dit bedrijf bestaat niet (meer).</div>'
+        pagina = render_simple_page("Niet gevonden", "zoeken", inhoud)
+        return render_template_string(pagina), 404
+
+    status_alle = laad_status()
+    status = status_alle.get(bedrijf["naam"], "")
+    opgeslagen = bedrijf["naam"] in set(laad_opgeslagen())
+    geverifieerd = bool(bedrijf.get("adres") or bedrijf.get("telefoon"))
+
+    inhoud = """
+<style>
+.profiel-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
+.profiel-naam { font-size:1.6rem; font-weight:800; color:var(--gray-900); letter-spacing:-0.5px; }
+.profiel-loc { color:var(--gray-400); font-size:0.9rem; margin-top:4px; }
+.profiel-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start; }
+@media (max-width:900px) { .profiel-grid { grid-template-columns:1fr; } }
+#profielKaart { height:260px; border-radius:14px; overflow:hidden; border:1px solid var(--gray-200); margin-top:16px; }
+.profiel-terug { color:var(--gray-400); text-decoration:none; font-size:0.85rem; display:inline-block; margin-bottom:16px; }
+.profiel-terug:hover { color:var(--brand-600); }
+.verificatie-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 0.68rem; font-weight: 700; color: var(--green-600);
+    background: var(--green-50); border: 1px solid #bbf7d0;
+    padding: 2px 8px; border-radius: 4px; vertical-align: middle;
+}
+.dg-kaart-titel { font-size:0.78rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:14px; font-weight:700; }
+.tag-purple { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+</style>
+
+<a href="/" class="profiel-terug">← Terug naar zoeken</a>
+
+<div class="profiel-header">
+    <div>
+        <div class="profiel-naam">{{ bedrijf.naam }}{% if geverifieerd %}<span class="verificatie-badge" style="margin-left:10px;">✓ Geverifieerd</span>{% endif %}</div>
+        <div class="profiel-loc">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</div>
+    </div>
+    <span class="star-btn {% if opgeslagen %}opgeslagen{% endif %}" id="profielSterBtn" onclick="toggleOpslaanProfiel(this)" style="font-size:1.6rem;">{% if opgeslagen %}★{% else %}☆{% endif %}</span>
+</div>
+
+<div class="profiel-grid">
+    <div>
+        <div class="info-kaart" style="margin-bottom:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Company Overview</div>
+            <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
+                <select id="statusSelect" onchange="wijzigStatusProfiel()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+                    <option value="" {% if not status %}selected{% endif %}>Geen status</option>
+                    <option value="klant" {% if status=='klant' %}selected{% endif %}>🟢 Klant</option>
+                    <option value="potentie" {% if status=='potentie' %}selected{% endif %}>🟡 Potentie</option>
+                    <option value="in_proces" {% if status=='in_proces' %}selected{% endif %}>🔵 In Proces</option>
+                    <option value="geen_interesse" {% if status=='geen_interesse' %}selected{% endif %}>⚪ Geen Interesse</option>
+                </select>
+            </span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">{{ bedrijf.klanttype or "—" }}</span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">{{ bedrijf.materialen or "—" }}</span></div>
+        </div>
+
+        <div class="info-kaart" style="margin-bottom:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Recycling Operations</div>
+            <div class="drawer-row"><span class="drawer-row-label">Annual Capacity</span><span class="drawer-row-value">{{ (bedrijf.volume ~ " t/y") if bedrijf.volume else "—" }}</span></div>
+            <div class="company-tags" style="padding-left:0;margin-top:8px;">
+                {% if bedrijf.materialen %}{% for m in bedrijf.materialen.split(",") %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
+            </div>
+        </div>
+
+        {% if bedrijf.certificeringen %}
+        <div class="info-kaart" style="margin-bottom:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Certifications</div>
+            <div class="company-tags" style="padding-left:0;">
+                {% for c in bedrijf.certificeringen.split(",") %}<span class="tag tag-purple">🏅 {{ c.strip() }}</span>{% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="info-kaart">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Notities</div>
+            <div id="notitiesLijst" style="margin-bottom:12px;"></div>
+            <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+                <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
+                <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
+                <button onclick="voegNotitieToeProfiel()" style="margin-left:auto;padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="info-kaart">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Contact Intelligence</div>
+            <div id="profielContact"><div style="color:var(--gray-400);font-size:var(--text-sm);">Laden...</div></div>
+            <div id="profielKaart"></div>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var BEDRIJF_NAAM = {{ bedrijf.naam|tojson }};
+var BEDRIJF_URL = {{ bedrijf.url|tojson }};
+var pKaart = L.map("profielKaart", {zoomControl:true}).setView([{{ bedrijf.lat or 20 }}, {{ bedrijf.lon or 0 }}], {{ 12 if bedrijf.lat else 2 }});
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(pKaart);
+{% if bedrijf.lat and bedrijf.lon %}
+L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(pKaart).bindPopup({{ bedrijf.naam|tojson }});
+{% endif %}
+
+function vulContact(data) {
+    var html = "";
+    if (data.website) html += `<div class="drawer-row"><span class="drawer-row-label">Website</span><span class="drawer-row-value"><a href="${data.website}" target="_blank" style="color:var(--brand-600);font-weight:600;">${data.website.replace("https://","").replace("http://","").split("/")[0]}</a></span></div>`;
+    var tel = data.telefoon || {{ (bedrijf.telefoon or "")|tojson }};
+    var adr = data.adres || {{ (bedrijf.adres or "")|tojson }};
+    if (tel) html += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value">${tel}</span></div>`;
+    if (adr) html += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value">${adr}</span></div>`;
+    if (!html) html = '<div style="color:var(--gray-400);font-size:var(--text-sm);">Geen extra contactgegevens gevonden.</div>';
+    document.getElementById("profielContact").innerHTML = html;
+}
+
+if (BEDRIJF_URL) {
+    fetch("/details?url=" + encodeURIComponent(BEDRIJF_URL)).then(r => r.json()).then(vulContact);
+} else {
+    vulContact({});
+}
+
+async function laadNotities() {
+    const res = await fetch("/api/notities?bedrijf=" + encodeURIComponent(BEDRIJF_NAAM));
+    const notities = await res.json();
+    const div = document.getElementById("notitiesLijst");
+    if (notities.length === 0) { div.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Nog geen notities.</p>"; return; }
+    let html = "";
+    notities.forEach(n => {
+        const badge = n.type === "team" ? "🟢 Team" : "🔒 Privé";
+        html += `<div style="background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;"><div style="color:#334155;">${n.tekst}</div><div style="color:#94a3b8;font-size:11px;margin-top:4px;">${badge} · ${n.timestamp}</div></div>`;
+    });
+    div.innerHTML = html;
+}
+async function voegNotitieToeProfiel() {
+    const input = document.getElementById("notitieInput");
+    const tekst = input.value.trim();
+    if (!tekst) return;
+    const type_ = document.querySelector('input[name="notitieType"]:checked').value;
+    await fetch("/api/notities", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, tekst: tekst, type: type_})});
+    input.value = "";
+    laadNotities();
+}
+async function wijzigStatusProfiel() {
+    const select = document.getElementById("statusSelect");
+    await fetch("/api/status", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, status: select.value})});
+}
+async function toggleOpslaanProfiel(el) {
+    const res = await fetch("/api/opgeslagen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({naam: BEDRIJF_NAAM})});
+    const data = await res.json();
+    el.textContent = data.opgeslagen ? "★" : "☆";
+    el.classList.toggle("opgeslagen", data.opgeslagen);
+}
+laadNotities();
+</script>
+    """
+    pagina = render_simple_page(bedrijf["naam"], "zoeken", inhoud)
+    return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
