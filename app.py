@@ -210,6 +210,139 @@ UPLOAD_HTML = '''
 </html>
 '''
 
+IMPORT_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Bedrijven importeren</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; padding: 40px; }
+        .box { background: white; padding: 30px; border-radius: 12px; max-width: 480px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { font-size: 18px; margin-bottom: 8px; }
+        p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+        input { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+        .succes { background: #f0fdf4; color: #16a34a; }
+        .fout { background: #fef2f2; color: #ef4444; }
+        table { width: 100%; font-size: 11px; margin-top: 16px; border-collapse: collapse; }
+        th, td { border: 1px solid #e2e8f0; padding: 4px 6px; text-align: left; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Bedrijven / Fabrieken importeren</h1>
+        <p>Kolommen: Naam, Type (Leverancier/Klant/Fabriek), Land, Stad, Adres, Telefoonnummer, Materialen, Klanttype, Volume</p>
+        {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="bestand" accept=".xlsx,.xls" required>
+            <button type="submit">Importeren</button>
+        </form>
+        <table>
+            <tr><th>Naam</th><th>Type</th><th>Land</th><th>Stad</th><th>Adres</th><th>Telefoonnummer</th><th>Materialen</th><th>Klanttype</th><th>Volume</th></tr>
+            <tr><td>Voorbeeld BV</td><td>Leverancier</td><td>Netherlands</td><td>Rotterdam</td><td>Kade 12</td><td>+31 10 1234567</td><td>Paper, Plastic</td><td>Commercial</td><td>5000</td></tr>
+            <tr><td>Fabriek XYZ</td><td>Fabriek</td><td>Germany</td><td>Hamburg</td><td></td><td></td><td>Paper, OCC</td><td></td><td></td></tr>
+        </table>
+    </div>
+</body>
+</html>
+'''
+
+@app.route("/importeer", methods=["GET", "POST"])
+def importeer_bedrijven():
+    bericht = None
+    succes = False
+    if request.method == "POST":
+        bestand = request.files.get("bestand")
+        if not bestand:
+            bericht = "Geen bestand geselecteerd."
+        else:
+            try:
+                import pandas as pd
+                df = pd.read_excel(bestand)
+                df.columns = [str(c).strip() for c in df.columns]
+
+                aantal_bedrijven = 0
+                aantal_fabrieken = 0
+                aantal_dubbel = 0
+
+                def maak_sleutel(naam_, land_, plaats_):
+                    return (naam_.strip().lower(), land_.strip().lower(), plaats_.strip().lower())
+
+                bestaande_bedrijven = {maak_sleutel(b["naam"], b["land"], b["regio"]) for b in ENF_BEDRIJVEN}
+                bestaande_fabrieken = {maak_sleutel(f["naam"], f["land"], f["stad"]) for f in PAPIERFABRIEKEN}
+
+                for _, rij in df.iterrows():
+                    naam = str(rij.get("Naam", "")).strip()
+                    if not naam or naam.lower() == "nan":
+                        continue
+                    type_ = str(rij.get("Type", "")).strip().lower()
+                    land = str(rij.get("Land", "")).strip()
+                    stad = str(rij.get("Stad", "")).strip()
+                    materialen = str(rij.get("Materialen", "")).strip()
+                    if materialen.lower() == "nan":
+                        materialen = ""
+                    klanttype = str(rij.get("Klanttype", "")).strip()
+                    if klanttype.lower() == "nan":
+                        klanttype = ""
+                    adres = str(rij.get("Adres", "")).strip()
+                    if adres.lower() == "nan":
+                        adres = ""
+                    telefoon = str(rij.get("Telefoonnummer", "")).strip()
+                    if telefoon.lower() == "nan":
+                        telefoon = ""
+                    volume_raw = rij.get("Volume", "")
+                    volume = "" if pd.isna(volume_raw) else str(volume_raw).strip()
+
+                    lat_raw = rij.get("Lat", None)
+                    lon_raw = rij.get("Lon", None)
+                    if lat_raw is not None and lon_raw is not None and not pd.isna(lat_raw) and not pd.isna(lon_raw):
+                        lat = float(lat_raw)
+                        lon = float(lon_raw)
+                    else:
+                        geo = geocode_adres(stad, land)
+                        lat = geo["lat"] if geo else None
+                        lon = geo["lon"] if geo else None
+
+                    sleutel = maak_sleutel(naam, land, stad)
+
+                    if type_ == "fabriek":
+                        if sleutel in bestaande_fabrieken:
+                            aantal_dubbel += 1
+                            continue
+                        bestaande_fabrieken.add(sleutel)
+                        PAPIERFABRIEKEN.append({
+                            "naam": naam, "land": land, "stad": stad,
+                            "materialen": materialen, "lat": lat, "lon": lon
+                        })
+                        aantal_fabrieken += 1
+                    else:
+                        if sleutel in bestaande_bedrijven:
+                            aantal_dubbel += 1
+                            continue
+                        bestaande_bedrijven.add(sleutel)
+                        ENF_BEDRIJVEN.append({
+                            "naam": naam, "land": land, "regio": stad,
+                            "materialen": materialen, "klanttype": klanttype,
+                            "volume": volume, "url": "", "lat": lat, "lon": lon,
+                            "adres": adres, "telefoon": telefoon
+                        })
+                        aantal_bedrijven += 1
+
+                with open("bedrijven.json", "w", encoding="utf-8") as f:
+                    json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+                with open("papierfabrieken.json", "w", encoding="utf-8") as f:
+                    json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+
+                bericht = f"Gelukt! {aantal_bedrijven} bedrijven/klanten en {aantal_fabrieken} fabrieken toegevoegd."
+                if aantal_dubbel:
+                    bericht += f" {aantal_dubbel} dubbele(n) overgeslagen (kwamen al voor)."
+                succes = True
+            except Exception as e:
+                bericht = f"Er ging iets mis: {e}"
+
+    return render_template_string(IMPORT_HTML, bericht=bericht, succes=succes)
 @app.route("/forwarder-upload", methods=["GET", "POST"])
 def forwarder_upload():
     bericht = None
@@ -309,18 +442,13 @@ def haal_bedrijf_details(url):
     except:
         return {}
 
-HTML = '''
-<!DOCTYPE html>
-<html lang="en">
+
+PAGINA_HOOFD = """<!DOCTYPE html>
+<html lang="nl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RecycleFind — Global Recycling Intelligence</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <title>__TITEL__ — RecycleFind</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         /* ============================================
@@ -330,16 +458,16 @@ HTML = '''
         /* TOKENS */
         :root {
             /* Colors */
-            --brand-50:  #eff6ff;
-            --brand-100: #dbeafe;
-            --brand-200: #bfdbfe;
-            --brand-300: #93c5fd;
-            --brand-400: #60a5fa;
-            --brand-500: #3b82f6;
-            --brand-600: #2563eb;
-            --brand-700: #1d4ed8;
-            --brand-800: #1e40af;
-            --brand-900: #1e3a8a;
+            --brand-50:  #fff7ed;
+            --brand-100: #ffedd5;
+            --brand-200: #fed7aa;
+            --brand-300: #fdba74;
+            --brand-400: #fb923c;
+            --brand-500: #f97316;
+            --brand-600: #ea580c;
+            --brand-700: #c2410c;
+            --brand-800: #9a3412;
+            --brand-900: #7c2d12;
 
             --gray-50:  #f8fafc;
             --gray-100: #f1f5f9;
@@ -458,63 +586,659 @@ HTML = '''
         /* ============================================
            HERO
            ============================================ */
-        .hero {
-            background: linear-gradient(160deg, var(--brand-900) 0%, var(--brand-800) 40%, var(--brand-700) 100%);
-            padding: var(--space-16) var(--space-10) var(--space-12);
-            text-align: center;
-            position: relative;
-            overflow: hidden;
+        .search-bar-section {
+            background: var(--gray-50);
+            padding: var(--space-8) var(--space-10);
+            border-bottom: 1px solid var(--gray-200);
         }
-        .hero::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-            pointer-events: none;
-        }
-        .hero-content { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
-        .hero-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: var(--space-2);
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: var(--brand-200);
-            padding: 5px 14px;
-            border-radius: var(--radius-full);
-            font-size: var(--text-xs);
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            margin-bottom: var(--space-5);
-        }
-        .hero h1 {
-            font-size: var(--text-5xl);
-            font-weight: 900;
-            color: #fff;
-            letter-spacing: -2px;
-            line-height: 1.05;
-            margin-bottom: var(--space-4);
-        }
-        .hero h1 em { color: var(--brand-300); font-style: normal; }
-        .hero-sub {
-            color: rgba(255,255,255,0.65);
-            font-size: var(--text-lg);
-            margin-bottom: var(--space-8);
-            font-weight: 400;
-        }
+        .hero-content { max-width: 860px; margin: 0 auto; }
 
         /* ============================================
            SEARCH
            ============================================ */
         .search-container {
-            background: rgba(255,255,255,0.07);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.12);
+            background: #fff;
+            border: 1px solid var(--gray-200);
             border-radius: var(--radius-xl);
             padding: var(--space-5);
             max-width: 860px;
             margin: 0 auto;
+            box-shadow: var(--shadow-sm);
+        }
+        .search-row {
+            display: flex;
+            gap: var(--space-2);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .search-input, .search-select {
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: 9px 13px;
+            font-size: var(--text-sm);
+            font-family: var(--font);
+            color: var(--gray-800);
+            outline: none;
+            transition: var(--transition);
+        }
+        .search-input { width: 200px; }
+        .search-input::placeholder { color: var(--gray-400); }
+        .search-select { width: 155px; cursor: pointer; }
+        .search-input:focus, .search-select:focus {
+            border-color: var(--brand-400);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+        .btn-search {
+            background: var(--brand-500);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 9px 20px;
+            font-size: var(--text-sm);
+            font-weight: 700;
+            font-family: var(--font);
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .btn-search:hover { background: var(--brand-400); transform: translateY(-1px); box-shadow: var(--shadow-brand); }
+
+        /* ============================================
+           STATS BAR
+           ============================================ */
+        .stats-bar {
+            background: #fff;
+            border-bottom: 1px solid var(--gray-200);
+            padding: var(--space-4) var(--space-10);
+            display: flex;
+            justify-content: center;
+            gap: var(--space-12);
+        }
+        .stat { text-align: center; }
+        .stat-num { font-size: var(--text-2xl); font-weight: 800; color: var(--brand-600); letter-spacing: -0.5px; }
+        .stat-label { font-size: var(--text-xs); color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; margin-top: 2px; }
+
+        /* ============================================
+           MAIN LAYOUT
+           ============================================ */
+        .main {
+            max-width: 1440px;
+            margin: var(--space-6) auto;
+            padding: 0 var(--space-6);
+            display: flex;
+            gap: var(--space-5);
+            align-items: flex-start;
+        }
+
+        /* ============================================
+           FILTERS SIDEBAR
+           ============================================ */
+        .filters-panel {
+            width: 220px;
+            flex-shrink: 0;
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            padding: var(--space-5);
+            box-shadow: var(--shadow-sm);
+        }
+        .filters-title {
+            font-size: var(--text-xs);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--gray-400);
+            margin-bottom: var(--space-4);
+        }
+        .filter-group { margin-bottom: var(--space-4); }
+        .filter-label {
+            font-size: var(--text-xs);
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: var(--space-2);
+            display: block;
+        }
+        .filter-select {
+            width: 100%;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: 7px 10px;
+            font-size: var(--text-sm);
+            font-family: var(--font);
+            color: var(--gray-700);
+            outline: none;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .filter-select:focus { border-color: var(--brand-400); background: #fff; }
+        .filter-divider { border: none; border-top: 1px solid var(--gray-100); margin: var(--space-4) 0; }
+        .btn-apply {
+            width: 100%;
+            background: var(--brand-600);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 9px;
+            font-size: var(--text-sm);
+            font-weight: 600;
+            font-family: var(--font);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .btn-apply:hover { background: var(--brand-700); }
+        .btn-reset {
+            width: 100%;
+            background: transparent;
+            color: var(--gray-400);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: 8px;
+            font-size: var(--text-xs);
+            font-family: var(--font);
+            cursor: pointer;
+            margin-top: var(--space-2);
+            transition: var(--transition);
+        }
+        .btn-reset:hover { color: var(--gray-600); border-color: var(--gray-300); }
+
+        /* ============================================
+           RESULTS PANEL
+           ============================================ */
+        .results-panel { width: 340px; flex-shrink: 0; }
+        .results-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-3);
+            padding: 0 2px;
+        }
+        .results-count { font-size: var(--text-sm); color: var(--gray-400); }
+        .results-count strong { color: var(--brand-600); font-weight: 700; }
+        .results-list {
+            max-height: 680px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--gray-200) transparent;
+        }
+
+        /* ============================================
+           COMPANY CARD
+           ============================================ */
+        .company-card {
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            margin-bottom: var(--space-2);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .company-card:hover {
+            border-color: var(--brand-300);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+        .company-card-top { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-2); }
+        .company-index {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            min-width: 22px;
+            background: var(--brand-600);
+            color: #fff;
+            border-radius: 5px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            margin-top: 1px;
+        }
+        .company-name { font-size: var(--text-base); font-weight: 600; color: var(--gray-800); line-height: 1.3; }
+        .company-meta { font-size: var(--text-xs); color: var(--gray-400); margin-bottom: var(--space-2); padding-left: 34px; display: flex; align-items: center; gap: 4px; }
+        .company-tags { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 34px; }
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+        }
+        .tag-blue { background: var(--brand-50); color: var(--brand-700); border: 1px solid var(--brand-100); }
+        .tag-green { background: var(--green-50); color: var(--green-600); border: 1px solid #bbf7d0; }
+        .tag-orange { background: var(--orange-50); color: var(--orange-600); border: 1px solid #fed7aa; }
+        .star-btn { font-size: 1.1em; color: var(--gray-300); cursor: pointer; padding: 0 2px; }
+        .star-btn:hover { color: var(--brand-400); }
+        .star-btn.opgeslagen { color: var(--brand-500); }
+
+        /* ============================================
+           MAP
+           ============================================ */
+        .map-panel { flex: 1; min-width: 0; }
+        #kaart {
+            height: 720px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--gray-200);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* ============================================
+           DETAIL DRAWER
+           ============================================ */
+        .overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.35);
+            z-index: 9999;
+            backdrop-filter: blur(3px);
+        }
+        .drawer {
+            position: fixed;
+            top: 0;
+            right: -500px;
+            width: 460px;
+            height: 100vh;
+            background: #fff;
+            border-left: 1px solid var(--gray-200);
+            box-shadow: var(--shadow-xl);
+            z-index: 10000;
+            overflow-y: auto;
+            transition: right 0.3s cubic-bezier(0.4,0,0.2,1);
+        }
+        .drawer.open { right: 0; }
+        .drawer-header {
+            padding: var(--space-6) var(--space-6) var(--space-4);
+            border-bottom: 1px solid var(--gray-100);
+            position: sticky;
+            top: 0;
+            background: #fff;
+            z-index: 1;
+        }
+        .drawer-close {
+            position: absolute;
+            top: var(--space-4);
+            right: var(--space-4);
+            width: 28px;
+            height: 28px;
+            background: var(--gray-100);
+            border: none;
+            border-radius: var(--radius-sm);
+            color: var(--gray-500);
+            cursor: pointer;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+        .drawer-close:hover { background: var(--gray-200); color: var(--gray-800); }
+        .drawer-company-name { font-size: var(--text-xl); font-weight: 700; color: var(--gray-900); margin-bottom: 4px; padding-right: 36px; }
+        .drawer-company-loc { font-size: var(--text-sm); color: var(--gray-400); }
+        .drawer-body { padding: var(--space-5) var(--space-6); }
+        .drawer-section { margin-bottom: var(--space-5); }
+        .drawer-section-title {
+            font-size: var(--text-xs);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--gray-400);
+            margin-bottom: var(--space-3);
+        }
+        .drawer-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-2) 0;
+            border-bottom: 1px solid var(--gray-50);
+        }
+        .drawer-row:last-child { border-bottom: none; }
+        .drawer-row-label { font-size: var(--text-sm); color: var(--gray-400); font-weight: 500; }
+        .drawer-row-value { font-size: var(--text-sm); color: var(--gray-700); font-weight: 500; text-align: right; }
+        .drawer-divider { border: none; border-top: 1px solid var(--gray-100); margin: var(--space-4) 0; }
+        .btn-website {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            background: var(--brand-600);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            font-size: var(--text-sm);
+            font-weight: 600;
+            transition: var(--transition);
+            margin-right: var(--space-2);
+        }
+        .btn-website:hover { background: var(--brand-700); box-shadow: var(--shadow-brand); }
+        .btn-enf {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            background: var(--gray-100);
+            color: var(--gray-600);
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            font-size: var(--text-sm);
+            font-weight: 600;
+            transition: var(--transition);
+        }
+        .btn-enf:hover { background: var(--gray-200); color: var(--gray-800); }
+        .score-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            font-size: var(--text-sm);
+            font-weight: 800;
+        }
+        .score-high { background: var(--green-50); color: var(--green-600); }
+        .score-mid { background: var(--orange-50); color: var(--orange-600); }
+
+        /* ============================================
+           WELCOME STATE
+           ============================================ */
+        .welcome-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-16);
+            text-align: center;
+        }
+        .welcome-icon { font-size: 3em; margin-bottom: var(--space-4); }
+        .welcome-title { font-size: var(--text-2xl); font-weight: 700; color: var(--gray-800); margin-bottom: var(--space-2); }
+        .welcome-sub { font-size: var(--text-base); color: var(--gray-400); max-width: 400px; }
+
+        /* ============================================
+           SIDEBAR
+           ============================================ */
+        body { display: flex; }
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            background: #fff;
+            border-right: 1px solid var(--gray-200);
+            display: flex;
+            flex-direction: column;
+            padding: var(--space-5) 0;
+            flex-shrink: 0;
+        }
+        .sidebar-logo {
+            font-size: var(--text-lg);
+            font-weight: 800;
+            color: var(--gray-900);
+            letter-spacing: -0.5px;
+            text-decoration: none;
+            padding: 0 var(--space-5);
+            margin-bottom: var(--space-6);
+            display: block;
+        }
+        .sidebar-logo em { color: var(--brand-600); font-style: normal; }
+        .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 var(--space-3); }
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            padding: 9px var(--space-3);
+            border-radius: var(--radius-sm);
+            color: var(--gray-600);
+            text-decoration: none;
+            font-size: var(--text-sm);
+            font-weight: 500;
+            transition: var(--transition);
+        }
+        .sidebar-link:hover { background: var(--gray-50); color: var(--gray-900); }
+        .sidebar-link.active { background: var(--brand-50); color: var(--brand-700); font-weight: 700; }
+        .sidebar-link .icoon { font-size: 1.05em; width: 20px; text-align: center; }
+        .content-wrapper { flex: 1; min-width: 0; }
+
+        /* ============================================
+           COLLAPSIBLE (uitklapbare secties in het paneel)
+           ============================================ */
+        .collapsible-card { border: 1px solid var(--gray-200); border-radius: var(--radius-md); margin-bottom: var(--space-3); overflow: hidden; }
+        .collapsible-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-3) var(--space-4);
+            background: var(--gray-50);
+            cursor: pointer;
+            user-select: none;
+        }
+        .collapsible-header-left { display: flex; align-items: center; gap: var(--space-2); font-weight: 700; font-size: var(--text-sm); color: var(--gray-800); }
+        .collapsible-arrow { transition: transform 0.2s ease; color: var(--gray-400); }
+        .collapsible-arrow.dicht { transform: rotate(-90deg); }
+        .collapsible-body { padding: var(--space-4); }
+        .collapsible-body.dicht { display: none; }
+
+        /* ============================================
+           SIMPELE PAGINA-KAARTEN (Dashboard/Inzichten/etc.)
+           ============================================ */
+        .page-content { padding: var(--space-8) var(--space-10); max-width: 1200px; }
+        .page-title { font-size: var(--text-2xl); font-weight: 800; color: var(--gray-900); margin-bottom: var(--space-6); }
+        .kaartjes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-8); }
+        .info-kaart { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: var(--space-5); }
+        .info-kaart-getal { font-size: var(--text-3xl); font-weight: 800; color: var(--brand-600); }
+        .info-kaart-label { font-size: var(--text-sm); color: var(--gray-400); margin-top: 4px; }
+        .eenvoudige-tabel { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); overflow: hidden; }
+        .eenvoudige-tabel th { text-align: left; padding: 10px 14px; background: var(--gray-50); font-size: var(--text-xs); text-transform: uppercase; color: var(--gray-400); border-bottom: 1px solid var(--gray-200); }
+        .eenvoudige-tabel td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); font-size: var(--text-sm); color: var(--gray-700); }
+        .lege-staat { text-align: center; padding: var(--space-16); color: var(--gray-400); }
+    </style>
+</head>
+"""
+
+def sidebar_html(actief):
+    items = [
+        ("zoeken", "/", "🔍", "Zoeken"),
+        ("dashboard", "/dashboard", "📊", "Dashboard"),
+        ("inzichten", "/inzichten", "📈", "Inzichten"),
+        ("contacten", "/contacten", "👥", "Contacten"),
+        ("opslagen", "/opslagen", "⭐", "Opslagen"),
+        ("notities", "/notities-overzicht", "📝", "Notities"),
+        ("instellingen", "/instellingen", "⚙️", "Instellingen"),
+    ]
+    links = ""
+    for key, href, icoon, label in items:
+        cls = "sidebar-link active" if key == actief else "sidebar-link"
+        links += "<a href=\"" + href + "\" class=\"" + cls + "\"><span class=\"icoon\">" + icoon + "</span> " + label + "</a>\n        "
+    return '''<aside class="sidebar">
+    <a href="/" class="sidebar-logo">Recycle<em>Find</em></a>
+    <nav class="sidebar-nav">
+        ITEMS_HIER
+    </nav>
+</aside>'''.replace("ITEMS_HIER", links)
+
+def render_simple_page(titel, actief, inhoud_html):
+    kop = PAGINA_HOOFD.replace("__TITEL__", titel)
+    volledige_html = kop + "<body>\n" + sidebar_html(actief) + '''
+<div class="content-wrapper">
+<div class="page-content">
+''' + inhoud_html + '''
+</div>
+</div>
+</body>
+</html>'''
+    return volledige_html
+
+HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RecycleFind — Global Recycling Intelligence</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ============================================
+           DESIGN SYSTEM — RECYCLEFIND
+           ============================================ */
+
+        /* TOKENS */
+        :root {
+            /* Colors */
+            --brand-50:  #fff7ed;
+            --brand-100: #ffedd5;
+            --brand-200: #fed7aa;
+            --brand-300: #fdba74;
+            --brand-400: #fb923c;
+            --brand-500: #f97316;
+            --brand-600: #ea580c;
+            --brand-700: #c2410c;
+            --brand-800: #9a3412;
+            --brand-900: #7c2d12;
+
+            --gray-50:  #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --green-50:  #f0fdf4;
+            --green-500: #22c55e;
+            --green-600: #16a34a;
+
+            --orange-50:  #fff7ed;
+            --orange-500: #f97316;
+            --orange-600: #ea580c;
+
+            --red-50:  #fef2f2;
+            --red-500: #ef4444;
+
+            /* Typography */
+            --font: "Inter", -apple-system, sans-serif;
+            --text-xs:   0.7rem;
+            --text-sm:   0.8rem;
+            --text-base: 0.9rem;
+            --text-lg:   1.05rem;
+            --text-xl:   1.2rem;
+            --text-2xl:  1.5rem;
+            --text-3xl:  2rem;
+            --text-4xl:  2.8rem;
+            --text-5xl:  3.5rem;
+
+            /* Spacing */
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --space-8: 32px;
+            --space-10: 40px;
+            --space-12: 48px;
+            --space-16: 64px;
+
+            /* Radius */
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 20px;
+            --radius-full: 9999px;
+
+            /* Shadows */
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.1);
+            --shadow-xl: 0 16px 48px rgba(0,0,0,0.12);
+            --shadow-brand: 0 4px 14px rgba(37,99,235,0.25);
+
+            /* Transitions */
+            --transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        /* RESET */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+        /* ============================================
+           NAVBAR
+           ============================================ */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--gray-200);
+            height: 56px;
+            display: flex;
+            align-items: center;
+            padding: 0 var(--space-8);
+            gap: var(--space-8);
+        }
+        .navbar-logo {
+            font-size: var(--text-lg);
+            font-weight: 800;
+            color: var(--gray-900);
+            letter-spacing: -0.5px;
+            text-decoration: none;
+            flex-shrink: 0;
+        }
+        .navbar-logo em { color: var(--brand-600); font-style: normal; }
+        .navbar-divider { width: 1px; height: 20px; background: var(--gray-200); }
+        .navbar-stat { font-size: var(--text-xs); color: var(--gray-400); white-space: nowrap; }
+        .navbar-stat strong { color: var(--brand-600); font-weight: 600; }
+        .navbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
+        .btn-nav {
+            font-size: var(--text-sm);
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: var(--radius-sm);
+            border: none;
+            cursor: pointer;
+            font-family: var(--font);
+            transition: var(--transition);
+            text-decoration: none;
+        }
+        .btn-nav-ghost { background: transparent; color: var(--gray-600); }
+        .btn-nav-ghost:hover { background: var(--gray-100); color: var(--gray-900); }
+        .btn-nav-primary { background: var(--brand-600); color: #fff; }
+        .btn-nav-primary:hover { background: var(--brand-700); box-shadow: var(--shadow-brand); }
+
+        /* ============================================
+           HERO
+           ============================================ */
+        .search-bar-section {
+            background: var(--gray-50);
+            padding: var(--space-8) var(--space-10);
+            border-bottom: 1px solid var(--gray-200);
+        }
+        .hero-content { max-width: 860px; margin: 0 auto; }
+
+        /* ============================================
+           SEARCH
+           ============================================ */
+        .search-container {
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-xl);
+            padding: var(--space-5);
+            max-width: 860px;
+            margin: 0 auto;
+            box-shadow: var(--shadow-sm);
         }
         .search-row {
             display: flex;
@@ -864,9 +1588,103 @@ HTML = '''
         .welcome-icon { font-size: 3em; margin-bottom: var(--space-4); }
         .welcome-title { font-size: var(--text-2xl); font-weight: 700; color: var(--gray-800); margin-bottom: var(--space-2); }
         .welcome-sub { font-size: var(--text-base); color: var(--gray-400); max-width: 400px; }
+
+        /* ============================================
+           SIDEBAR
+           ============================================ */
+        body { display: flex; }
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            background: #fff;
+            border-right: 1px solid var(--gray-200);
+            display: flex;
+            flex-direction: column;
+            padding: var(--space-5) 0;
+            flex-shrink: 0;
+        }
+        .sidebar-logo {
+            font-size: var(--text-lg);
+            font-weight: 800;
+            color: var(--gray-900);
+            letter-spacing: -0.5px;
+            text-decoration: none;
+            padding: 0 var(--space-5);
+            margin-bottom: var(--space-6);
+            display: block;
+        }
+        .sidebar-logo em { color: var(--brand-600); font-style: normal; }
+        .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 var(--space-3); }
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            padding: 9px var(--space-3);
+            border-radius: var(--radius-sm);
+            color: var(--gray-600);
+            text-decoration: none;
+            font-size: var(--text-sm);
+            font-weight: 500;
+            transition: var(--transition);
+        }
+        .sidebar-link:hover { background: var(--gray-50); color: var(--gray-900); }
+        .sidebar-link.active { background: var(--brand-50); color: var(--brand-700); font-weight: 700; }
+        .sidebar-link .icoon { font-size: 1.05em; width: 20px; text-align: center; }
+        .content-wrapper { flex: 1; min-width: 0; }
+
+        /* ============================================
+           COLLAPSIBLE (uitklapbare secties in het paneel)
+           ============================================ */
+        .collapsible-card { border: 1px solid var(--gray-200); border-radius: var(--radius-md); margin-bottom: var(--space-3); overflow: hidden; }
+        .collapsible-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-3) var(--space-4);
+            background: var(--gray-50);
+            cursor: pointer;
+            user-select: none;
+        }
+        .collapsible-header-left { display: flex; align-items: center; gap: var(--space-2); font-weight: 700; font-size: var(--text-sm); color: var(--gray-800); }
+        .collapsible-arrow { transition: transform 0.2s ease; color: var(--gray-400); }
+        .collapsible-arrow.dicht { transform: rotate(-90deg); }
+        .collapsible-body { padding: var(--space-4); }
+        .collapsible-body.dicht { display: none; }
+
+        /* ============================================
+           SIMPELE PAGINA-KAARTEN (Dashboard/Inzichten/etc.)
+           ============================================ */
+        .page-content { padding: var(--space-8) var(--space-10); max-width: 1200px; }
+        .page-title { font-size: var(--text-2xl); font-weight: 800; color: var(--gray-900); margin-bottom: var(--space-6); }
+        .kaartjes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-8); }
+        .info-kaart { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: var(--space-5); }
+        .info-kaart-getal { font-size: var(--text-3xl); font-weight: 800; color: var(--brand-600); }
+        .info-kaart-label { font-size: var(--text-sm); color: var(--gray-400); margin-top: 4px; }
+        .eenvoudige-tabel { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); overflow: hidden; }
+        .eenvoudige-tabel th { text-align: left; padding: 10px 14px; background: var(--gray-50); font-size: var(--text-xs); text-transform: uppercase; color: var(--gray-400); border-bottom: 1px solid var(--gray-200); }
+        .eenvoudige-tabel td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); font-size: var(--text-sm); color: var(--gray-700); }
+        .lege-staat { text-align: center; padding: var(--space-16); color: var(--gray-400); }
     </style>
 </head>
 <body>
+
+<aside class="sidebar">
+    <a href="/" class="sidebar-logo">Recycle<em>Find</em></a>
+    <nav class="sidebar-nav">
+        <a href="/" class="sidebar-link active"><span class="icoon">🔍</span> Zoeken</a>
+        <a href="/dashboard" class="sidebar-link"><span class="icoon">📊</span> Dashboard</a>
+        <a href="/inzichten" class="sidebar-link"><span class="icoon">📈</span> Inzichten</a>
+        <a href="/contacten" class="sidebar-link"><span class="icoon">👥</span> Contacten</a>
+        <a href="/opslagen" class="sidebar-link"><span class="icoon">⭐</span> Opslagen</a>
+        <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">📝</span> Notities</a>
+        <a href="/instellingen" class="sidebar-link"><span class="icoon">⚙️</span> Instellingen</a>
+    </nav>
+</aside>
+
+<div class="content-wrapper">
 
 <div class="ai-search-box">
   <input type="text" id="aiSearchInput" placeholder="Bijv. papierbedrijven in Duitsland met meer dan 50 werknemers" />
@@ -923,12 +1741,9 @@ HTML = '''
     </div>
 </nav>
 
-<!-- HERO -->
-<section class="hero">
+<!-- ZOEKBALK -->
+<section class="search-bar-section">
     <div class="hero-content">
-        <div class="hero-badge">🌍 Global Recycling Intelligence Platform</div>
-        <h1>Find the right<br><em>recycling partners</em><br>worldwide</h1>
-        <p class="hero-sub">Search {{ totaal }} verified companies across {{ landen|length }} countries with AI-powered filters</p>
         <form method="POST" id="searchForm">
             <div class="search-container">
                 <div class="search-row">
@@ -953,26 +1768,6 @@ HTML = '''
         </form>
     </div>
 </section>
-
-<!-- STATS BAR -->
-<div class="stats-bar">
-    <div class="stat">
-        <div class="stat-num">{{ totaal }}</div>
-        <div class="stat-label">Companies</div>
-    </div>
-    <div class="stat">
-        <div class="stat-num">{{ landen|length }}</div>
-        <div class="stat-label">Countries</div>
-    </div>
-    <div class="stat">
-        <div class="stat-num">Free</div>
-        <div class="stat-label">To Search</div>
-    </div>
-    <div class="stat">
-        <div class="stat-num">Live</div>
-        <div class="stat-label">Data</div>
-    </div>
-</div>
 
 <!-- MAIN -->
 <div class="main">
@@ -1035,10 +1830,11 @@ HTML = '''
         <div class="results-list">
             {% for bedrijf in bedrijven %}
             <div class="company-card"
-                onclick="openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }})">
+                onclick="openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}')">
                 <div class="company-card-top">
                     <span class="company-index">{{ loop.index }}</span>
-                    <span class="company-name">{{ bedrijf.naam }}</span>
+                    <span class="company-name" style="flex:1;">{{ bedrijf.naam }}</span>
+                    <span class="star-btn {% if bedrijf.naam in opgeslagen_namen %}opgeslagen{% endif %}" onclick="toggleOpslaan(event, '{{ bedrijf.naam|replace("'","\\'") }}', this)">{% if bedrijf.naam in opgeslagen_namen %}★{% else %}☆{% endif %}</span>
                 </div>
                 <div class="company-meta">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</div>
                 <div class="company-tags">
@@ -1114,7 +1910,7 @@ var clusterGroep = L.markerClusterGroup();
 {% for b in bedrijven %}
 L.marker([{{ b.lat }}, {{ b.lon }}])
     .bindPopup("<b>{{ b.naam|replace('"','') }}</b><br><small>{{ b.regio }}, {{ b.land }}</small>")
-    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }}); })
+    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }},"{{ b.adres|default('', true)|replace("'","&#39;") }}","{{ b.telefoon|default('', true) }}"); })
     .addTo(clusterGroep);
 {% endfor %}
 kaart.addLayer(clusterGroep);
@@ -1131,15 +1927,27 @@ L.marker([{{ f.lat }}, {{ f.lon }}], {icon: fabriekIcon})
 {% endif %}{% endfor %}
 {% endif %}
 
-function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon) {
-window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon};
-    {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
-    document.getElementById("drawerName").textContent = naam;
-    document.getElementById("drawerLoc").textContent = "📍 " + regio + ", " + land;
-    document.getElementById("drawerBody").innerHTML = `
-        <div class="drawer-section">
-            <div class="drawer-section-title">Company Info</div>
-            <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
+function kaartHTML(id, titel, icoon, inhoud, openStaan) {
+    return `
+        <div class="collapsible-card">
+            <div class="collapsible-header" onclick="toggleKaart('${id}')">
+                <span class="collapsible-header-left"><span>${icoon}</span> ${titel}</span>
+                <span class="collapsible-arrow ${openStaan ? '' : 'dicht'}" id="pijl-${id}">▾</span>
+            </div>
+            <div class="collapsible-body ${openStaan ? '' : 'dicht'}" id="${id}">
+                ${inhoud}
+            </div>
+        </div>`;
+}
+
+function toggleKaart(id) {
+    document.getElementById(id).classList.toggle("dicht");
+    document.getElementById("pijl-" + id).classList.toggle("dicht");
+}
+
+function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHTML) {
+    const algemeen = `
+        <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
     <select id="statusSelect" onchange="wijzigStatus()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
         <option value="">Geen status</option>
         <option value="klant">🟢 Klant</option>
@@ -1148,45 +1956,58 @@ window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: kla
         <option value="geen_interesse">⚪ Geen Interesse</option>
     </select>
 </span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div><hr class="drawer-divider">
-<div class="drawer-section-title">AI Uitrusting-analyse</div>
-<button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;">AI Analyseren</button>
-<div id="equipmentResults" style="margin-top:12px;"></div>
-<hr class="drawer-divider">
-<div class="drawer-section-title">Notities</div>
-<div id="notitiesLijst" style="margin-bottom:12px;"></div>
-<textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
-<div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-    <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
-    <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
-    <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
-</div>
-<hr class="drawer-divider" style="margin:12px 0;">
-<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Stuur melding naar:</div>
-<select id="meldingOntvanger" style="width:100%;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:6px;">
-    <option value="">Kies persoon/team...</option>
-</select>
-<div style="display:flex;gap:8px;">
-    <input type="text" id="meldingTekst" placeholder="Melding..." style="flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
-    <button onclick="stuurMelding()" style="padding:6px 14px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Stuur</button>
-</div>
-        </div>
-        <hr class="drawer-divider">
-        <div class="drawer-section">
-            <div class="drawer-section-title">Contact & Details</div>
-            <div id="transportInfo"></div>
-            <hr class="drawer-divider">
-<div class="drawer-section-title">Foto's</div>
-<div id="fotosLijst" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
-<input type="file" id="fotoInput" accept="image/*" style="display:none;" onchange="uploadFoto()">
-<button onclick="document.getElementById('fotoInput').click()" style="padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">📷 Foto toevoegen</button>
-            <div style="color:var(--gray-400);font-size:var(--text-sm);padding:var(--space-2) 0;">⏳ Loading details...</div>
-        </div>
-        <hr class="drawer-divider">
-      <a href="${url}" target="_blank" class="btn-enf" style="display:none;">Laden...</a>
-    `;
+        <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div>`;
+
+    const logistiek = `<div id="transportInfo"><div style="color:var(--gray-400);font-size:var(--text-sm);">Laden...</div></div>`;
+
+    const commercieel = `
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Stuur melding naar:</div>
+        <select id="meldingOntvanger" style="width:100%;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:6px;">
+            <option value="">Kies persoon/team...</option>
+        </select>
+        <div style="display:flex;gap:8px;">
+            <input type="text" id="meldingTekst" placeholder="Melding..." style="flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+            <button onclick="stuurMelding()" style="padding:6px 14px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Stuur</button>
+        </div>`;
+
+    const aiAnalyse = `
+        <button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;">AI Analyseren</button>
+        <div id="equipmentResults" style="margin-top:12px;"></div>`;
+
+    const notities = `
+        <div id="notitiesLijst" style="margin-bottom:12px;"></div>
+        <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+            <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
+            <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
+            <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
+        </div>`;
+
+    const contactDetails = `
+        <div id="fotosLijst" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+        <input type="file" id="fotoInput" accept="image/*" style="display:none;" onchange="uploadFoto()">
+        <button onclick="document.getElementById('fotoInput').click()" style="padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:12px;">📷 Foto toevoegen</button>
+        ${contactHTML}
+        ${websiteBtnHTML}`;
+
+    return (
+        kaartHTML("kaartAlgemeen", "Algemene informatie", "ℹ️", algemeen, true) +
+        kaartHTML("kaartLogistiek", "Logistiek", "🚚", logistiek, false) +
+        kaartHTML("kaartCommercieel", "Commercieel", "💬", commercieel, false) +
+        kaartHTML("kaartAi", "AI-uitrusting analyse", "✨", aiAnalyse, false) +
+        kaartHTML("kaartNotities", "Notities", "📝", notities, false) +
+        kaartHTML("kaartContact", "Contact & details", "📇", contactDetails, false)
+    );
+}
+
+function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon, adres, telefoon) {
+    window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon, adres: adres || "", telefoon: telefoon || ""};
+    {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
+    document.getElementById("drawerName").textContent = naam;
+    document.getElementById("drawerLoc").textContent = "📍 " + regio + ", " + land;
+    document.getElementById("drawerBody").innerHTML = bouwDrawerBody(klanttype, materialen, volume, `<div style="color:var(--gray-400);font-size:var(--text-sm);">⏳ Loading details...</div>`, "");
     document.getElementById("overlay").style.display = "block";
     document.getElementById("drawer").classList.add("open");
     laadNotities();
@@ -1198,15 +2019,17 @@ window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: kla
     fetch("/details?url=" + encodeURIComponent(url))
         .then(r => r.json())
         .then(data => {
-        window.currentDrawerData.stad = data.stad || "";
+            window.currentDrawerData.stad = data.stad || "";
             if (data.lat_precies && data.lon_precies) {
                 window.currentDrawerData.lat = data.lat_precies;
                 window.currentDrawerData.lon = data.lon_precies;
             }
             var contactHTML = "";
             if (data.website) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Website</span><span class="drawer-row-value"><a href="${data.website}" target="_blank" style="color:var(--brand-600);font-weight:600;">${data.website.replace("https://","").replace("http://","").split("/")[0]}</a></span></div>`;
-            if (data.telefoon) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value">${data.telefoon}</span></div>`;
-            if (data.adres) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value">${data.adres}${data.stad?", "+data.stad:""}</span></div>`;
+            var telefoon = data.telefoon || window.currentDrawerData.telefoon;
+            var adres = data.adres || window.currentDrawerData.adres;
+            if (telefoon) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value">${telefoon}</span></div>`;
+            if (adres) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value">${adres}${data.stad?", "+data.stad:""}</span></div>`;
             if (data.medewerkers) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Employees</span><span class="drawer-row-value">${data.medewerkers}</span></div>`;
             if (!contactHTML) contactHTML = `<div style="color:var(--gray-400);font-size:var(--text-sm);">No additional details available</div>`;
             if (data.lat_precies && data.lon_precies) {
@@ -1214,65 +2037,14 @@ window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: kla
                 L.marker([data.lat_precies, data.lon_precies]).addTo(kaart)
                     .bindPopup("<b>" + naam + "</b>").openPopup();
             }
+            var websiteBtnHTML = data.website ? `<a href="${data.website}" target="_blank" class="btn-website">🌐 Visit Website</a>` : "";
 
-            document.getElementById("drawerBody").innerHTML = `
-                <div class="drawer-section">
-                    <div class="drawer-section-title">Company Info</div>
-                    <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
-    <select id="statusSelect" onchange="wijzigStatus()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
-        <option value="">Geen status</option>
-        <option value="klant">🟢 Klant</option>
-        <option value="potentie">🟡 Potentie</option>
-        <option value="in_proces">🔵 In Proces</option>
-        <option value="geen_interesse">⚪ Geen Interesse</option>
-    </select>
-</span></div>
-                    <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype||"—"}</span></div>
-                    <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen||"—"}</span></div>
-                    <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume?volume+" t/y":"—"}</span></div>
-                    <hr class="drawer-divider">
-<div class="drawer-section-title">AI Uitrusting-analyse</div>
-<button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;">AI Analyseren</button>
-<div id="equipmentResults" style="margin-top:12px;"></div>
-<hr class="drawer-divider">
-<div class="drawer-section-title">Notities</div>
-<div id="notitiesLijst" style="margin-bottom:12px;"></div>
-<textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
-<div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-    <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
-    <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
-    <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
-</div>
-<hr class="drawer-divider" style="margin:12px 0;">
-<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Stuur melding naar:</div>
-<select id="meldingOntvanger" style="width:100%;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:6px;">
-    <option value="">Kies persoon/team...</option>
-</select>
-<div style="display:flex;gap:8px;">
-    <input type="text" id="meldingTekst" placeholder="Melding..." style="flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
-    <button onclick="stuurMelding()" style="padding:6px 14px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Stuur</button>
-</div>
-                </div>
-                <hr class="drawer-divider">
-                <div class="drawer-section">
-                    <div class="drawer-section-title">Contact & Details</div>
-                    <div id="transportInfo"></div>
-                    <hr class="drawer-divider">
-<div class="drawer-section-title">Foto's</div>
-<div id="fotosLijst" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
-<input type="file" id="fotoInput" accept="image/*" style="display:none;" onchange="uploadFoto()">
-<button onclick="document.getElementById('fotoInput').click()" style="padding:6px 14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">📷 Foto toevoegen</button>
-                    ${contactHTML}
-                </div>
-                <hr class="drawer-divider">
-                ${data.website?`<a href="${data.website}" target="_blank" class="btn-website">🌐 Visit Website</a>`:""}
-                <a href="${url}" target="_blank" class="btn-enf" style="display:none;">Bron →</a>
-            `;
+            document.getElementById("drawerBody").innerHTML = bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHTML);
             laadNotities();
             laadTransport();
             laadStatus();
             vulMeldingDropdowns();
-                        laadFotos();
+            laadFotos();
         });
 }
 
@@ -1657,7 +2429,24 @@ function closeDrawer() {
     document.getElementById("overlay").style.display = "none";
     document.getElementById("drawer").classList.remove("open");
 }
+async function toggleOpslaan(event, naam, el) {
+    event.stopPropagation();
+    try {
+        const res = await fetch("/api/opgeslagen", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({naam: naam})
+        });
+        const data = await res.json();
+        el.textContent = data.opgeslagen ? "★" : "☆";
+        el.classList.toggle("opgeslagen", data.opgeslagen);
+    } catch (err) {
+        console.error(err);
+    }
+}
 </script>
+
+</div>
 
 </body>
 </html>
@@ -1945,13 +2734,196 @@ def index():
 
     totaal_gevonden = len(bedrijven)
     bedrijven = bedrijven[:200]
+    opgeslagen_namen = set(laad_opgeslagen())
 
     return render_template_string(HTML,
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
         klanttype=klanttype, materiaal=materiaal,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
-        papierfabrieken=PAPIERFABRIEKEN)
+        papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen)
+
+OPGESLAGEN_FILE = "opgeslagen.json"
+
+def laad_opgeslagen():
+    try:
+        with open(OPGESLAGEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_opgeslagen(data):
+    with open(OPGESLAGEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+@app.route("/api/opgeslagen", methods=["GET"])
+def get_opgeslagen():
+    return jsonify(laad_opgeslagen())
+
+@app.route("/api/opgeslagen", methods=["POST"])
+def toggle_opgeslagen():
+    data = request.get_json()
+    naam = data.get("naam", "")
+    if not naam:
+        return jsonify({"error": "Naam is verplicht"}), 400
+    lijst = laad_opgeslagen()
+    if naam in lijst:
+        lijst.remove(naam)
+        opgeslagen = False
+    else:
+        lijst.append(naam)
+        opgeslagen = True
+    bewaar_opgeslagen(lijst)
+    return jsonify({"opgeslagen": opgeslagen})
+
+@app.route("/dashboard")
+def dashboard():
+    status_alle = laad_status()
+    aantal_klant = sum(1 for s in status_alle.values() if s == "klant")
+    aantal_potentie = sum(1 for s in status_alle.values() if s == "potentie")
+    aantal_proces = sum(1 for s in status_alle.values() if s == "in_proces")
+
+    inhoud = """
+    <div class="page-title">Dashboard</div>
+    <div class="kaartjes-grid">
+        <div class="info-kaart"><div class="info-kaart-getal">{{ totaal }}</div><div class="info-kaart-label">Bedrijven</div></div>
+        <div class="info-kaart"><div class="info-kaart-getal">{{ landen|length }}</div><div class="info-kaart-label">Landen</div></div>
+        <div class="info-kaart"><div class="info-kaart-getal">{{ fabrieken }}</div><div class="info-kaart-label">Papierfabrieken</div></div>
+        <div class="info-kaart"><div class="info-kaart-getal">{{ klant }}</div><div class="info-kaart-label">🟢 Klant</div></div>
+        <div class="info-kaart"><div class="info-kaart-getal">{{ potentie }}</div><div class="info-kaart-label">🟡 Potentie</div></div>
+        <div class="info-kaart"><div class="info-kaart-getal">{{ proces }}</div><div class="info-kaart-label">🔵 In Proces</div></div>
+    </div>
+    """
+    pagina = render_simple_page("Dashboard", "dashboard", inhoud)
+    return render_template_string(pagina,
+        totaal=len(ENF_BEDRIJVEN), landen=LANDEN, fabrieken=len(PAPIERFABRIEKEN),
+        klant=aantal_klant, potentie=aantal_potentie, proces=aantal_proces)
+
+@app.route("/inzichten")
+def inzichten():
+    per_land = {}
+    per_materiaal = {}
+    for b in ENF_BEDRIJVEN:
+        land = b.get("land", "Onbekend")
+        per_land[land] = per_land.get(land, 0) + 1
+        for m in [x.strip() for x in b.get("materialen", "").split(",") if x.strip()]:
+            per_materiaal[m] = per_materiaal.get(m, 0) + 1
+
+    top_landen = sorted(per_land.items(), key=lambda x: -x[1])[:10]
+    top_materialen = sorted(per_materiaal.items(), key=lambda x: -x[1])[:10]
+
+    inhoud = """
+    <div class="page-title">Inzichten</div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:300px;">
+            <h3 style="margin-bottom:12px;color:var(--gray-600);font-size:14px;">Top 10 landen</h3>
+            <table class="eenvoudige-tabel">
+                <tr><th>Land</th><th>Bedrijven</th></tr>
+                {% for land, aantal in top_landen %}
+                <tr><td>{{ land }}</td><td>{{ aantal }}</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+        <div style="flex:1;min-width:300px;">
+            <h3 style="margin-bottom:12px;color:var(--gray-600);font-size:14px;">Top 10 materialen</h3>
+            <table class="eenvoudige-tabel">
+                <tr><th>Materiaal</th><th>Bedrijven</th></tr>
+                {% for mat, aantal in top_materialen %}
+                <tr><td>{{ mat }}</td><td>{{ aantal }}</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+    """
+    pagina = render_simple_page("Inzichten", "inzichten", inhoud)
+    return render_template_string(pagina, top_landen=top_landen, top_materialen=top_materialen)
+
+@app.route("/contacten")
+def contacten():
+    status_alle = laad_status()
+    labels = {"klant": "🟢 Klant", "potentie": "🟡 Potentie", "in_proces": "🔵 In Proces", "geen_interesse": "⚪ Geen Interesse"}
+    contacten_lijst = []
+    for b in ENF_BEDRIJVEN:
+        s = status_alle.get(b["naam"], "")
+        if s:
+            contacten_lijst.append({"naam": b["naam"], "land": b["land"], "regio": b.get("regio",""), "status": labels.get(s, s)})
+
+    inhoud = """
+    <div class="page-title">Contacten</div>
+    {% if contacten_lijst %}
+    <table class="eenvoudige-tabel">
+        <tr><th>Naam</th><th>Locatie</th><th>Status</th></tr>
+        {% for c in contacten_lijst %}
+        <tr><td>{{ c.naam }}</td><td>{{ c.regio }}, {{ c.land }}</td><td>{{ c.status }}</td></tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <div class="lege-staat">Nog geen bedrijven met een status. Zet een status via het paneel op de zoekpagina.</div>
+    {% endif %}
+    """
+    pagina = render_simple_page("Contacten", "contacten", inhoud)
+    return render_template_string(pagina, contacten_lijst=contacten_lijst)
+
+@app.route("/opslagen")
+def opslagen():
+    opgeslagen_namen = set(laad_opgeslagen())
+    lijst = [b for b in ENF_BEDRIJVEN if b["naam"] in opgeslagen_namen]
+
+    inhoud = """
+    <div class="page-title">Opgeslagen bedrijven</div>
+    {% if lijst %}
+    <table class="eenvoudige-tabel">
+        <tr><th>Naam</th><th>Locatie</th><th>Materialen</th></tr>
+        {% for b in lijst %}
+        <tr><td>{{ b.naam }}</td><td>{{ b.regio }}, {{ b.land }}</td><td>{{ b.materialen }}</td></tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <div class="lege-staat">Nog geen bedrijven opgeslagen.</div>
+    {% endif %}
+    """
+    pagina = render_simple_page("Opgeslagen", "opslagen", inhoud)
+    return render_template_string(pagina, lijst=lijst)
+
+@app.route("/notities-overzicht")
+def notities_overzicht():
+    alle = laad_notities()
+    rijen = []
+    for bedrijf, lijst in alle.items():
+        for n in lijst:
+            if n["type"] == "team":
+                rijen.append({"bedrijf": bedrijf, "tekst": n["tekst"], "timestamp": n["timestamp"]})
+    rijen.sort(key=lambda x: x["timestamp"], reverse=True)
+
+    inhoud = """
+    <div class="page-title">Notities</div>
+    {% if rijen %}
+    <table class="eenvoudige-tabel">
+        <tr><th>Bedrijf</th><th>Notitie</th><th>Datum</th></tr>
+        {% for r in rijen %}
+        <tr><td>{{ r.bedrijf }}</td><td>{{ r.tekst }}</td><td>{{ r.timestamp }}</td></tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <div class="lege-staat">Nog geen teamnotities.</div>
+    {% endif %}
+    """
+    pagina = render_simple_page("Notities", "notities", inhoud)
+    return render_template_string(pagina, rijen=rijen)
+
+@app.route("/instellingen")
+def instellingen():
+    inhoud = """
+    <div class="page-title">Instellingen</div>
+    <div class="info-kaart" style="max-width:400px;">
+        <div class="drawer-row"><span class="drawer-row-label">Ingelogd als</span><span class="drawer-row-value">{{ gebruikersnaam }}</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">Team</span><span class="drawer-row-value">{{ team or "—" }}</span></div>
+        <hr class="drawer-divider">
+        <a href="/logout" class="btn-nav btn-nav-primary" style="display:inline-block;">Uitloggen</a>
+    </div>
+    """
+    pagina = render_simple_page("Instellingen", "instellingen", inhoud)
+    return render_template_string(pagina, gebruikersnaam=session.get("gebruikersnaam",""), team=session.get("team",""))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
