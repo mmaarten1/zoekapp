@@ -1402,8 +1402,10 @@ HTML = '''
            COMPANY CARD
            ============================================ */
         .company-card {
+            position: relative;
             background: #fff;
             border: 1px solid var(--gray-200);
+            border-left: 3px solid transparent;
             border-radius: var(--radius-md);
             padding: var(--space-4);
             margin-bottom: var(--space-2);
@@ -1412,8 +1414,9 @@ HTML = '''
         }
         .company-card:hover {
             border-color: var(--brand-300);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-1px);
+            border-left-color: var(--brand-500);
+            box-shadow: 0 8px 20px rgba(234,88,12,0.10);
+            transform: translateY(-2px);
         }
         .company-card-top { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-2); }
         .company-index {
@@ -1430,8 +1433,17 @@ HTML = '''
             font-weight: 700;
             margin-top: 1px;
         }
-        .company-name { font-size: var(--text-base); font-weight: 600; color: var(--gray-800); line-height: 1.3; }
+        .company-name { font-size: var(--text-base); font-weight: 700; color: var(--gray-800); line-height: 1.3; letter-spacing: -0.2px; }
+        .verificatie-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            font-size: 0.62rem; font-weight: 700; color: var(--green-600);
+            background: var(--green-50); border: 1px solid #bbf7d0;
+            padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle;
+        }
         .company-meta { font-size: var(--text-xs); color: var(--gray-400); margin-bottom: var(--space-2); padding-left: 34px; display: flex; align-items: center; gap: 4px; }
+        .company-volume-badge {
+            padding-left: 34px; margin-bottom: 6px; font-size: 0.72rem; font-weight: 700; color: var(--brand-700);
+        }
         .company-tags { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 34px; }
         .tag {
             display: inline-flex;
@@ -1638,6 +1650,17 @@ HTML = '''
         /* ============================================
            COLLAPSIBLE (uitklapbare secties in het paneel)
            ============================================ */
+        .drawer-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--gray-100); margin-bottom: var(--space-4); }
+        .drawer-tab {
+            background: none; border: none; cursor: pointer; font-family: var(--font);
+            font-size: var(--text-sm); font-weight: 600; color: var(--gray-400);
+            padding: var(--space-2) var(--space-1); margin-bottom: -1px;
+            border-bottom: 2px solid transparent; transition: var(--transition);
+        }
+        .drawer-tab:hover { color: var(--gray-700); }
+        .drawer-tab.actief { color: var(--brand-600); border-bottom-color: var(--brand-600); }
+        .drawer-tab-paneel { display: none; }
+        .drawer-tab-paneel.actief { display: block; }
         .collapsible-card { border: 1px solid var(--gray-200); border-radius: var(--radius-md); margin-bottom: var(--space-3); overflow: hidden; }
         .collapsible-header {
             display: flex;
@@ -1779,7 +1802,10 @@ HTML = '''
         <input type="hidden" name="land" value="{{ land }}">
         <input type="hidden" name="regio" value="{{ regio }}">
         <aside class="filters-panel">
-            <div class="filters-title">Filters</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);">
+                <div class="filters-title" style="margin-bottom:0;display:flex;align-items:center;gap:6px;">🎚️ Filters</div>
+                <a href="/" style="font-size:var(--text-xs);color:var(--gray-400);text-decoration:none;font-weight:600;">Wis filters</a>
+            </div>
 
             <div class="filter-group">
                 <label class="filter-label">Customer Type</label>
@@ -1815,8 +1841,7 @@ HTML = '''
             </div>
 
             <hr class="filter-divider">
-            <button type="submit" class="btn-apply">Apply Filters</button>
-            <a href="/" class="btn-reset" style="display:block;text-align:center;text-decoration:none;margin-top:6px;padding:8px;font-size:var(--text-xs);color:var(--gray-400);">Reset all</a>
+            <button type="submit" class="btn-apply">Filters toepassen</button>
         </aside>
     </form>
 
@@ -1833,14 +1858,14 @@ HTML = '''
                 onclick="openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}')">
                 <div class="company-card-top">
                     <span class="company-index">{{ loop.index }}</span>
-                    <span class="company-name" style="flex:1;">{{ bedrijf.naam }}</span>
+                    <span class="company-name" style="flex:1;">{{ bedrijf.naam }}{% if bedrijf.adres or bedrijf.telefoon %}<span class="verificatie-badge">✓ Geverifieerd</span>{% endif %}</span>
                     <span class="star-btn {% if bedrijf.naam in opgeslagen_namen %}opgeslagen{% endif %}" onclick="toggleOpslaan(event, '{{ bedrijf.naam|replace("'","\\'") }}', this)">{% if bedrijf.naam in opgeslagen_namen %}★{% else %}☆{% endif %}</span>
                 </div>
                 <div class="company-meta">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</div>
+                {% if bedrijf.volume %}<div class="company-volume-badge">⚙ {{ bedrijf.volume }} t/jaar capaciteit</div>{% endif %}
                 <div class="company-tags">
                     {% if bedrijf.klanttype %}{% for t in bedrijf.klanttype.split(",")[:2] %}<span class="tag tag-blue">{{ t.strip() }}</span>{% endfor %}{% endif %}
                     {% if bedrijf.materialen %}{% for m in bedrijf.materialen.split(",")[:2] %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
-                    {% if bedrijf.volume %}<span class="tag tag-orange">{{ bedrijf.volume }} t/y</span>{% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -1945,8 +1970,21 @@ function toggleKaart(id) {
     document.getElementById("pijl-" + id).classList.toggle("dicht");
 }
 
+function wisselDrawerTab(naam) {
+    ["info", "logistiek", "commercieel"].forEach(function(t) {
+        var paneel = document.getElementById("tabpaneel-" + t);
+        var knop = document.getElementById("tabknop-" + t);
+        if (paneel) paneel.classList.toggle("actief", t === naam);
+        if (knop) knop.classList.toggle("actief", t === naam);
+    });
+}
+
 function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHTML) {
+    const geverifieerd = (window.currentDrawerData && (window.currentDrawerData.adres || window.currentDrawerData.telefoon))
+        ? `<div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value" style="color:var(--green-600);font-weight:700;">✓ Geverifieerd</span></div>` : "";
+
     const algemeen = `
+        ${geverifieerd}
         <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
     <select id="statusSelect" onchange="wijzigStatus()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
         <option value="">Geen status</option>
@@ -1992,14 +2030,29 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
         ${contactHTML}
         ${websiteBtnHTML}`;
 
-    return (
+    const tabbalk = `
+        <div class="drawer-tabs">
+            <button class="drawer-tab actief" id="tabknop-info" onclick="wisselDrawerTab('info')">Info</button>
+            <button class="drawer-tab" id="tabknop-logistiek" onclick="wisselDrawerTab('logistiek')">Logistiek</button>
+            <button class="drawer-tab" id="tabknop-commercieel" onclick="wisselDrawerTab('commercieel')">Commercieel</button>
+        </div>`;
+
+    const paneelInfo = `<div class="drawer-tab-paneel actief" id="tabpaneel-info">` +
         kaartHTML("kaartAlgemeen", "Algemene informatie", "ℹ️", algemeen, true) +
-        kaartHTML("kaartLogistiek", "Logistiek", "🚚", logistiek, false) +
-        kaartHTML("kaartCommercieel", "Commercieel", "💬", commercieel, false) +
-        kaartHTML("kaartAi", "AI-uitrusting analyse", "✨", aiAnalyse, false) +
         kaartHTML("kaartNotities", "Notities", "📝", notities, false) +
-        kaartHTML("kaartContact", "Contact & details", "📇", contactDetails, false)
-    );
+        `</div>`;
+
+    const paneelLogistiek = `<div class="drawer-tab-paneel" id="tabpaneel-logistiek">` +
+        kaartHTML("kaartLogistiek", "Logistiek", "🚚", logistiek, true) +
+        `</div>`;
+
+    const paneelCommercieel = `<div class="drawer-tab-paneel" id="tabpaneel-commercieel">` +
+        kaartHTML("kaartCommercieel", "Commercieel", "💬", commercieel, true) +
+        kaartHTML("kaartAi", "AI-uitrusting analyse", "✨", aiAnalyse, false) +
+        kaartHTML("kaartContact", "Contact & details", "📇", contactDetails, false) +
+        `</div>`;
+
+    return tabbalk + paneelInfo + paneelLogistiek + paneelCommercieel;
 }
 
 function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon, adres, telefoon) {
@@ -2716,7 +2769,6 @@ def company_analysis():
 @app.route("/", methods=["GET", "POST"])
 def index():
     zoekterm = land = regio = klanttype = materiaal = ""
-    bedrijven = []
 
     if request.method == "POST":
         zoekterm = request.form.get("zoekterm", "").lower()
@@ -2725,12 +2777,12 @@ def index():
         klanttype = request.form.get("klanttype", "")
         materiaal = request.form.get("materiaal", "")
 
-        bedrijven = ENF_BEDRIJVEN
-        if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
-        if land:      bedrijven = [b for b in bedrijven if b["land"] == land]
-        if regio:     bedrijven = [b for b in bedrijven if b["regio"] == regio]
-        if klanttype: bedrijven = [b for b in bedrijven if klanttype in b.get("klanttype","")]
-        if materiaal: bedrijven = [b for b in bedrijven if materiaal in b.get("materialen","")]
+    bedrijven = ENF_BEDRIJVEN
+    if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
+    if land:      bedrijven = [b for b in bedrijven if b["land"] == land]
+    if regio:     bedrijven = [b for b in bedrijven if b["regio"] == regio]
+    if klanttype: bedrijven = [b for b in bedrijven if klanttype in b.get("klanttype","")]
+    if materiaal: bedrijven = [b for b in bedrijven if materiaal in b.get("materialen","")]
 
     totaal_gevonden = len(bedrijven)
     bedrijven = bedrijven[:200]
@@ -2776,28 +2828,237 @@ def toggle_opgeslagen():
     bewaar_opgeslagen(lijst)
     return jsonify({"opgeslagen": opgeslagen})
 
+def bepaal_continent(land):
+    land = (land or "").strip()
+    europa = {"Netherlands","Germany","Belgium","France","United Kingdom","Spain","Italy","Portugal","Austria","Switzerland","Poland","Czech Republic","Hungary","Sweden","Norway","Finland","Denmark","Ireland","Greece","Romania","Bulgaria","Croatia","Slovenia","Slovakia","Ukraine","Belarus","Estonia","Latvia","Lithuania","Luxembourg","Serbia","Bosnia and Herzegovina","Iceland","Malta","Cyprus"}
+    azie = {"China","Japan","South Korea","India","Indonesia","Vietnam","Thailand","Malaysia","Philippines","Singapore","Taiwan","Pakistan","Bangladesh","Saudi Arabia","United Arab Emirates","Turkey","Israel","Hong Kong"}
+    n_amerika = {"United States","Canada","Mexico"}
+    z_amerika = {"Brazil","Argentina","Chile","Colombia","Peru","Uruguay","Paraguay","Ecuador","Bolivia"}
+    afrika = {"South Africa","Egypt","Nigeria","Kenya","Morocco","Ghana","Tunisia"}
+    if land in europa: return "Europa"
+    if land in azie: return "Azië"
+    if land in n_amerika: return "Noord-Amerika"
+    if land in z_amerika: return "Zuid-Amerika"
+    if land in afrika: return "Afrika"
+    return "Overig"
+
 @app.route("/dashboard")
 def dashboard():
     status_alle = laad_status()
     aantal_klant = sum(1 for s in status_alle.values() if s == "klant")
     aantal_potentie = sum(1 for s in status_alle.values() if s == "potentie")
     aantal_proces = sum(1 for s in status_alle.values() if s == "in_proces")
+    aantal_geen = sum(1 for s in status_alle.values() if s == "geen_interesse")
+    status_totaal = max(aantal_klant + aantal_potentie + aantal_proces + aantal_geen, 1)
+
+    per_materiaal = {}
+    per_continent = {}
+    per_continent_materiaal = {}
+    for b in ENF_BEDRIJVEN:
+        continent = bepaal_continent(b.get("land",""))
+        per_continent[continent] = per_continent.get(continent, 0) + 1
+        per_continent_materiaal.setdefault(continent, {})
+        for m in [x.strip() for x in b.get("materialen", "").split(",") if x.strip()]:
+            per_materiaal[m] = per_materiaal.get(m, 0) + 1
+            per_continent_materiaal[continent][m] = per_continent_materiaal[continent].get(m, 0) + 1
+
+    top_materialen = sorted(per_materiaal.items(), key=lambda x: -x[1])[:5]
+    max_materiaal = max([a for _, a in top_materialen], default=1)
+
+    # Donut-chart data: top 4 materialen + "Overig"
+    donut_bron = sorted(per_materiaal.items(), key=lambda x: -x[1])
+    donut_top4 = donut_bron[:4]
+    donut_overig = sum(a for _, a in donut_bron[4:])
+    donut_totaal = max(sum(a for _, a in donut_top4) + donut_overig, 1)
+    donut_kleuren = ["#fbbf24", "#f97316", "#ea580c", "#c2410c", "#5c4326"]
+    donut_segmenten = []
+    cursor = 0
+    for i, (naam, aantal) in enumerate(donut_top4 + ([("Overig", donut_overig)] if donut_overig else [])):
+        pct = aantal / donut_totaal * 100
+        donut_segmenten.append({"naam": naam, "aantal": aantal, "pct": round(pct,1), "van": round(cursor,2), "tot": round(cursor+pct,2), "kleur": donut_kleuren[i % len(donut_kleuren)]})
+        cursor += pct
+
+    # Regionaal intelligence: top 3 continenten
+    top_continenten = sorted(per_continent.items(), key=lambda x: -x[1])[:3]
+    regio_kaarten = []
+    for naam, aantal in top_continenten:
+        top_mat = sorted(per_continent_materiaal.get(naam, {}).items(), key=lambda x: -x[1])[:3]
+        activiteit = "Hoog" if aantal > status_totaal else ("Gemiddeld" if aantal > status_totaal/3 else "Laag")
+        regio_kaarten.append({"naam": naam, "aantal": aantal, "materialen": [m for m,_ in top_mat], "activiteit": activiteit})
+
+    volume_klant = 0
+    for b in ENF_BEDRIJVEN:
+        if status_alle.get(b["naam"]) == "klant":
+            try:
+                volume_klant += float(str(b.get("volume","0")).replace(",",""))
+            except:
+                pass
+
+    alle_meldingen = laad_meldingen()
+    openstaand = [m for m in alle_meldingen if not m.get("gelezen")]
+    openstaand = sorted(openstaand, key=lambda x: x.get("timestamp",""), reverse=True)[:8]
+
+    kaart_bedrijven = [
+        {"naam": b["naam"], "lat": b["lat"], "lon": b["lon"], "status": status_alle.get(b["naam"], "")}
+        for b in ENF_BEDRIJVEN if b.get("lat") and b.get("lon")
+    ][:1500]
 
     inhoud = """
-    <div class="page-title">Dashboard</div>
-    <div class="kaartjes-grid">
-        <div class="info-kaart"><div class="info-kaart-getal">{{ totaal }}</div><div class="info-kaart-label">Bedrijven</div></div>
-        <div class="info-kaart"><div class="info-kaart-getal">{{ landen|length }}</div><div class="info-kaart-label">Landen</div></div>
-        <div class="info-kaart"><div class="info-kaart-getal">{{ fabrieken }}</div><div class="info-kaart-label">Papierfabrieken</div></div>
-        <div class="info-kaart"><div class="info-kaart-getal">{{ klant }}</div><div class="info-kaart-label">🟢 Klant</div></div>
-        <div class="info-kaart"><div class="info-kaart-getal">{{ potentie }}</div><div class="info-kaart-label">🟡 Potentie</div></div>
-        <div class="info-kaart"><div class="info-kaart-getal">{{ proces }}</div><div class="info-kaart-label">🔵 In Proces</div></div>
+<div class="dash-donker-wrap">
+<style>
+.dash-donker-wrap {
+    background: var(--gray-50);
+    margin:-32px -40px; padding:32px 40px; min-height:calc(100vh - 64px); color:var(--gray-800);
+}
+.dash-donker-wrap .page-title { color:var(--gray-900); font-weight:800; letter-spacing:-0.5px; }
+.dg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:16px; margin-bottom:24px; }
+.dg-kaart {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.dg-kaart:hover { transform: translateY(-2px); border-color: var(--brand-300); box-shadow: var(--shadow-md); }
+.dg-icoon { font-size:1.3rem; margin-bottom:10px; opacity:0.9; }
+.dg-getal { font-size:2.1rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(90deg,var(--brand-600),var(--brand-500)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.dg-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:1.2px; margin-top:6px; font-weight:600; }
+.dg-kaart-titel { font-size:0.78rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:18px; font-weight:700; display:flex; align-items:center; gap:8px; }
+.dg-bar-rij { display:flex; align-items:center; gap:10px; margin-bottom:13px; font-size:0.82rem; }
+.dg-bar-label { width:110px; color:var(--gray-600); flex-shrink:0; }
+.dg-bar-track { flex:1; background:var(--gray-100); border-radius:6px; height:9px; overflow:hidden; }
+.dg-bar-fill { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); height:100%; border-radius:6px; }
+.dg-bar-getal { width:34px; text-align:right; color:var(--brand-700); font-weight:700; }
+#dashKaart { height:280px; border-radius:14px; overflow:hidden; border:1px solid var(--gray-200); }
+.dg-activiteit-item { padding:11px 0; border-bottom:1px solid var(--gray-100); font-size:0.83rem; color:var(--gray-700); }
+.dg-activiteit-item:last-child { border-bottom:none; }
+.dg-activiteit-item small { color:var(--gray-400); display:block; margin-top:3px; }
+.dg-lege { color:var(--gray-400); font-size:0.83rem; }
+.dg-rij-2 { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px; }
+.dg-rij-2 > div { flex:1; min-width:280px; }
+</style>
+
+<div class="page-title">Dashboard</div>
+
+<div class="dg-grid">
+    <div class="dg-kaart"><div class="dg-icoon">🏢</div><div class="dg-getal">{{ totaal }}</div><div class="dg-label">Bedrijven</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">🌍</div><div class="dg-getal">{{ landen|length }}</div><div class="dg-label">Landen</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">📦</div><div class="dg-getal">{{ volume_klant|int }}</div><div class="dg-label">t/j bij klanten</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">🟢</div><div class="dg-getal">{{ klant }}</div><div class="dg-label">Klant</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">🟡</div><div class="dg-getal">{{ potentie }}</div><div class="dg-label">Potentie</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">🔵</div><div class="dg-getal">{{ proces }}</div><div class="dg-label">In proces</div></div>
+</div>
+
+<div class="dg-rij-2">
+    <div class="dg-kaart">
+        <div class="dg-kaart-titel">Status verdeling</div>
+        <div class="dg-bar-rij"><span class="dg-bar-label">🟢 Klant</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (klant/status_totaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ klant }}</span></div>
+        <div class="dg-bar-rij"><span class="dg-bar-label">🟡 Potentie</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (potentie/status_totaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ potentie }}</span></div>
+        <div class="dg-bar-rij"><span class="dg-bar-label">🔵 In proces</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (proces/status_totaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ proces }}</span></div>
+        <div class="dg-bar-rij"><span class="dg-bar-label">⚪ Geen interesse</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (geen/status_totaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ geen }}</span></div>
     </div>
+    <div class="dg-kaart">
+        <div class="dg-kaart-titel">Top materialen</div>
+        {% for mat, aantal in top_materialen %}
+        <div class="dg-bar-rij"><span class="dg-bar-label">{{ mat }}</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (aantal/max_materiaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ aantal }}</span></div>
+        {% else %}
+        <div class="dg-lege">Nog geen materiaaldata.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="dg-rij-2">
+    <div class="dg-kaart" style="flex:1.4;">
+        <div class="dg-kaart-titel">Bedrijven wereldwijd</div>
+        <div id="dashKaart"></div>
+    </div>
+    <div class="dg-kaart">
+        <div class="dg-kaart-titel">Openstaande meldingen</div>
+        {% for m in openstaand %}
+        <div class="dg-activiteit-item">{{ m.tekst }}<small>{{ m.bedrijf }} · van {{ m.van }} · {{ m.timestamp }}</small></div>
+        {% else %}
+        <div class="dg-lege">Geen openstaande meldingen.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="dg-rij-2">
+    <div class="dg-kaart">
+        <div class="dg-kaart-titel">Materiaalverdeling</div>
+        <div style="display:flex;align-items:center;gap:20px;">
+            <div style="width:130px;height:130px;border-radius:50%;flex-shrink:0;
+                background:conic-gradient({% for s in donut_segmenten %}{{ s.kleur }} {{ s.van }}% {{ s.tot }}%{% if not loop.last %}, {% endif %}{% endfor %});
+                box-shadow:0 0 0 1px var(--gray-200), inset 0 0 0 22px #fff;"></div>
+            <div style="flex:1;">
+                {% for s in donut_segmenten %}
+                <div style="display:flex;align-items:center;gap:8px;font-size:0.78rem;margin-bottom:8px;color:var(--gray-700);">
+                    <span style="width:10px;height:10px;border-radius:3px;background:{{ s.kleur }};flex-shrink:0;"></span>
+                    {{ s.naam }} <span style="margin-left:auto;color:var(--brand-700);font-weight:700;">{{ s.pct }}%</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="dg-kaart">
+        <div class="dg-kaart-titel">Regionale intelligence</div>
+        {% for r in regio_kaarten %}
+        <div style="padding:12px 0;{% if not loop.last %}border-bottom:1px solid var(--gray-100);{% endif %}">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                <span style="font-weight:700;color:var(--gray-900);">{{ r.naam }}</span>
+                <span style="color:var(--brand-700);font-weight:700;">{{ r.aantal }} bedrijven</span>
+            </div>
+            <div style="font-size:0.76rem;color:var(--gray-400);margin-top:4px;">
+                Top materialen: {{ r.materialen|join(", ") if r.materialen else "—" }}
+            </div>
+            <div style="font-size:0.76rem;margin-top:2px;">
+                Marktactiviteit:
+                <span style="color:{% if r.activiteit=='Hoog' %}var(--green-600){% elif r.activiteit=='Gemiddeld' %}var(--brand-600){% else %}var(--gray-400){% endif %};font-weight:700;">{{ r.activiteit }}</span>
+            </div>
+        </div>
+        {% else %}
+        <div class="dg-lege">Nog geen regiodata.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="dg-kaart">
+    <div class="dg-kaart-titel">Openstaande orders</div>
+    <div class="dg-lege">Er is nog geen inkoop-/verkoop-ordermodule. Zodra die er is, komt hier een overzicht van openstaande verkoop- en inkooporders met bedragen en status. Zeg het als je wilt dat ik die nu bouw.</div>
+</div>
+
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+var dKaart = L.map("dashKaart", {zoomControl:false, attributionControl:false}).setView([30,10], 2);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {attribution:"© OpenStreetMap, © CARTO"}).addTo(dKaart);
+var kleurPerStatus = {"klant":"#22c55e","potentie":"#fbbf24","in_proces":"#3b82f6","geen_interesse":"#6b7280","":"#f0a83c"};
+var dCluster = L.markerClusterGroup({
+    iconCreateFunction: function(cluster) {
+        return L.divIcon({
+            html: '<div style="background:#f0a83c;color:#1b1309;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fbbf24;box-shadow:0 0 10px rgba(240,168,60,0.5);">' + cluster.getChildCount() + '</div>',
+            className: '', iconSize: [34, 34]
+        });
+    }
+});
+{{ kaart_bedrijven|tojson }}.forEach(function(b){
+    dCluster.addLayer(L.circleMarker([b.lat, b.lon], {radius:4, color: kleurPerStatus[b.status] || "#f0a83c", fillColor: kleurPerStatus[b.status] || "#f0a83c", fillOpacity:0.9, weight:1}));
+});
+dKaart.addLayer(dCluster);
+</script>
     """
     pagina = render_simple_page("Dashboard", "dashboard", inhoud)
     return render_template_string(pagina,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN, fabrieken=len(PAPIERFABRIEKEN),
-        klant=aantal_klant, potentie=aantal_potentie, proces=aantal_proces)
+        klant=aantal_klant, potentie=aantal_potentie, proces=aantal_proces, geen=aantal_geen,
+        status_totaal=status_totaal, top_materialen=top_materialen, max_materiaal=max_materiaal,
+        volume_klant=volume_klant, openstaand=openstaand, kaart_bedrijven=kaart_bedrijven,
+        donut_segmenten=donut_segmenten, regio_kaarten=regio_kaarten)
 
 @app.route("/inzichten")
 def inzichten():
