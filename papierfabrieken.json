@@ -1,22 +1,160 @@
 [
-  {"naam": "UPM Shotton Mill", "land": "United Kingdom", "stad": "Deeside", "materialen": "Paper, OCC"},
-  {"naam": "DS Smith Kemsley Mill", "land": "United Kingdom", "stad": "Sittingbourne", "materialen": "Paper, OCC, Mixed Paper"},
-  {"naam": "Smurfit Kappa Townsend Hook", "land": "United Kingdom", "stad": "Snodland", "materialen": "Paper, OCC"},
-  {"naam": "Stora Enso Maxau", "land": "Germany", "stad": "Karlsruhe", "materialen": "Paper, OCC, Kraft"},
-  {"naam": "UPM Schongau", "land": "Germany", "stad": "Schongau", "materialen": "Paper, Mixed Paper"},
-  {"naam": "Progroup Eisfeld", "land": "Germany", "stad": "Eisfeld", "materialen": "Paper, OCC"},
-  {"naam": "Smurfit Kappa Roermond", "land": "Netherlands", "stad": "Roermond", "materialen": "Paper, OCC"},
-  {"naam": "DS Smith De Hoop", "land": "Netherlands", "stad": "Eerbeek", "materialen": "Paper, OCC, Mixed Paper"},
-  {"naam": "Cartiere Burgo", "land": "Italy", "stad": "Verzuolo", "materialen": "Paper, SOP"},
-  {"naam": "Lucart Group", "land": "Italy", "stad": "Porcari", "materialen": "Paper, Mixed Paper"},
-  {"naam": "Saica Paper", "land": "Spain", "stad": "Zaragoza", "materialen": "Paper, OCC"},
-  {"naam": "Smurfit Kappa Nervion", "land": "Spain", "stad": "Rentería", "materialen": "Paper, OCC"},
-  {"naam": "International Paper Saillat", "land": "France", "stad": "Saillat-sur-Vienne", "materialen": "Paper, OCC"},
-  {"naam": "VPK Packaging", "land": "France", "stad": "Oudegem", "materialen": "Paper, OCC"},
-  {"naam": "Mondi Świecie", "land": "Poland", "stad": "Świecie", "materialen": "Paper, OCC, Kraft"},
-  {"naam": "Progroup Sandersdorf-Brehna", "land": "Germany", "stad": "Sandersdorf-Brehna", "materialen": "Paper, OCC"},
-  {"naam": "Smurfit Kappa Piteå", "land": "Sweden", "stad": "Piteå", "materialen": "Paper, Kraft"},
-  {"naam": "Stora Enso Skoghall", "land": "Sweden", "stad": "Skoghall", "materialen": "Paper, OCC"},
-  {"naam": "DS Smith Ovacık", "land": "Turkey", "stad": "Ovacık", "materialen": "Paper, OCC"},
-  {"naam": "Hamburger Containerboard", "land": "Austria", "stad": "Pitten", "materialen": "Paper, OCC"}
+  {
+    "naam": "UPM Shotton Mill",
+    "land": "United Kingdom",
+    "stad": "Deeside",
+    "materialen": "Paper, OCC",
+    "lat": 57.0749482,
+    "lon": -2.7650694
+  },
+  {
+    "naam": "DS Smith Kemsley Mill",
+    "land": "United Kingdom",
+    "stad": "Sittingbourne",
+    "materialen": "Paper, OCC, Mixed Paper",
+    "lat": 51.3397366,
+    "lon": 0.7342319
+  },
+  {
+    "naam": "Smurfit Kappa Townsend Hook",
+    "land": "United Kingdom",
+    "stad": "Snodland",
+    "materialen": "Paper, OCC",
+    "lat": 51.3349191,
+    "lon": 0.432657
+  },
+  {
+    "naam": "Stora Enso Maxau",
+    "land": "Germany",
+    "stad": "Karlsruhe",
+    "materialen": "Paper, OCC, Kraft",
+    "lat": 49.0068705,
+    "lon": 8.4034195
+  },
+  {
+    "naam": "UPM Schongau",
+    "land": "Germany",
+    "stad": "Schongau",
+    "materialen": "Paper, Mixed Paper",
+    "lat": 47.8118973,
+    "lon": 10.8972133
+  },
+  {
+    "naam": "Progroup Eisfeld",
+    "land": "Germany",
+    "stad": "Eisfeld",
+    "materialen": "Paper, OCC",
+    "lat": 50.4269914,
+    "lon": 10.9075046
+  },
+  {
+    "naam": "Smurfit Kappa Roermond",
+    "land": "Netherlands",
+    "stad": "Roermond",
+    "materialen": "Paper, OCC",
+    "lat": 51.1933903,
+    "lon": 5.9882649
+  },
+  {
+    "naam": "DS Smith De Hoop",
+    "land": "Netherlands",
+    "stad": "Eerbeek",
+    "materialen": "Paper, OCC, Mixed Paper",
+    "lat": 52.1050018,
+    "lon": 6.0662773
+  },
+  {
+    "naam": "Cartiere Burgo",
+    "land": "Italy",
+    "stad": "Verzuolo",
+    "materialen": "Paper, SOP",
+    "lat": 44.6002924,
+    "lon": 7.4828776
+  },
+  {
+    "naam": "Lucart Group",
+    "land": "Italy",
+    "stad": "Porcari",
+    "materialen": "Paper, Mixed Paper",
+    "lat": 43.8401177,
+    "lon": 10.6164074
+  },
+  {
+    "naam": "Saica Paper",
+    "land": "Spain",
+    "stad": "Zaragoza",
+    "materialen": "Paper, OCC",
+    "lat": 41.6915847,
+    "lon": -0.9101268
+  },
+  {
+    "naam": "Smurfit Kappa Nervion",
+    "land": "Spain",
+    "stad": "Rentería",
+    "materialen": "Paper, OCC",
+    "lat": 43.3125271,
+    "lon": -1.8986133
+  },
+  {
+    "naam": "International Paper Saillat",
+    "land": "France",
+    "stad": "Saillat-sur-Vienne",
+    "materialen": "Paper, OCC",
+    "lat": 45.8707107,
+    "lon": 0.8153056
+  },
+  {
+    "naam": "VPK Packaging",
+    "land": "France",
+    "stad": "Oudegem",
+    "materialen": "Paper, OCC"
+  },
+  {
+    "naam": "Mondi Świecie",
+    "land": "Poland",
+    "stad": "Świecie",
+    "materialen": "Paper, OCC, Kraft",
+    "lat": 53.4072518,
+    "lon": 18.4455253
+  },
+  {
+    "naam": "Progroup Sandersdorf-Brehna",
+    "land": "Germany",
+    "stad": "Sandersdorf-Brehna",
+    "materialen": "Paper, OCC",
+    "lat": 51.5911163,
+    "lon": 12.2359037
+  },
+  {
+    "naam": "Smurfit Kappa Piteå",
+    "land": "Sweden",
+    "stad": "Piteå",
+    "materialen": "Paper, Kraft",
+    "lat": 65.3134652,
+    "lon": 21.4900252
+  },
+  {
+    "naam": "Stora Enso Skoghall",
+    "land": "Sweden",
+    "stad": "Skoghall",
+    "materialen": "Paper, OCC",
+    "lat": 59.3238493,
+    "lon": 13.4701864
+  },
+  {
+    "naam": "DS Smith Ovacık",
+    "land": "Turkey",
+    "stad": "Ovacık",
+    "materialen": "Paper, OCC",
+    "lat": 39.3583833,
+    "lon": 39.2144472
+  },
+  {
+    "naam": "Hamburger Containerboard",
+    "land": "Austria",
+    "stad": "Pitten",
+    "materialen": "Paper, OCC",
+    "lat": 47.7162157,
+    "lon": 16.1862518
+  }
 ]
