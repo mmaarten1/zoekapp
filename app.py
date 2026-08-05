@@ -3,6 +3,7 @@ import json
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
 from werkzeug.security import check_password_hash
 import requests
+import re
 import uuid
 import datetime
 
@@ -304,6 +305,84 @@ OSM_IMPORT_HTML = '''
 </body>
 </html>
 '''
+
+OPSCHOON_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Dubbele bedrijven opschonen</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; padding: 40px; }
+        .box { background: white; padding: 30px; border-radius: 12px; max-width: 480px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { font-size: 18px; margin-bottom: 8px; }
+        p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+        label { display:block; font-size:13px; margin-bottom:8px; padding:10px; border:1px solid #e2e8f0; border-radius:6px; cursor:pointer; }
+        button { width: 100%; padding: 10px; background: #ea580c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top:8px; }
+        .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+        .succes { background: #f0fdf4; color: #16a34a; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Dubbele bedrijven/fabrieken opschonen</h1>
+        <p>Verwijdert bedrijven en fabrieken die dubbel voorkomen. Bij dubbelen wordt de meest complete versie bewaard (met adres/telefoon indien beschikbaar).</p>
+        {% if bericht %}<div class="bericht succes">{{ bericht }}</div>{% endif %}
+        <form method="POST">
+            <label><input type="radio" name="modus" value="normaal" checked> <b>Normaal</b> — zelfde naam + land + stad</label>
+            <label><input type="radio" name="modus" value="streng"> <b>Streng</b> — alleen zelfde naam + land (negeert verschillen in stad-notatie, spaties, hoofdletters, leestekens)</label>
+            <button type="submit">Nu opschonen</button>
+        </form>
+    </div>
+</body>
+</html>
+'''
+
+def normaliseer_naam(naam):
+    naam = str(naam or "").strip().lower()
+    naam = re.sub(r"[.,]", "", naam)
+    naam = re.sub(r"\s+", " ", naam)
+    return naam
+
+def volledigheid_score(item):
+    return sum(1 for veld in ("adres", "telefoon", "materialen", "volume", "certificeringen") if item.get(veld))
+
+@app.route("/opschonen-dubbelen", methods=["GET", "POST"])
+def opschonen_dubbelen():
+    bericht = None
+    if request.method == "POST":
+        modus = request.form.get("modus", "normaal")
+
+        def sleutel(item, plaatsveld):
+            if modus == "streng":
+                return (normaliseer_naam(item.get("naam","")), str(item.get("land","")).strip().lower())
+            return (normaliseer_naam(item.get("naam","")), str(item.get("land","")).strip().lower(), str(item.get(plaatsveld,"")).strip().lower())
+
+        def dedupliceer(lijst, plaatsveld):
+            groepen = {}
+            volgorde = []
+            for item in lijst:
+                s = sleutel(item, plaatsveld)
+                if s not in groepen:
+                    groepen[s] = item
+                    volgorde.append(s)
+                else:
+                    if volledigheid_score(item) > volledigheid_score(groepen[s]):
+                        groepen[s] = item
+            return [groepen[s] for s in volgorde], len(lijst) - len(volgorde)
+
+        global ENF_BEDRIJVEN, PAPIERFABRIEKEN
+        ENF_BEDRIJVEN, dubbel_bedrijven = dedupliceer(ENF_BEDRIJVEN, "regio")
+        with open("bedrijven.json", "w", encoding="utf-8") as f:
+            json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
+        PAPIERFABRIEKEN, dubbel_fabrieken = dedupliceer(PAPIERFABRIEKEN, "stad")
+        with open("papierfabrieken.json", "w", encoding="utf-8") as f:
+            json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+
+        bericht = f"Klaar! ({modus}) {dubbel_bedrijven} dubbele bedrijven en {dubbel_fabrieken} dubbele fabrieken verwijderd. {len(ENF_BEDRIJVEN)} bedrijven en {len(PAPIERFABRIEKEN)} fabrieken over."
+
+    return render_template_string(OPSCHOON_HTML, bericht=bericht)
 
 @app.route("/importeer-osm", methods=["GET", "POST"])
 def importeer_osm():
@@ -2702,6 +2781,19 @@ def login():
             fout = "Onjuiste gebruikersnaam of wachtwoord."
     return render_template_string(LOGIN_HTML, fout=fout)
 
+@app.route("/export-data")
+def export_data():
+    from flask import Response
+    pakket = {
+        "bedrijven": ENF_BEDRIJVEN,
+        "papierfabrieken": PAPIERFABRIEKEN,
+    }
+    return Response(
+        json.dumps(pakket, ensure_ascii=False, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=live_data_export.json"}
+    )
+
 @app.route("/logout")
 def logout():
     session.clear()
@@ -3399,11 +3491,18 @@ def notities_overzicht():
 def instellingen():
     inhoud = """
     <div class="page-title">Instellingen</div>
-    <div class="info-kaart" style="max-width:400px;">
+    <div class="info-kaart" style="max-width:400px;margin-bottom:16px;">
         <div class="drawer-row"><span class="drawer-row-label">Ingelogd als</span><span class="drawer-row-value">{{ gebruikersnaam }}</span></div>
         <div class="drawer-row"><span class="drawer-row-label">Team</span><span class="drawer-row-value">{{ team or "—" }}</span></div>
         <hr class="drawer-divider">
         <a href="/logout" class="btn-nav btn-nav-primary" style="display:inline-block;">Uitloggen</a>
+    </div>
+    <div class="info-kaart" style="max-width:400px;">
+        <div class="dg-kaart-titel">Beheer</div>
+        <a href="/importeer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Excel-import</a>
+        <a href="/importeer-osm" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ OpenStreetMap-import</a>
+        <a href="/opschonen-dubbelen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Dubbele bedrijven opschonen</a>
+        <a href="/export-data" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
     </div>
     """
     pagina = render_simple_page("Instellingen", "instellingen", inhoud)
