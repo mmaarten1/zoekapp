@@ -470,6 +470,19 @@ def osm_importeer_land(land_naam):
             return "Plastic"
         return ""
 
+    def _bepaal_brontype(tags):
+        if tags.get("craft") == "paper":
+            return "Papierfabriek"
+        if tags.get("shop") == "scrap_yard":
+            return "Schroothandel"
+        if tags.get("amenity") == "recycling":
+            return "Recyclingcentrum"
+        if tags.get("office") == "recycling":
+            return "Recycling-kantoor"
+        if tags.get("office") == "waste_management" or tags.get("shop") == "waste_disposal":
+            return "Afvalbeheer"
+        return "Overig"
+
     bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
     aantal_nieuw = 0
     for el in elementen:
@@ -493,6 +506,7 @@ def osm_importeer_land(land_naam):
             "lat": lat, "lon": lon,
             "adres": tags.get("addr:street", ""), "telefoon": tags.get("phone", tags.get("contact:phone", "")),
             "bedrijf_id": TENANT_ID,
+            "brontype": _bepaal_brontype(tags),
         })
         aantal_nieuw += 1
 
@@ -2265,6 +2279,18 @@ HTML = '''
                 </select>
             </div>
 
+            <div class="filter-group">
+                <label class="filter-label">Bedrijfstype</label>
+                <select class="filter-select" name="brontype">
+                    <option value="">Alle types</option>
+                    <option value="Schroothandel" {% if brontype == "Schroothandel" %}selected{% endif %}>Schroothandel</option>
+                    <option value="Recyclingcentrum" {% if brontype == "Recyclingcentrum" %}selected{% endif %}>Recyclingcentrum</option>
+                    <option value="Papierfabriek" {% if brontype == "Papierfabriek" %}selected{% endif %}>Papierfabriek</option>
+                    <option value="Recycling-kantoor" {% if brontype == "Recycling-kantoor" %}selected{% endif %}>Recycling-kantoor</option>
+                    <option value="Afvalbeheer" {% if brontype == "Afvalbeheer" %}selected{% endif %}>Afvalbeheer</option>
+                </select>
+            </div>
+
             <hr class="filter-divider">
             <button type="submit" class="btn-apply">Filters toepassen</button>
         </aside>
@@ -3208,7 +3234,7 @@ def company_analysis():
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    zoekterm = land = regio = klanttype = materiaal = ""
+    zoekterm = land = regio = klanttype = materiaal = brontype = ""
 
     if request.method == "POST":
         zoekterm = request.form.get("zoekterm", "").lower()
@@ -3216,10 +3242,12 @@ def index():
         regio    = request.form.get("regio", "")
         klanttype = request.form.get("klanttype", "")
         materiaal = request.form.get("materiaal", "")
+        brontype  = request.form.get("brontype", "")
     else:
         zoekterm = request.args.get("zoekterm", "").lower()
         land     = request.args.get("land", "")
         materiaal = request.args.get("materiaal", "")
+        brontype  = request.args.get("brontype", "")
 
     bedrijven = ENF_BEDRIJVEN
     if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
@@ -3227,6 +3255,7 @@ def index():
     if regio:     bedrijven = [b for b in bedrijven if b["regio"] == regio]
     if klanttype: bedrijven = [b for b in bedrijven if klanttype in b.get("klanttype","")]
     if materiaal: bedrijven = [b for b in bedrijven if materiaal in b.get("materialen","")]
+    if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","") == brontype]
 
     totaal_gevonden = len(bedrijven)
     bedrijven = bedrijven[:200]
@@ -3234,7 +3263,7 @@ def index():
 
     return render_template_string(HTML,
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
-        klanttype=klanttype, materiaal=materiaal,
+        klanttype=klanttype, materiaal=materiaal, brontype=brontype,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen)
