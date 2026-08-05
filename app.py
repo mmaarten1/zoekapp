@@ -6,6 +6,8 @@ import requests
 import re
 import uuid
 import datetime
+import threading
+import time
 
 DATA_DIR = os.environ.get("DATA_DIR", ".")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -322,6 +324,7 @@ OSM_IMPORT_HTML = '''
             </select>
             <button type="submit">Importeren vanuit OpenStreetMap</button>
         </form>
+        <a href="/importeer-osm-alle" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#ea580c;">→ Of importeer in één keer álle landen op de achtergrond</a>
     </div>
 </body>
 </html>
@@ -405,71 +408,185 @@ def opschonen_dubbelen():
 
     return render_template_string(OPSCHOON_HTML, bericht=bericht)
 
+def osm_importeer_land(land_naam):
+    """Importeert bedrijven voor 1 land vanuit OpenStreetMap. Geeft (aantal_nieuw, aantal_gevonden) terug, of gooit een Exception."""
+    iso = OSM_LANDEN.get(land_naam)
+    if not iso:
+        raise ValueError(f"Onbekend land: {land_naam}")
+
+    query = (
+        '[out:json][timeout:60];'
+        f'area["ISO3166-1"="{iso}"][admin_level=2]->.a;'
+        '('
+        'node["shop"="scrap_yard"](area.a);'
+        'way["shop"="scrap_yard"](area.a);'
+        'node["amenity"="recycling"]["recycling_type"="centre"](area.a);'
+        'way["amenity"="recycling"]["recycling_type"="centre"](area.a);'
+        ');'
+        'out center tags;'
+    )
+    resp = requests.get(
+        "https://overpass-api.de/api/interpreter",
+        params={"data": query},
+        headers={"User-Agent": "RecycleFind/1.0"},
+        timeout=90
+    )
+    elementen = resp.json().get("elements", [])
+
+    bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
+    aantal_nieuw = 0
+    for el in elementen:
+        tags = el.get("tags", {})
+        naam = tags.get("name", "").strip()
+        if not naam:
+            continue
+        lat = el.get("lat") or el.get("center", {}).get("lat")
+        lon = el.get("lon") or el.get("center", {}).get("lon")
+        if not lat or not lon:
+            continue
+        stad = tags.get("addr:city", "")
+        sleutel = (naam.strip().lower(), land_naam.strip().lower(), stad.strip().lower())
+        if sleutel in bestaande:
+            continue
+        bestaande.add(sleutel)
+        ENF_BEDRIJVEN.append({
+            "naam": naam, "land": land_naam, "regio": stad,
+            "materialen": "Metal" if tags.get("shop") == "scrap_yard" else "",
+            "klanttype": "", "volume": "", "url": "",
+            "lat": lat, "lon": lon,
+            "adres": tags.get("addr:street", ""), "telefoon": tags.get("phone", tags.get("contact:phone", "")),
+            "bedrijf_id": TENANT_ID,
+        })
+        aantal_nieuw += 1
+
+    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
+    return aantal_nieuw, len(elementen)
+
 @app.route("/importeer-osm", methods=["GET", "POST"])
 def importeer_osm():
     bericht = None
     succes = False
     if request.method == "POST":
         land_naam = request.form.get("land", "")
-        iso = OSM_LANDEN.get(land_naam)
-        if not iso:
-            bericht = "Onbekend land."
-        else:
-            try:
-                query = (
-                    '[out:json][timeout:60];'
-                    f'area["ISO3166-1"="{iso}"][admin_level=2]->.a;'
-                    '('
-                    'node["shop"="scrap_yard"](area.a);'
-                    'way["shop"="scrap_yard"](area.a);'
-                    'node["amenity"="recycling"]["recycling_type"="centre"](area.a);'
-                    'way["amenity"="recycling"]["recycling_type"="centre"](area.a);'
-                    ');'
-                    'out center tags;'
-                )
-                resp = requests.get(
-                    "https://overpass-api.de/api/interpreter",
-                    params={"data": query},
-                    headers={"User-Agent": "RecycleFind/1.0"},
-                    timeout=90
-                )
-                elementen = resp.json().get("elements", [])
-
-                bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
-                aantal_nieuw = 0
-                for el in elementen:
-                    tags = el.get("tags", {})
-                    naam = tags.get("name", "").strip()
-                    if not naam:
-                        continue
-                    lat = el.get("lat") or el.get("center", {}).get("lat")
-                    lon = el.get("lon") or el.get("center", {}).get("lon")
-                    if not lat or not lon:
-                        continue
-                    stad = tags.get("addr:city", "")
-                    sleutel = (naam.strip().lower(), land_naam.strip().lower(), stad.strip().lower())
-                    if sleutel in bestaande:
-                        continue
-                    bestaande.add(sleutel)
-                    ENF_BEDRIJVEN.append({
-                        "naam": naam, "land": land_naam, "regio": stad,
-                        "materialen": "Metal" if tags.get("shop") == "scrap_yard" else "",
-                        "klanttype": "", "volume": "", "url": "",
-                        "lat": lat, "lon": lon,
-                        "adres": tags.get("addr:street", ""), "telefoon": tags.get("phone", tags.get("contact:phone", "")),
-                        "bedrijf_id": TENANT_ID,
-                    })
-                    aantal_nieuw += 1
-
-                with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-                    json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
-
-                bericht = f"Gelukt! {aantal_nieuw} nieuwe bedrijven toegevoegd uit OpenStreetMap voor {land_naam} ({len(elementen)} gevonden, rest was al aanwezig of zonder naam)."
-                succes = True
-            except Exception as e:
-                bericht = f"Er ging iets mis: {e}"
+        try:
+            aantal_nieuw, aantal_gevonden = osm_importeer_land(land_naam)
+            bericht = f"Gelukt! {aantal_nieuw} nieuwe bedrijven toegevoegd uit OpenStreetMap voor {land_naam} ({aantal_gevonden} gevonden, rest was al aanwezig of zonder naam)."
+            succes = True
+        except Exception as e:
+            bericht = f"Er ging iets mis: {e}"
 
     return render_template_string(OSM_IMPORT_HTML, bericht=bericht, succes=succes, landen=sorted(OSM_LANDEN.keys()))
+
+OSM_BULK_STATUS = {
+    "bezig": False, "huidig_land": "", "klaar": 0, "totaal": len(OSM_LANDEN),
+    "nieuw_totaal": 0, "log": [],
+}
+OSM_BULK_LOCK = threading.Lock()
+
+def _osm_bulk_worker(gebruikersnaam):
+    with OSM_BULK_LOCK:
+        OSM_BULK_STATUS["bezig"] = True
+        OSM_BULK_STATUS["klaar"] = 0
+        OSM_BULK_STATUS["nieuw_totaal"] = 0
+        OSM_BULK_STATUS["log"] = []
+
+    for land_naam in sorted(OSM_LANDEN.keys()):
+        OSM_BULK_STATUS["huidig_land"] = land_naam
+        try:
+            aantal_nieuw, aantal_gevonden = osm_importeer_land(land_naam)
+            regel = f"✓ {land_naam}: {aantal_nieuw} nieuw ({aantal_gevonden} gevonden)"
+            OSM_BULK_STATUS["nieuw_totaal"] += aantal_nieuw
+        except Exception as e:
+            regel = f"✗ {land_naam}: fout ({e})"
+        OSM_BULK_STATUS["log"].append(regel)
+        OSM_BULK_STATUS["klaar"] += 1
+        time.sleep(5)  # respecteer de gratis Overpass-dienst tussen landen
+
+    OSM_BULK_STATUS["bezig"] = False
+    OSM_BULK_STATUS["huidig_land"] = ""
+
+    if gebruikersnaam:
+        alle_meldingen = laad_meldingen()
+        alle_meldingen.append({
+            "id": str(uuid.uuid4()),
+            "tekst": f"OpenStreetMap-import klaar! {OSM_BULK_STATUS['nieuw_totaal']} nieuwe bedrijven toegevoegd over {OSM_BULK_STATUS['totaal']} landen.",
+            "bedrijf": "",
+            "van": "Systeem",
+            "voor_gebruiker": gebruikersnaam,
+            "voor_team": "",
+            "gelezen": False,
+            "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+        })
+        bewaar_meldingen(alle_meldingen)
+
+@app.route("/importeer-osm-alle", methods=["GET", "POST"])
+def importeer_osm_alle():
+    if request.method == "POST":
+        if not OSM_BULK_STATUS["bezig"]:
+            gebruikersnaam = session.get("gebruikersnaam", "")
+            thread = threading.Thread(target=_osm_bulk_worker, args=(gebruikersnaam,), daemon=True)
+            thread.start()
+        return redirect(url_for("importeer_osm_alle"))
+
+    inhoud = """
+<style>
+.bulk-log { max-height:300px; overflow-y:auto; background:var(--gray-50); border-radius:8px; padding:12px; font-size:0.8rem; font-family:monospace; margin-top:16px; }
+.bulk-log div { padding:2px 0; }
+.bulk-balk-track { background:var(--gray-100); border-radius:6px; height:14px; overflow:hidden; margin-top:12px; }
+.bulk-balk-fill { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); height:100%; transition:width 0.3s; }
+</style>
+<div class="page-title">Alle landen importeren (OpenStreetMap)</div>
+<div class="info-kaart" style="max-width:600px;">
+    <p style="color:var(--gray-500);font-size:0.85rem;margin-bottom:16px;">
+        Haalt automatisch, land voor land, gratis recyclingbedrijven op uit OpenStreetMap voor alle {{ totaal }} ondersteunde landen.
+        Dit duurt ongeveer {{ (totaal * 15 / 60)|round(0, 'ceil')|int }}-{{ (totaal * 30 / 60)|round(0, 'ceil')|int }} minuten. Je kunt deze pagina gewoon open laten staan of sluiten — het draait op de achtergrond door.
+    </p>
+    <div id="bulkKnopWrap">
+        <button onclick="startBulk()" id="bulkStartBtn" style="padding:10px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Start import van alle landen</button>
+    </div>
+    <div id="bulkStatus" style="display:none;margin-top:16px;">
+        <div style="font-size:0.85rem;color:var(--gray-600);">Bezig met: <b id="bulkHuidig">—</b></div>
+        <div class="bulk-balk-track"><div class="bulk-balk-fill" id="bulkBalk" style="width:0%"></div></div>
+        <div style="font-size:0.8rem;color:var(--gray-400);margin-top:6px;"><span id="bulkKlaar">0</span> / {{ totaal }} landen · <span id="bulkNieuw">0</span> nieuwe bedrijven tot nu toe</div>
+        <div class="bulk-log" id="bulkLog"></div>
+    </div>
+</div>
+<script>
+function startBulk() {
+    fetch("/importeer-osm-alle", {method:"POST"}).then(() => pollBulk());
+    document.getElementById("bulkKnopWrap").style.display = "none";
+    document.getElementById("bulkStatus").style.display = "block";
+}
+async function pollBulk() {
+    const res = await fetch("/api/osm-import-status");
+    const data = await res.json();
+    document.getElementById("bulkHuidig").textContent = data.huidig_land || (data.bezig ? "..." : "Klaar!");
+    document.getElementById("bulkBalk").style.width = (data.klaar / data.totaal * 100) + "%";
+    document.getElementById("bulkKlaar").textContent = data.klaar;
+    document.getElementById("bulkNieuw").textContent = data.nieuw_totaal;
+    document.getElementById("bulkLog").innerHTML = data.log.slice().reverse().map(r => `<div>${r}</div>`).join("");
+    if (data.bezig) {
+        setTimeout(pollBulk, 3000);
+    }
+}
+// Als er al een import bezig is (bv. na herladen van de pagina), meteen tonen
+fetch("/api/osm-import-status").then(r => r.json()).then(data => {
+    if (data.bezig || data.klaar > 0) {
+        document.getElementById("bulkKnopWrap").style.display = "none";
+        document.getElementById("bulkStatus").style.display = "block";
+        pollBulk();
+    }
+});
+</script>
+    """
+    pagina = render_simple_page("Alle landen importeren", "zoeken", inhoud)
+    return render_template_string(pagina, totaal=len(OSM_LANDEN))
+
+@app.route("/api/osm-import-status")
+def osm_import_status():
+    return jsonify(OSM_BULK_STATUS)
 
 @app.route("/importeer", methods=["GET", "POST"])
 def importeer_bedrijven():
