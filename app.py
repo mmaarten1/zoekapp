@@ -316,7 +316,7 @@ OSM_IMPORT_HTML = '''
 <body>
     <div class="box">
         <h1>Bedrijven importeren via OpenStreetMap</h1>
-        <p>Haalt gratis, publiek beschikbare recyclingbedrijven (schroothandels, recyclingcentra) op uit OpenStreetMap voor het gekozen land. Kan 10-60 seconden duren.</p>
+        <p>Haalt gratis, publiek beschikbare recyclingbedrijven (schroothandels, recyclingcentra, papierfabrieken, afvalbeheerbedrijven) op uit OpenStreetMap voor het gekozen land. Kan 10-60 seconden duren.</p>
         {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
         <form method="POST">
             <select name="land" required>
@@ -371,39 +371,43 @@ def normaliseer_naam(naam):
 def volledigheid_score(item):
     return sum(1 for veld in ("adres", "telefoon", "materialen", "volume", "certificeringen") if item.get(veld))
 
+def dedupliceer_lijst(lijst, plaatsveld, modus="streng"):
+    def sleutel(item):
+        if modus == "streng":
+            return (normaliseer_naam(item.get("naam","")), str(item.get("land","")).strip().lower())
+        return (normaliseer_naam(item.get("naam","")), str(item.get("land","")).strip().lower(), str(item.get(plaatsveld,"")).strip().lower())
+
+    groepen = {}
+    volgorde = []
+    for item in lijst:
+        s = sleutel(item)
+        if s not in groepen:
+            groepen[s] = item
+            volgorde.append(s)
+        else:
+            if volledigheid_score(item) > volledigheid_score(groepen[s]):
+                groepen[s] = item
+    return [groepen[s] for s in volgorde], len(lijst) - len(volgorde)
+
+def opschonen_bedrijven_en_fabrieken(modus="streng"):
+    """Dedupliceert ENF_BEDRIJVEN en PAPIERFABRIEKEN in-place en slaat ze op. Geeft (aantal_bedrijven_verwijderd, aantal_fabrieken_verwijderd) terug."""
+    global ENF_BEDRIJVEN, PAPIERFABRIEKEN
+    ENF_BEDRIJVEN, dubbel_bedrijven = dedupliceer_lijst(ENF_BEDRIJVEN, "regio", modus)
+    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
+    PAPIERFABRIEKEN, dubbel_fabrieken = dedupliceer_lijst(PAPIERFABRIEKEN, "stad", modus)
+    with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
+        json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+
+    return dubbel_bedrijven, dubbel_fabrieken
+
 @app.route("/opschonen-dubbelen", methods=["GET", "POST"])
 def opschonen_dubbelen():
     bericht = None
     if request.method == "POST":
         modus = request.form.get("modus", "normaal")
-
-        def sleutel(item, plaatsveld):
-            if modus == "streng":
-                return (normaliseer_naam(item.get("naam","")), str(item.get("land","")).strip().lower())
-            return (normaliseer_naam(item.get("naam","")), str(item.get("land","")).strip().lower(), str(item.get(plaatsveld,"")).strip().lower())
-
-        def dedupliceer(lijst, plaatsveld):
-            groepen = {}
-            volgorde = []
-            for item in lijst:
-                s = sleutel(item, plaatsveld)
-                if s not in groepen:
-                    groepen[s] = item
-                    volgorde.append(s)
-                else:
-                    if volledigheid_score(item) > volledigheid_score(groepen[s]):
-                        groepen[s] = item
-            return [groepen[s] for s in volgorde], len(lijst) - len(volgorde)
-
-        global ENF_BEDRIJVEN, PAPIERFABRIEKEN
-        ENF_BEDRIJVEN, dubbel_bedrijven = dedupliceer(ENF_BEDRIJVEN, "regio")
-        with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-            json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
-
-        PAPIERFABRIEKEN, dubbel_fabrieken = dedupliceer(PAPIERFABRIEKEN, "stad")
-        with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
-            json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
-
+        dubbel_bedrijven, dubbel_fabrieken = opschonen_bedrijven_en_fabrieken(modus)
         bericht = f"Klaar! ({modus}) {dubbel_bedrijven} dubbele bedrijven en {dubbel_fabrieken} dubbele fabrieken verwijderd. {len(ENF_BEDRIJVEN)} bedrijven en {len(PAPIERFABRIEKEN)} fabrieken over."
 
     return render_template_string(OPSCHOON_HTML, bericht=bericht)
@@ -422,6 +426,14 @@ def osm_importeer_land(land_naam):
         'way["shop"="scrap_yard"](area.a);'
         'node["amenity"="recycling"]["recycling_type"="centre"](area.a);'
         'way["amenity"="recycling"]["recycling_type"="centre"](area.a);'
+        'node["office"="recycling"](area.a);'
+        'way["office"="recycling"](area.a);'
+        'node["craft"="paper"](area.a);'
+        'way["craft"="paper"](area.a);'
+        'node["shop"="waste_disposal"](area.a);'
+        'way["shop"="waste_disposal"](area.a);'
+        'node["office"="waste_management"](area.a);'
+        'way["office"="waste_management"](area.a);'
         ');'
         'out center tags;'
     )
@@ -447,6 +459,17 @@ def osm_importeer_land(land_naam):
     if elementen is None:
         raise laatste_fout
 
+    def _bepaal_materialen(tags):
+        if tags.get("craft") == "paper":
+            return "Paper"
+        if tags.get("shop") == "scrap_yard":
+            return "Metal"
+        if tags.get("recycling:glass") == "yes":
+            return "Glass"
+        if tags.get("recycling:plastic") == "yes" or tags.get("recycling:plastic_packaging") == "yes":
+            return "Plastic"
+        return ""
+
     bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
     aantal_nieuw = 0
     for el in elementen:
@@ -465,7 +488,7 @@ def osm_importeer_land(land_naam):
         bestaande.add(sleutel)
         ENF_BEDRIJVEN.append({
             "naam": naam, "land": land_naam, "regio": stad,
-            "materialen": "Metal" if tags.get("shop") == "scrap_yard" else "",
+            "materialen": _bepaal_materialen(tags),
             "klanttype": "", "volume": "", "url": "",
             "lat": lat, "lon": lon,
             "adres": tags.get("addr:street", ""), "telefoon": tags.get("phone", tags.get("contact:phone", "")),
@@ -486,7 +509,8 @@ def importeer_osm():
         land_naam = request.form.get("land", "")
         try:
             aantal_nieuw, aantal_gevonden = osm_importeer_land(land_naam)
-            bericht = f"Gelukt! {aantal_nieuw} nieuwe bedrijven toegevoegd uit OpenStreetMap voor {land_naam} ({aantal_gevonden} gevonden, rest was al aanwezig of zonder naam)."
+            dubbel, _ = opschonen_bedrijven_en_fabrieken("streng")
+            bericht = f"Gelukt! {aantal_nieuw} nieuwe bedrijven toegevoegd uit OpenStreetMap voor {land_naam} ({aantal_gevonden} gevonden). {dubbel} dubbelingen automatisch opgeschoond."
             succes = True
         except Exception as e:
             bericht = f"Er ging iets mis: {e}"
@@ -525,12 +549,16 @@ def _osm_bulk_worker(gebruikersnaam, landen_lijst=None):
     OSM_BULK_STATUS["bezig"] = False
     OSM_BULK_STATUS["huidig_land"] = ""
 
+    OSM_BULK_STATUS["huidig_land"] = "Opschonen van dubbelingen..."
+    dubbel_opgeschoond, _ = opschonen_bedrijven_en_fabrieken("streng")
+    OSM_BULK_STATUS["huidig_land"] = ""
+
     if gebruikersnaam:
         alle_meldingen = laad_meldingen()
         mislukt_tekst = f" ({len(OSM_BULK_STATUS['mislukt'])} landen mislukt, kun je opnieuw proberen)" if OSM_BULK_STATUS["mislukt"] else ""
         alle_meldingen.append({
             "id": str(uuid.uuid4()),
-            "tekst": f"OpenStreetMap-import klaar! {OSM_BULK_STATUS['nieuw_totaal']} nieuwe bedrijven toegevoegd over {OSM_BULK_STATUS['totaal']} landen.{mislukt_tekst}",
+            "tekst": f"OpenStreetMap-import klaar! {OSM_BULK_STATUS['nieuw_totaal']} nieuwe bedrijven toegevoegd over {OSM_BULK_STATUS['totaal']} landen. {dubbel_opgeschoond} dubbelingen automatisch opgeschoond.{mislukt_tekst}",
             "bedrijf": "",
             "van": "Systeem",
             "voor_gebruiker": gebruikersnaam,
