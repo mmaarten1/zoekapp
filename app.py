@@ -415,7 +415,7 @@ def osm_importeer_land(land_naam):
         raise ValueError(f"Onbekend land: {land_naam}")
 
     query = (
-        '[out:json][timeout:60];'
+        '[out:json][timeout:120];'
         f'area["ISO3166-1"="{iso}"][admin_level=2]->.a;'
         '('
         'node["shop"="scrap_yard"](area.a);'
@@ -425,13 +425,27 @@ def osm_importeer_land(land_naam):
         ');'
         'out center tags;'
     )
-    resp = requests.get(
-        "https://overpass-api.de/api/interpreter",
-        params={"data": query},
-        headers={"User-Agent": "RecycleFind/1.0"},
-        timeout=90
-    )
-    elementen = resp.json().get("elements", [])
+
+    laatste_fout = None
+    elementen = None
+    for poging in range(3):
+        try:
+            resp = requests.get(
+                "https://overpass-api.de/api/interpreter",
+                params={"data": query},
+                headers={"User-Agent": "RecycleFind/1.0"},
+                timeout=150
+            )
+            if resp.status_code != 200:
+                raise Exception(f"HTTP {resp.status_code}: {resp.text[:150] or '(lege reactie)'}")
+            elementen = resp.json().get("elements", [])
+            break
+        except Exception as e:
+            laatste_fout = e
+            if poging < 2:
+                time.sleep(15 * (poging + 1))  # oplopende wachttijd: 15s, 30s
+    if elementen is None:
+        raise laatste_fout
 
     bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
     aantal_nieuw = 0
@@ -481,18 +495,21 @@ def importeer_osm():
 
 OSM_BULK_STATUS = {
     "bezig": False, "huidig_land": "", "klaar": 0, "totaal": len(OSM_LANDEN),
-    "nieuw_totaal": 0, "log": [],
+    "nieuw_totaal": 0, "log": [], "mislukt": [],
 }
 OSM_BULK_LOCK = threading.Lock()
 
-def _osm_bulk_worker(gebruikersnaam):
+def _osm_bulk_worker(gebruikersnaam, landen_lijst=None):
+    landen_lijst = landen_lijst or sorted(OSM_LANDEN.keys())
     with OSM_BULK_LOCK:
         OSM_BULK_STATUS["bezig"] = True
         OSM_BULK_STATUS["klaar"] = 0
         OSM_BULK_STATUS["nieuw_totaal"] = 0
         OSM_BULK_STATUS["log"] = []
+        OSM_BULK_STATUS["mislukt"] = []
+        OSM_BULK_STATUS["totaal"] = len(landen_lijst)
 
-    for land_naam in sorted(OSM_LANDEN.keys()):
+    for land_naam in landen_lijst:
         OSM_BULK_STATUS["huidig_land"] = land_naam
         try:
             aantal_nieuw, aantal_gevonden = osm_importeer_land(land_naam)
@@ -500,18 +517,20 @@ def _osm_bulk_worker(gebruikersnaam):
             OSM_BULK_STATUS["nieuw_totaal"] += aantal_nieuw
         except Exception as e:
             regel = f"✗ {land_naam}: fout ({e})"
+            OSM_BULK_STATUS["mislukt"].append(land_naam)
         OSM_BULK_STATUS["log"].append(regel)
         OSM_BULK_STATUS["klaar"] += 1
-        time.sleep(5)  # respecteer de gratis Overpass-dienst tussen landen
+        time.sleep(8)  # respecteer de gratis Overpass-dienst tussen landen
 
     OSM_BULK_STATUS["bezig"] = False
     OSM_BULK_STATUS["huidig_land"] = ""
 
     if gebruikersnaam:
         alle_meldingen = laad_meldingen()
+        mislukt_tekst = f" ({len(OSM_BULK_STATUS['mislukt'])} landen mislukt, kun je opnieuw proberen)" if OSM_BULK_STATUS["mislukt"] else ""
         alle_meldingen.append({
             "id": str(uuid.uuid4()),
-            "tekst": f"OpenStreetMap-import klaar! {OSM_BULK_STATUS['nieuw_totaal']} nieuwe bedrijven toegevoegd over {OSM_BULK_STATUS['totaal']} landen.",
+            "tekst": f"OpenStreetMap-import klaar! {OSM_BULK_STATUS['nieuw_totaal']} nieuwe bedrijven toegevoegd over {OSM_BULK_STATUS['totaal']} landen.{mislukt_tekst}",
             "bedrijf": "",
             "van": "Systeem",
             "voor_gebruiker": gebruikersnaam,
@@ -526,7 +545,9 @@ def importeer_osm_alle():
     if request.method == "POST":
         if not OSM_BULK_STATUS["bezig"]:
             gebruikersnaam = session.get("gebruikersnaam", "")
-            thread = threading.Thread(target=_osm_bulk_worker, args=(gebruikersnaam,), daemon=True)
+            alleen_mislukte = request.form.get("alleen_mislukte") == "1"
+            landen_lijst = list(OSM_BULK_STATUS["mislukt"]) if alleen_mislukte and OSM_BULK_STATUS["mislukt"] else None
+            thread = threading.Thread(target=_osm_bulk_worker, args=(gebruikersnaam, landen_lijst), daemon=True)
             thread.start()
         return redirect(url_for("importeer_osm_alle"))
 
@@ -549,8 +570,9 @@ def importeer_osm_alle():
     <div id="bulkStatus" style="display:none;margin-top:16px;">
         <div style="font-size:0.85rem;color:var(--gray-600);">Bezig met: <b id="bulkHuidig">—</b></div>
         <div class="bulk-balk-track"><div class="bulk-balk-fill" id="bulkBalk" style="width:0%"></div></div>
-        <div style="font-size:0.8rem;color:var(--gray-400);margin-top:6px;"><span id="bulkKlaar">0</span> / {{ totaal }} landen · <span id="bulkNieuw">0</span> nieuwe bedrijven tot nu toe</div>
+        <div style="font-size:0.8rem;color:var(--gray-400);margin-top:6px;"><span id="bulkKlaar">0</span> / <span id="bulkTotaal">{{ totaal }}</span> landen · <span id="bulkNieuw">0</span> nieuwe bedrijven tot nu toe</div>
         <div class="bulk-log" id="bulkLog"></div>
+        <button onclick="startRetry()" id="bulkRetryBtn" style="display:none;margin-top:12px;padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Probeer mislukte landen opnieuw</button>
     </div>
 </div>
 <script>
@@ -559,16 +581,25 @@ function startBulk() {
     document.getElementById("bulkKnopWrap").style.display = "none";
     document.getElementById("bulkStatus").style.display = "block";
 }
+function startRetry() {
+    fetch("/importeer-osm-alle", {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"alleen_mislukte=1"}).then(() => pollBulk());
+    document.getElementById("bulkRetryBtn").style.display = "none";
+}
 async function pollBulk() {
     const res = await fetch("/api/osm-import-status");
     const data = await res.json();
     document.getElementById("bulkHuidig").textContent = data.huidig_land || (data.bezig ? "..." : "Klaar!");
     document.getElementById("bulkBalk").style.width = (data.klaar / data.totaal * 100) + "%";
     document.getElementById("bulkKlaar").textContent = data.klaar;
+    document.getElementById("bulkTotaal").textContent = data.totaal;
     document.getElementById("bulkNieuw").textContent = data.nieuw_totaal;
     document.getElementById("bulkLog").innerHTML = data.log.slice().reverse().map(r => `<div>${r}</div>`).join("");
     if (data.bezig) {
+        document.getElementById("bulkRetryBtn").style.display = "none";
         setTimeout(pollBulk, 3000);
+    } else if (data.mislukt && data.mislukt.length > 0) {
+        document.getElementById("bulkRetryBtn").style.display = "inline-block";
+        document.getElementById("bulkRetryBtn").textContent = `Probeer ${data.mislukt.length} mislukte landen opnieuw`;
     }
 }
 // Als er al een import bezig is (bv. na herladen van de pagina), meteen tonen
