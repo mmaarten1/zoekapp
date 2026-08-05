@@ -7,8 +7,29 @@ import re
 import uuid
 import datetime
 
-NOTITIES_FILE = "notities.json"
-USERS_FILE = "users.json"
+DATA_DIR = os.environ.get("DATA_DIR", ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+def datapad(bestandsnaam):
+    return os.path.join(DATA_DIR, bestandsnaam)
+
+# Eenmalige migratie: als de Volume nog leeg is, kopieer de data die met Git is meegekomen erheen.
+if os.path.abspath(DATA_DIR) != os.path.abspath("."):
+    import shutil
+    _te_migreren = [
+        "bedrijven.json", "papierfabrieken.json", "users.json", "status.json",
+        "notities.json", "meldingen.json", "fotos.json", "transport_prijzen.json",
+        "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
+    ]
+    for _bestand in _te_migreren:
+        _doel = datapad(_bestand)
+        if not os.path.exists(_doel) and os.path.exists(_bestand):
+            shutil.copy(_bestand, _doel)
+    if os.path.isdir("fotos_uploads") and not os.path.isdir(datapad("fotos_uploads")):
+        shutil.copytree("fotos_uploads", datapad("fotos_uploads"))
+
+NOTITIES_FILE = datapad("notities.json")
+USERS_FILE = datapad("users.json")
 
 def laad_users():
     try:
@@ -16,7 +37,7 @@ def laad_users():
             return json.load(f)
     except:
         return {}
-STATUS_FILE = "status.json"
+STATUS_FILE = datapad("status.json")
 
 def laad_status():
     try:
@@ -29,7 +50,7 @@ def bewaar_status(data):
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-MELDINGEN_FILE = "meldingen.json"
+MELDINGEN_FILE = datapad("meldingen.json")
 
 def laad_meldingen():
     try:
@@ -42,8 +63,8 @@ def bewaar_meldingen(data):
     with open(MELDINGEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-FOTOS_FILE = "fotos.json"
-FOTOS_MAP = "fotos_uploads"
+FOTOS_FILE = datapad("fotos.json")
+FOTOS_MAP = datapad("fotos_uploads")
 
 def laad_fotos():
     try:
@@ -69,7 +90,7 @@ def bewaar_notities(data):
 
 def get_user_id():
     return request.cookies.get("user_id") or getattr(request, "nieuw_user_id", "") or ""
-GEOCODE_CACHE_FILE = "geocode_cache.json"
+GEOCODE_CACHE_FILE = datapad("geocode_cache.json")
 
 def laad_geocode_cache():
     try:
@@ -137,9 +158,9 @@ def zet_user_cookie(response):
 
 TENANT_ID = os.environ.get("TENANT_ID", "peute")
 
-with open("bedrijven.json", "r", encoding="utf-8") as f:
+with open(datapad("bedrijven.json"), "r", encoding="utf-8") as f:
     ENF_BEDRIJVEN = json.load(f)
-with open("papierfabrieken.json", "r", encoding="utf-8") as f:
+with open(datapad("papierfabrieken.json"), "r", encoding="utf-8") as f:
     PAPIERFABRIEKEN = json.load(f)
 
 _bedrijven_gewijzigd = False
@@ -148,7 +169,7 @@ for _b in ENF_BEDRIJVEN:
         _b["bedrijf_id"] = TENANT_ID
         _bedrijven_gewijzigd = True
 if _bedrijven_gewijzigd:
-    with open("bedrijven.json", "w", encoding="utf-8") as f:
+    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
         json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
 
 for fabriek in PAPIERFABRIEKEN:
@@ -159,7 +180,7 @@ for fabriek in PAPIERFABRIEKEN:
             fabriek["lon"] = geo["lon"]
 def laad_transport_data():
     try:
-        with open("transport_prijzen.json", "r", encoding="utf-8") as f:
+        with open(datapad("transport_prijzen.json"), "r", encoding="utf-8") as f:
             return json.load(f)
     except:
         return {}
@@ -185,7 +206,7 @@ def vind_transport_tarieven_dichtbij(lat, lon, straal_km=40):
 
 def laad_forwarder_wachtwoorden():
     try:
-        with open("forwarder_wachtwoorden.json", "r", encoding="utf-8") as f:
+        with open(datapad("forwarder_wachtwoorden.json"), "r", encoding="utf-8") as f:
             return json.load(f)
     except:
         return {}
@@ -373,11 +394,11 @@ def opschonen_dubbelen():
 
         global ENF_BEDRIJVEN, PAPIERFABRIEKEN
         ENF_BEDRIJVEN, dubbel_bedrijven = dedupliceer(ENF_BEDRIJVEN, "regio")
-        with open("bedrijven.json", "w", encoding="utf-8") as f:
+        with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
             json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
 
         PAPIERFABRIEKEN, dubbel_fabrieken = dedupliceer(PAPIERFABRIEKEN, "stad")
-        with open("papierfabrieken.json", "w", encoding="utf-8") as f:
+        with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
             json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
 
         bericht = f"Klaar! ({modus}) {dubbel_bedrijven} dubbele bedrijven en {dubbel_fabrieken} dubbele fabrieken verwijderd. {len(ENF_BEDRIJVEN)} bedrijven en {len(PAPIERFABRIEKEN)} fabrieken over."
@@ -440,7 +461,7 @@ def importeer_osm():
                     })
                     aantal_nieuw += 1
 
-                with open("bedrijven.json", "w", encoding="utf-8") as f:
+                with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
                     json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
 
                 bericht = f"Gelukt! {aantal_nieuw} nieuwe bedrijven toegevoegd uit OpenStreetMap voor {land_naam} ({len(elementen)} gevonden, rest was al aanwezig of zonder naam)."
@@ -535,9 +556,9 @@ def importeer_bedrijven():
                         })
                         aantal_bedrijven += 1
 
-                with open("bedrijven.json", "w", encoding="utf-8") as f:
+                with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
                     json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
-                with open("papierfabrieken.json", "w", encoding="utf-8") as f:
+                with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
                     json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
 
                 bericht = f"Gelukt! {aantal_bedrijven} bedrijven/klanten en {aantal_fabrieken} fabrieken toegevoegd."
@@ -587,7 +608,7 @@ def forwarder_upload():
                 global TRANSPORT_DATA
                 TRANSPORT_DATA = laad_transport_data()
                 TRANSPORT_DATA[forwarder] = records
-                with open("transport_prijzen.json", "w", encoding="utf-8") as f:
+                with open(datapad("transport_prijzen.json"), "w", encoding="utf-8") as f:
                     json.dump(TRANSPORT_DATA, f, ensure_ascii=False, indent=2)
 
                 bericht = f"Gelukt! {len(records)} steden geimporteerd voor {forwarder}."
@@ -3042,7 +3063,7 @@ def index():
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen)
 
-OPGESLAGEN_FILE = "opgeslagen.json"
+OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
 def laad_opgeslagen():
     try:
@@ -3075,7 +3096,7 @@ def toggle_opgeslagen():
     bewaar_opgeslagen(lijst)
     return jsonify({"opgeslagen": opgeslagen})
 
-SNAPSHOTS_FILE = "snapshots.json"
+SNAPSHOTS_FILE = datapad("snapshots.json")
 
 def laad_snapshots():
     try:
