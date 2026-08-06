@@ -2503,6 +2503,7 @@ function toggleMobielMenu() {
                 <strong>{{ bedrijven|length }}</strong> of <strong>{{ totaal_gevonden }}</strong> results
                 {% if totaal_paginas > 1 %}<span style="color:var(--gray-300);"> · pagina {{ pagina }}/{{ totaal_paginas }}</span>{% endif %}
             </div>
+            <a href="/export-csv?{{ export_query }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;">⬇ Export to CSV</a>
         </div>
         <div class="results-list">
             {% for bedrijf in bedrijven %}
@@ -3250,6 +3251,44 @@ def login():
             fout = "Onjuiste gebruikersnaam of wachtwoord."
     return render_template_string(LOGIN_HTML, fout=fout)
 
+@app.route("/export-csv")
+def export_csv():
+    import csv
+    import io
+
+    zoekterm = request.args.get("zoekterm", "").lower()
+    land     = request.args.get("land", "")
+    regio    = request.args.get("regio", "")
+    klanttype = request.args.get("klanttype", "")
+    materiaal = request.args.get("materiaal", "")
+    brontype  = request.args.get("brontype", "")
+
+    bedrijven = ENF_BEDRIJVEN
+    if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
+    if land:      bedrijven = [b for b in bedrijven if b.get("land","").strip().lower() == land.strip().lower()]
+    if regio:     bedrijven = [b for b in bedrijven if b.get("regio","").strip().lower() == regio.strip().lower()]
+    if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
+    if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
+    if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
+
+    output = io.StringIO()
+    schrijver = csv.writer(output)
+    schrijver.writerow(["Naam", "Land", "Stad/Regio", "Bedrijfstype", "Materialen", "Klanttype", "Volume (t/jaar)",
+                         "Adres", "Telefoonnummer", "Certificeringen", "Website"])
+    for b in bedrijven:
+        schrijver.writerow([
+            b.get("naam",""), b.get("land",""), b.get("regio",""), b.get("brontype",""),
+            b.get("materialen",""), b.get("klanttype",""), b.get("volume",""),
+            b.get("adres",""), b.get("telefoon",""), b.get("certificeringen",""), b.get("url",""),
+        ])
+
+    from flask import Response
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=recyclefind_export.csv"}
+    )
+
 @app.route("/export-data")
 def export_data():
     from flask import Response
@@ -3529,6 +3568,11 @@ def index():
         params = {k: v for k, v in params.items() if v}
         return "/?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
 
+    export_params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
+                      "materiaal": materiaal, "brontype": brontype}
+    export_params = {k: v for k, v in export_params.items() if v}
+    export_query = "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in export_params.items())
+
     return render_template_string(HTML,
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
         klanttype=klanttype, materiaal=materiaal, brontype=brontype,
@@ -3536,7 +3580,7 @@ def index():
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
         er_is_gefilterd=er_is_gefilterd, pagina=pagina, totaal_paginas=totaal_paginas,
-        maak_pagina_url=maak_pagina_url)
+        maak_pagina_url=maak_pagina_url, export_query=export_query)
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
