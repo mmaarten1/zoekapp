@@ -1514,6 +1514,50 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         .sidebar-link.active { background: var(--brand-50); color: var(--brand-700); font-weight: 700; }
         .sidebar-link .icoon { font-size: 1.05em; width: 20px; text-align: center; }
         .content-wrapper { flex: 1; min-width: 0; }
+        .mobiel-menu-knop { display: none; }
+        .mobiel-overlay { display: none; }
+        @media (max-width: 900px) {
+            .sidebar {
+                position: fixed;
+                left: -240px;
+                top: 0;
+                z-index: 2000;
+                transition: left 0.25s ease;
+                box-shadow: 0 0 24px rgba(0,0,0,0.18);
+            }
+            .sidebar.open { left: 0; }
+            .mobiel-menu-knop {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 38px; height: 38px;
+                border: 1px solid var(--gray-200); background: #fff;
+                border-radius: 8px; cursor: pointer; font-size: 18px;
+                position: fixed; top: 12px; left: 12px; z-index: 1500;
+                box-shadow: var(--shadow-sm);
+            }
+            .mobiel-overlay.open {
+                display: block;
+                position: fixed; inset: 0; background: rgba(15,23,42,0.35); z-index: 1900;
+            }
+            .content-wrapper { padding-top: 52px; }
+            .page-content { padding: var(--space-4) !important; }
+            .main { flex-direction: column; padding: 0 var(--space-3); }
+            .filters-panel { width: 100%; box-sizing: border-box; }
+            .results-panel { width: 100%; }
+            #kaart { height: 320px; }
+            .map-panel { width: 100%; }
+            .drawer { width: 100%; right: -100%; }
+            .navbar { padding: 0 var(--space-4) 0 56px; flex-wrap: wrap; height: auto; min-height: 56px; gap: var(--space-3); }
+            .navbar-stat { display: none; }
+            .hero-content, .search-bar-section { padding-left: var(--space-3); padding-right: var(--space-3); }
+            .search-row { flex-direction: column; align-items: stretch; }
+            .search-input, .search-select { width: 100%; box-sizing: border-box; }
+            .dg-grid { grid-template-columns: repeat(2, 1fr) !important; }
+            .dg-rij-2 { flex-direction: column; }
+            .profiel-grid { grid-template-columns: 1fr !important; }
+        }
+
 
         /* ============================================
            COLLAPSIBLE (uitklapbare secties in het paneel)
@@ -1584,12 +1628,20 @@ def sidebar_html(actief):
     for key, href, icoon, label in items:
         cls = "sidebar-link active" if key == actief else "sidebar-link"
         links += "<a href=\"" + href + "\" class=\"" + cls + "\"><span class=\"icoon\">" + icoon + "</span> " + label + "</a>\n        "
-    return '''<aside class="sidebar">
+    return '''<button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
+<div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
+<aside class="sidebar" id="mobielSidebar">
     <a href="/" class="sidebar-logo">Recycle<em>Find</em></a>
     <nav class="sidebar-nav">
         ITEMS_HIER
     </nav>
-</aside>'''.replace("ITEMS_HIER", links)
+</aside>
+<script>
+function toggleMobielMenu() {
+    document.getElementById("mobielSidebar").classList.toggle("open");
+    document.getElementById("mobielOverlay").classList.toggle("open");
+}
+</script>'''.replace("ITEMS_HIER", links)
 
 def render_simple_page(titel, actief, inhoud_html):
     kop = PAGINA_HOOFD.replace("__TITEL__", titel)
@@ -2178,6 +2230,50 @@ HTML = '''
         .sidebar-link.active { background: var(--brand-50); color: var(--brand-700); font-weight: 700; }
         .sidebar-link .icoon { font-size: 1.05em; width: 20px; text-align: center; }
         .content-wrapper { flex: 1; min-width: 0; }
+        .mobiel-menu-knop { display: none; }
+        .mobiel-overlay { display: none; }
+        @media (max-width: 900px) {
+            .sidebar {
+                position: fixed;
+                left: -240px;
+                top: 0;
+                z-index: 2000;
+                transition: left 0.25s ease;
+                box-shadow: 0 0 24px rgba(0,0,0,0.18);
+            }
+            .sidebar.open { left: 0; }
+            .mobiel-menu-knop {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 38px; height: 38px;
+                border: 1px solid var(--gray-200); background: #fff;
+                border-radius: 8px; cursor: pointer; font-size: 18px;
+                position: fixed; top: 12px; left: 12px; z-index: 1500;
+                box-shadow: var(--shadow-sm);
+            }
+            .mobiel-overlay.open {
+                display: block;
+                position: fixed; inset: 0; background: rgba(15,23,42,0.35); z-index: 1900;
+            }
+            .content-wrapper { padding-top: 52px; }
+            .page-content { padding: var(--space-4) !important; }
+            .main { flex-direction: column; padding: 0 var(--space-3); }
+            .filters-panel { width: 100%; box-sizing: border-box; }
+            .results-panel { width: 100%; }
+            #kaart { height: 320px; }
+            .map-panel { width: 100%; }
+            .drawer { width: 100%; right: -100%; }
+            .navbar { padding: 0 var(--space-4) 0 56px; flex-wrap: wrap; height: auto; min-height: 56px; gap: var(--space-3); }
+            .navbar-stat { display: none; }
+            .hero-content, .search-bar-section { padding-left: var(--space-3); padding-right: var(--space-3); }
+            .search-row { flex-direction: column; align-items: stretch; }
+            .search-input, .search-select { width: 100%; box-sizing: border-box; }
+            .dg-grid { grid-template-columns: repeat(2, 1fr) !important; }
+            .dg-rij-2 { flex-direction: column; }
+            .profiel-grid { grid-template-columns: 1fr !important; }
+        }
+
 
         /* ============================================
            COLLAPSIBLE (uitklapbare secties in het paneel)
@@ -2226,7 +2322,9 @@ HTML = '''
 </head>
 <body>
 
-<aside class="sidebar">
+<button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
+<div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
+<aside class="sidebar" id="mobielSidebar">
     <a href="/" class="sidebar-logo">Recycle<em>Find</em></a>
     <nav class="sidebar-nav">
         <a href="/" class="sidebar-link active"><span class="icoon">🔍</span> Zoeken</a>
@@ -2241,6 +2339,12 @@ HTML = '''
         <a href="/instellingen" class="sidebar-link"><span class="icoon">⚙️</span> Instellingen</a>
     </nav>
 </aside>
+<script>
+function toggleMobielMenu() {
+    document.getElementById("mobielSidebar").classList.toggle("open");
+    document.getElementById("mobielOverlay").classList.toggle("open");
+}
+</script>
 
 <div class="content-wrapper">
 
