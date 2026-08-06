@@ -402,6 +402,62 @@ def opschonen_bedrijven_en_fabrieken(modus="streng"):
 
     return dubbel_bedrijven, dubbel_fabrieken
 
+HERLABEL_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Bedrijfstypes aanvullen</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; padding: 40px; }
+        .box { background: white; padding: 30px; border-radius: 12px; max-width: 480px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { font-size: 18px; margin-bottom: 8px; }
+        p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+        button { width: 100%; padding: 10px; background: #ea580c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; }
+        .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+        .succes { background: #f0fdf4; color: #16a34a; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Bedrijfstypes aanvullen</h1>
+        <p>Kent een Bedrijfstype toe aan bedrijven die er nog geen hebben (bijvoorbeeld oudere ENF-data), op basis van hun materialen. Zo werkt de nieuwe filter overal, niet alleen bij toekomstige imports.</p>
+        {% if bericht %}<div class="bericht succes">{{ bericht }}</div>{% endif %}
+        <form method="POST">
+            <button type="submit">Nu aanvullen</button>
+        </form>
+    </div>
+</body>
+</html>
+'''
+
+def _bepaal_brontype_uit_materiaal(materialen):
+    materialen = (materialen or "").lower()
+    if "paper" in materialen:
+        return "Papierfabriek"
+    if "metal" in materialen:
+        return "Schroothandel"
+    if "plastic" in materialen or "glass" in materialen:
+        return "Recyclingcentrum"
+    return ""
+
+@app.route("/herlabel-brontype", methods=["GET", "POST"])
+def herlabel_brontype():
+    bericht = None
+    if request.method == "POST":
+        aantal_aangevuld = 0
+        for b in ENF_BEDRIJVEN:
+            if not b.get("brontype"):
+                nieuw_type = _bepaal_brontype_uit_materiaal(b.get("materialen", ""))
+                if nieuw_type:
+                    b["brontype"] = nieuw_type
+                    aantal_aangevuld += 1
+        with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+            json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+        bericht = f"Klaar! {aantal_aangevuld} bedrijven hebben nu een Bedrijfstype gekregen op basis van hun materialen."
+
+    return render_template_string(HERLABEL_HTML, bericht=bericht)
+
 @app.route("/opschonen-dubbelen", methods=["GET", "POST"])
 def opschonen_dubbelen():
     bericht = None
@@ -2312,7 +2368,7 @@ HTML = '''
                     <span class="company-name" style="flex:1;">{{ bedrijf.naam }}{% if bedrijf.adres or bedrijf.telefoon %}<span class="verificatie-badge">✓ Geverifieerd</span>{% endif %}</span>
                     <span class="star-btn {% if bedrijf.naam in opgeslagen_namen %}opgeslagen{% endif %}" onclick="toggleOpslaan(event, '{{ bedrijf.naam|replace("'","\\'") }}', this)">{% if bedrijf.naam in opgeslagen_namen %}★{% else %}☆{% endif %}</span>
                 </div>
-                <div class="company-meta">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</div>
+                <div class="company-meta">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}{% if bedrijf.brontype %} · <span style="color:var(--gray-500);font-weight:600;">{{ bedrijf.brontype }}</span>{% endif %}</div>
                 {% if bedrijf.volume %}<div class="company-volume-badge">⚙ {{ bedrijf.volume }} t/jaar capaciteit</div>{% endif %}
                 <div class="company-tags">
                     {% if bedrijf.klanttype %}{% for t in bedrijf.klanttype.split(",")[:2] %}<span class="tag tag-blue">{{ t.strip() }}</span>{% endfor %}{% endif %}
@@ -3728,6 +3784,7 @@ def instellingen():
         <a href="/importeer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Excel-import</a>
         <a href="/importeer-osm" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ OpenStreetMap-import</a>
         <a href="/opschonen-dubbelen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Dubbele bedrijven opschonen</a>
+        <a href="/herlabel-brontype" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Bedrijfstypes aanvullen</a>
         <a href="/export-data" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
     </div>
     """
@@ -4005,6 +4062,7 @@ def bedrijf_profiel(naam):
                     <option value="geen_interesse" {% if status=='geen_interesse' %}selected{% endif %}>⚪ Geen Interesse</option>
                 </select>
             </span></div>
+            {% if bedrijf.brontype %}<div class="drawer-row"><span class="drawer-row-label">Type</span><span class="drawer-row-value">{{ bedrijf.brontype }}</span></div>{% endif %}
             <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">{{ bedrijf.klanttype or "—" }}</span></div>
             <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">{{ bedrijf.materialen or "—" }}</span></div>
         </div>
@@ -4050,8 +4108,8 @@ def bedrijf_profiel(naam):
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-var BEDRIJF_NAAM = {{ bedrijf.naam|tojson }};
-var BEDRIJF_URL = {{ bedrijf.url|tojson }};
+var BEDRIJF_NAAM = {{ (bedrijf.naam or "")|tojson }};
+var BEDRIJF_URL = {{ (bedrijf.url or "")|tojson }};
 var pKaart = L.map("profielKaart", {zoomControl:true}).setView([{{ bedrijf.lat or 20 }}, {{ bedrijf.lon or 0 }}], {{ 12 if bedrijf.lat else 2 }});
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(pKaart);
 {% if bedrijf.lat and bedrijf.lon %}
