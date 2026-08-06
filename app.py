@@ -3184,23 +3184,50 @@ LOGIN_HTML = '''
     <meta charset="UTF-8">
     <title>Inloggen — RecycleFind</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: -apple-system, sans-serif; background: #1e3a8a; height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; }
-        .box { background: white; padding: 40px; border-radius: 14px; width: 320px; box-shadow: 0 16px 48px rgba(0,0,0,0.2); }
-        h1 { font-size: 20px; margin-bottom: 20px; color: #1e293b; }
-        input { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
-        .fout { color: #ef4444; font-size: 13px; margin-bottom: 12px; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Inter", -apple-system, sans-serif;
+            background: radial-gradient(circle at 20% 10%, #fff7ed 0%, #f8fafc 45%, #f1f5f9 100%);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0;
+            padding: 20px;
+        }
+        .box {
+            background: #fff; padding: 44px 40px; border-radius: 20px; width: 100%; max-width: 360px;
+            box-shadow: 0 24px 60px rgba(15,23,42,0.08), 0 2px 8px rgba(15,23,42,0.04);
+            border: 1px solid #f1f5f9;
+        }
+        .logo { font-size: 1.4rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; margin-bottom: 4px; }
+        .logo em { color: #ea580c; font-style: normal; }
+        .sub { font-size: 0.82rem; color: #94a3b8; margin-bottom: 28px; }
+        label { display: block; font-size: 0.75rem; font-weight: 600; color: #475569; margin-bottom: 6px; margin-top: 14px; }
+        label:first-of-type { margin-top: 0; }
+        input {
+            width: 100%; padding: 11px 13px; border: 1px solid #e2e8f0; border-radius: 8px;
+            font-size: 14px; font-family: inherit; outline: none; transition: all 0.15s ease;
+        }
+        input:focus { border-color: #fb923c; box-shadow: 0 0 0 3px rgba(251,146,60,0.15); }
+        button {
+            width: 100%; padding: 12px; background: linear-gradient(135deg, #f97316, #ea580c); color: white;
+            border: none; border-radius: 8px; font-size: 14px; font-weight: 700; font-family: inherit;
+            cursor: pointer; margin-top: 22px; transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        button:hover { box-shadow: 0 8px 20px rgba(234,88,12,0.3); transform: translateY(-1px); }
+        .fout { background: #fef2f2; color: #dc2626; font-size: 0.8rem; padding: 10px 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #fecaca; }
     </style>
 </head>
 <body>
     <div class="box">
-        <h1>RecycleFind — Inloggen</h1>
+        <div class="logo">Recycle<em>Find</em></div>
+        <div class="sub">Global Recycling Intelligence Platform</div>
         {% if fout %}<div class="fout">{{ fout }}</div>{% endif %}
         <form method="POST">
-            <input type="text" name="gebruikersnaam" placeholder="Gebruikersnaam" required>
-            <input type="password" name="wachtwoord" placeholder="Wachtwoord" required>
-            <button type="submit">Inloggen</button>
+            <label>Gebruikersnaam</label>
+            <input type="text" name="gebruikersnaam" placeholder="jouw.naam" required autofocus>
+            <label>Wachtwoord</label>
+            <input type="password" name="wachtwoord" placeholder="••••••••" required>
+            <button type="submit">Inloggen →</button>
         </form>
     </div>
 </body>
@@ -4356,6 +4383,51 @@ laadNotities();
     """
     pagina = render_simple_page(bedrijf["naam"], "zoeken", inhoud)
     return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd)
+
+FOUTPAGINA_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ titel }} — RecycleFind</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Inter", -apple-system, sans-serif;
+            background: radial-gradient(circle at 20% 10%, #fff7ed 0%, #f8fafc 45%, #f1f5f9 100%);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; padding: 20px;
+        }
+        .box { text-align: center; max-width: 420px; }
+        .code { font-size: 4.5rem; font-weight: 900; color: #ea580c; letter-spacing: -3px; line-height: 1; margin-bottom: 12px; }
+        h1 { font-size: 1.3rem; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
+        p { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
+        a { display: inline-block; padding: 11px 22px; background: linear-gradient(135deg, #f97316, #ea580c); color: #fff;
+            border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.85rem; }
+        a:hover { box-shadow: 0 8px 20px rgba(234,88,12,0.3); }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <div class="code">{{ code }}</div>
+        <h1>{{ titel }}</h1>
+        <p>{{ boodschap }}</p>
+        <a href="/">← Terug naar RecycleFind</a>
+    </div>
+</body>
+</html>
+'''
+
+@app.errorhandler(404)
+def pagina_niet_gevonden(e):
+    return render_template_string(FOUTPAGINA_HTML, code="404", titel="Pagina niet gevonden",
+        boodschap="Deze pagina bestaat niet (meer). Check de link, of ga terug naar de zoekpagina."), 404
+
+@app.errorhandler(500)
+def server_fout(e):
+    return render_template_string(FOUTPAGINA_HTML, code="500", titel="Er ging iets mis",
+        boodschap="Er is een onverwachte fout opgetreden. Probeer het nog eens, of ga terug naar de zoekpagina."), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
