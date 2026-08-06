@@ -2397,6 +2397,7 @@ HTML = '''
         <div class="results-header">
             <div class="results-count">
                 <strong>{{ bedrijven|length }}</strong> of <strong>{{ totaal_gevonden }}</strong> results
+                {% if totaal_paginas > 1 %}<span style="color:var(--gray-300);"> · pagina {{ pagina }}/{{ totaal_paginas }}</span>{% endif %}
             </div>
         </div>
         <div class="results-list">
@@ -2418,6 +2419,19 @@ HTML = '''
             </div>
             {% endfor %}
         </div>
+        {% if totaal_paginas > 1 %}
+        <div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:14px;flex-wrap:wrap;">
+            {% if pagina > 1 %}<a href="{{ maak_pagina_url(pagina - 1) }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--gray-600);font-size:13px;">←</a>{% endif %}
+            {% if pagina > 2 %}<a href="{{ maak_pagina_url(1) }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--gray-600);font-size:13px;">1</a>{% endif %}
+            {% if pagina > 3 %}<span style="color:var(--gray-300);">…</span>{% endif %}
+            {% if pagina > 1 %}<a href="{{ maak_pagina_url(pagina - 1) }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--gray-600);font-size:13px;">{{ pagina - 1 }}</a>{% endif %}
+            <span style="padding:6px 10px;border-radius:6px;background:var(--brand-600);color:#fff;font-weight:700;font-size:13px;">{{ pagina }}</span>
+            {% if pagina < totaal_paginas %}<a href="{{ maak_pagina_url(pagina + 1) }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--gray-600);font-size:13px;">{{ pagina + 1 }}</a>{% endif %}
+            {% if pagina < totaal_paginas - 2 %}<span style="color:var(--gray-300);">…</span>{% endif %}
+            {% if pagina < totaal_paginas - 1 %}<a href="{{ maak_pagina_url(totaal_paginas) }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--gray-600);font-size:13px;">{{ totaal_paginas }}</a>{% endif %}
+            {% if pagina < totaal_paginas %}<a href="{{ maak_pagina_url(pagina + 1) }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--gray-600);font-size:13px;">→</a>{% endif %}
+        </div>
+        {% endif %}
     </div>
 
     <!-- MAP -->
@@ -3333,9 +3347,12 @@ def company_analysis():
 
     return jsonify(resultaat)
 
+PAGINA_GROOTTE = 200
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     zoekterm = land = regio = klanttype = materiaal = brontype = ""
+    pagina = 1
 
     if request.method == "POST":
         zoekterm = request.form.get("zoekterm", "").lower()
@@ -3344,11 +3361,20 @@ def index():
         klanttype = request.form.get("klanttype", "")
         materiaal = request.form.get("materiaal", "")
         brontype  = request.form.get("brontype", "")
+        pagina    = request.form.get("pagina", "1")
     else:
         zoekterm = request.args.get("zoekterm", "").lower()
         land     = request.args.get("land", "")
+        regio    = request.args.get("regio", "")
+        klanttype = request.args.get("klanttype", "")
         materiaal = request.args.get("materiaal", "")
         brontype  = request.args.get("brontype", "")
+        pagina    = request.args.get("pagina", "1")
+
+    try:
+        pagina = max(1, int(pagina))
+    except (TypeError, ValueError):
+        pagina = 1
 
     bedrijven = ENF_BEDRIJVEN
     if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
@@ -3360,8 +3386,17 @@ def index():
 
     totaal_gevonden = len(bedrijven)
     er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype)
-    bedrijven = bedrijven[:200]
+    totaal_paginas = max(1, (totaal_gevonden + PAGINA_GROOTTE - 1) // PAGINA_GROOTTE)
+    pagina = min(pagina, totaal_paginas)
+    start = (pagina - 1) * PAGINA_GROOTTE
+    bedrijven = bedrijven[start:start + PAGINA_GROOTTE]
     opgeslagen_namen = set(laad_opgeslagen())
+
+    def maak_pagina_url(p):
+        params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
+                   "materiaal": materiaal, "brontype": brontype, "pagina": p}
+        params = {k: v for k, v in params.items() if v}
+        return "/?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
 
     return render_template_string(HTML,
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
@@ -3369,7 +3404,8 @@ def index():
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
-        er_is_gefilterd=er_is_gefilterd)
+        er_is_gefilterd=er_is_gefilterd, pagina=pagina, totaal_paginas=totaal_paginas,
+        maak_pagina_url=maak_pagina_url)
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
