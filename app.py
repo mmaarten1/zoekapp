@@ -413,7 +413,8 @@ HERLABEL_HTML = '''
         .box { background: white; padding: 30px; border-radius: 12px; max-width: 480px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         h1 { font-size: 18px; margin-bottom: 8px; }
         p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
-        button { width: 100%; padding: 10px; background: #ea580c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; }
+        button { width: 100%; padding: 10px; background: #ea580c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; margin-bottom: 10px; }
+        button.secundair { background: #fff; color: #ea580c; border: 1px solid #ea580c; }
         .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
         .succes { background: #f0fdf4; color: #16a34a; }
     </style>
@@ -421,42 +422,81 @@ HERLABEL_HTML = '''
 <body>
     <div class="box">
         <h1>Bedrijfstypes aanvullen</h1>
-        <p>Kent een Bedrijfstype toe aan bedrijven die er nog geen hebben (bijvoorbeeld oudere ENF-data), op basis van hun materialen. Zo werkt de nieuwe filter overal, niet alleen bij toekomstige imports.</p>
+        <p>Kent een Bedrijfstype toe aan bedrijven die er nog geen hebben, maar <b>alleen</b> als er precies één duidelijk materiaal is (bij twijfel wordt niets gegokt).</p>
         {% if bericht %}<div class="bericht succes">{{ bericht }}</div>{% endif %}
         <form method="POST">
+            <input type="hidden" name="actie" value="aanvullen">
             <button type="submit">Nu aanvullen</button>
         </form>
+        <p style="margin-top:20px;">Heb je eerder de knop gebruikt en staat er nu te vaak "Papierfabriek"? Corrigeer dat hiermee:</p>
+        <form method="POST">
+            <input type="hidden" name="actie" value="corrigeer">
+            <button type="submit" class="secundair">Corrigeer verkeerd gegokte "Papierfabriek"-labels</button>
+        </form>
+        {% if telling_lijst %}
+        <hr style="margin:20px 0;border:none;border-top:1px solid #e2e8f0;">
+        <p style="font-weight:600;color:#334155;margin-bottom:8px;">Huidige verdeling:</p>
+        <table style="width:100%;font-size:13px;">
+            {% for type_naam, aantal in telling_lijst %}
+            <tr><td style="padding:3px 0;color:#334155;">{{ type_naam }}</td><td style="padding:3px 0;text-align:right;color:#ea580c;font-weight:600;">{{ aantal }}</td></tr>
+            {% endfor %}
+        </table>
+        {% endif %}
     </div>
 </body>
 </html>
 '''
 
 def _bepaal_brontype_uit_materiaal(materialen):
-    materialen = (materialen or "").lower()
-    if "paper" in materialen:
-        return "Papierfabriek"
-    if "metal" in materialen:
+    """Kent een type toe op basis van materialen. Materiaal zegt niets over 'kantoor' vs 'afvalbeheerbedrijf'
+    (dat is een bedrijfsvorm, geen materiaalsoort) - die twee blijven dus alleen uit echte OSM-tags komen.
+    Bij twijfel/meerdere materialen -> generiek 'Recyclingcentrum'."""
+    delen = [m.strip().lower() for m in (materialen or "").split(",") if m.strip()]
+    if len(delen) == 1 and delen[0] == "metal":
         return "Schroothandel"
-    if "plastic" in materialen or "glass" in materialen:
-        return "Recyclingcentrum"
-    return ""
+    if len(delen) == 1 and delen[0] == "paper":
+        return "Papierfabriek"
+    return "Recyclingcentrum"  # alle overige gevallen (ook geen materialen bekend): eerlijke, brede standaard
 
 @app.route("/herlabel-brontype", methods=["GET", "POST"])
 def herlabel_brontype():
     bericht = None
     if request.method == "POST":
-        aantal_aangevuld = 0
-        for b in ENF_BEDRIJVEN:
-            if not b.get("brontype"):
-                nieuw_type = _bepaal_brontype_uit_materiaal(b.get("materialen", ""))
-                if nieuw_type:
-                    b["brontype"] = nieuw_type
-                    aantal_aangevuld += 1
-        with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-            json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
-        bericht = f"Klaar! {aantal_aangevuld} bedrijven hebben nu een Bedrijfstype gekregen op basis van hun materialen."
+        actie = request.form.get("actie", "aanvullen")
+        if actie == "corrigeer":
+            # Maakt de allereerste, te agressieve versie ongedaan: haalt "Papierfabriek" weg
+            # bij bedrijven die MEERDERE materialen hebben (dus duidelijk fout gegokt).
+            # "Paper" als enige materiaal is inmiddels wél een geldige, bewuste "Papierfabriek"-gok - die laten we staan.
+            aantal_gecorrigeerd = 0
+            for b in ENF_BEDRIJVEN:
+                if b.get("brontype") == "Papierfabriek":
+                    delen = [m.strip().lower() for m in (b.get("materialen","") or "").split(",") if m.strip()]
+                    if delen != ["paper"]:
+                        nieuw = "Recyclingcentrum" if delen else ""
+                        b["brontype"] = nieuw
+                        aantal_gecorrigeerd += 1
+            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            bericht = f"Klaar! {aantal_gecorrigeerd} verkeerd gegokte 'Papierfabriek'-labels zijn gecorrigeerd."
+        else:
+            aantal_aangevuld = 0
+            for b in ENF_BEDRIJVEN:
+                if not b.get("brontype"):
+                    nieuw_type = _bepaal_brontype_uit_materiaal(b.get("materialen", ""))
+                    if nieuw_type:
+                        b["brontype"] = nieuw_type
+                        aantal_aangevuld += 1
+            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            bericht = f"Klaar! {aantal_aangevuld} bedrijven hebben nu een Bedrijfstype gekregen."
 
-    return render_template_string(HERLABEL_HTML, bericht=bericht)
+    telling = {}
+    for b in ENF_BEDRIJVEN:
+        t = b.get("brontype") or "(geen type)"
+        telling[t] = telling.get(t, 0) + 1
+    telling_lijst = sorted(telling.items(), key=lambda x: -x[1])
+
+    return render_template_string(HERLABEL_HTML, bericht=bericht, telling_lijst=telling_lijst)
 
 @app.route("/opschonen-dubbelen", methods=["GET", "POST"])
 def opschonen_dubbelen():
@@ -2388,8 +2428,13 @@ HTML = '''
     {% else %}
     <div class="welcome-state">
         <div class="welcome-icon">🔍</div>
+        {% if er_is_gefilterd %}
+        <div class="welcome-title">Geen bedrijven gevonden voor deze filters</div>
+        <div class="welcome-sub">Probeer een andere combinatie, of klik op "Wis filters" om opnieuw te beginnen</div>
+        {% else %}
         <div class="welcome-title">Search for recycling companies</div>
         <div class="welcome-sub">Use the search bar or filters above to find companies across {{ landen|length }} countries</div>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -3307,13 +3352,14 @@ def index():
 
     bedrijven = ENF_BEDRIJVEN
     if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
-    if land:      bedrijven = [b for b in bedrijven if b["land"] == land]
-    if regio:     bedrijven = [b for b in bedrijven if b["regio"] == regio]
-    if klanttype: bedrijven = [b for b in bedrijven if klanttype in b.get("klanttype","")]
-    if materiaal: bedrijven = [b for b in bedrijven if materiaal in b.get("materialen","")]
-    if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","") == brontype]
+    if land:      bedrijven = [b for b in bedrijven if b.get("land","").strip().lower() == land.strip().lower()]
+    if regio:     bedrijven = [b for b in bedrijven if b.get("regio","").strip().lower() == regio.strip().lower()]
+    if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
+    if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
+    if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
 
     totaal_gevonden = len(bedrijven)
+    er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype)
     bedrijven = bedrijven[:200]
     opgeslagen_namen = set(laad_opgeslagen())
 
@@ -3322,7 +3368,8 @@ def index():
         klanttype=klanttype, materiaal=materiaal, brontype=brontype,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
-        papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen)
+        papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
+        er_is_gefilterd=er_is_gefilterd)
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
