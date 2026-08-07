@@ -307,7 +307,7 @@ SCRAPMONSTER_LANDEN = {
     "United States": "united-states", "Canada": "canada", "Australia": "australia",
 }
 
-def scrapmonster_importeer_land(land_naam, max_paginas=10):
+def scrapmonster_importeer_land(land_naam, max_paginas=50):
     """Scrapet ScrapMonster.com voor schroothandels/recyclingcentra per land. Geeft (aantal_nieuw, aantal_gezien) terug."""
     slug = SCRAPMONSTER_LANDEN.get(land_naam)
     if not slug:
@@ -416,7 +416,7 @@ SCRAPMONSTER_IMPORT_HTML = '''
 <body>
     <div class="box">
         <h1>Bedrijven importeren via ScrapMonster</h1>
-        <p>Haalt schroothandels/recyclingcentra op van scrapmonster.com voor het gekozen land (max. 10 pagina's, ca. 200 bedrijven). Kan 30-60 seconden duren.</p>
+        <p>Haalt schroothandels/recyclingcentra op van scrapmonster.com voor het gekozen land (max. 50 pagina's, tot ~1000 bedrijven). Kan 2-3 minuten duren per land.</p>
         {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
         <form method="POST">
             <select name="land" required>
