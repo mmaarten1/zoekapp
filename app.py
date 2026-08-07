@@ -441,6 +441,165 @@ SCRAPMONSTER_IMPORT_HTML = '''
 </html>
 '''
 
+# ============================================
+# UK OVERHEIDSREGISTER (Waste Carriers, Brokers and Dealers)
+# ============================================
+GOV_UK_TREFWOORDEN = [
+    "recycl", "scrap", "waste", "skip", "salvage", "reclamation", "metal",
+    "demolition", "haulage", "disposal", "environmental services", "container",
+    "aggregate", "landfill", "tip ", "materials recovery", "mrf",
+]
+
+GOV_UK_BULK_STATUS = {"bezig": False, "voortgang": "", "totaal_gezien": 0, "totaal_nieuw": 0, "klaar": False, "fout": ""}
+
+def _gov_uk_bulk_worker(gebruikersnaam, max_nieuw=3000):
+    import zipfile, io as io_module, csv as csv_module
+
+    GOV_UK_BULK_STATUS.update({"bezig": True, "klaar": False, "fout": "", "voortgang": "Bestand downloaden...", "totaal_gezien": 0, "totaal_nieuw": 0})
+    try:
+        resp = requests.get("https://environment.data.gov.uk/public-register/downloads/waste-carriers-brokers",
+                             headers={"User-Agent": "Mozilla/5.0 (RecycleFind/1.0)"}, timeout=180)
+        zip_bestand = zipfile.ZipFile(io_module.BytesIO(resp.content))
+        csv_naam = next(n for n in zip_bestand.namelist() if n.lower().endswith(".csv"))
+
+        GOV_UK_BULK_STATUS["voortgang"] = "Bestand inlezen en filteren..."
+        bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
+        aantal_nieuw = 0
+        aantal_gezien = 0
+        nieuwe_bedrijven_tmp = []
+
+        with zip_bestand.open(csv_naam) as f:
+            tekst_stream = io_module.TextIOWrapper(f, encoding="utf-8", errors="replace")
+            lezer = csv_module.DictReader(tekst_stream)
+            for rij in lezer:
+                aantal_gezien += 1
+                if aantal_gezien % 20000 == 0:
+                    GOV_UK_BULK_STATUS["voortgang"] = f"{aantal_gezien} regels doorzocht, {aantal_nieuw} relevante gevonden..."
+                    GOV_UK_BULK_STATUS["totaal_gezien"] = aantal_gezien
+
+                if aantal_nieuw >= max_nieuw:
+                    break
+
+                naam = (rij.get("Business Name") or "").strip()
+                tier = (rij.get("Registration Tier") or "").strip()
+                if not naam or tier != "Upper":
+                    continue
+                naam_laag = naam.lower()
+                if not any(kw in naam_laag for kw in GOV_UK_TREFWOORDEN):
+                    continue
+
+                adres = (rij.get("Address") or "").strip()
+                postcode = (rij.get("Postcode") or "").strip()
+                stad = ""
+                adresdelen = [d.strip() for d in adres.split(",") if d.strip()]
+                if len(adresdelen) >= 2:
+                    stad = adresdelen[-2]
+
+                sleutel = (naam.lower(), "united kingdom", stad.lower())
+                if sleutel in bestaande:
+                    continue
+                bestaande.add(sleutel)
+
+                nieuwe_bedrijven_tmp.append({
+                    "naam": naam, "land": "United Kingdom", "regio": stad,
+                    "materialen": "", "klanttype": "", "volume": "", "url": "",
+                    "lat": None, "lon": None,
+                    "adres": adres, "telefoon": "",
+                    "bedrijf_id": TENANT_ID, "brontype": "Afvalbeheer",
+                })
+                aantal_nieuw += 1
+
+        GOV_UK_BULK_STATUS["voortgang"] = f"Geocoderen van {len(nieuwe_bedrijven_tmp)} nieuwe bedrijven..."
+        for i, b in enumerate(nieuwe_bedrijven_tmp):
+            zoekterm = b.get("regio") or b.get("adres","").split(",")[0]
+            geo = geocode_adres(zoekterm, "United Kingdom")
+            if geo:
+                b["lat"] = geo["lat"]
+                b["lon"] = geo["lon"]
+            ENF_BEDRIJVEN.append(b)
+            if i % 25 == 0:
+                GOV_UK_BULK_STATUS["voortgang"] = f"Geocoderen: {i+1}/{len(nieuwe_bedrijven_tmp)}..."
+
+        with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+            json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
+        dubbel, _ = opschonen_bedrijven_en_fabrieken("streng")
+
+        GOV_UK_BULK_STATUS["totaal_gezien"] = aantal_gezien
+        GOV_UK_BULK_STATUS["totaal_nieuw"] = aantal_nieuw
+        GOV_UK_BULK_STATUS["voortgang"] = "Klaar!"
+
+        if gebruikersnaam:
+            alle_meldingen = laad_meldingen()
+            alle_meldingen.append({
+                "id": str(uuid.uuid4()),
+                "tekst": f"UK overheidsregister-import klaar! {aantal_nieuw} nieuwe bedrijven toegevoegd (van {aantal_gezien} doorzochte registraties). {dubbel} dubbelingen opgeschoond.",
+                "bedrijf": "", "van": "Systeem", "voor_gebruiker": gebruikersnaam, "voor_team": "",
+                "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+            })
+            bewaar_meldingen(alle_meldingen)
+    except Exception as e:
+        GOV_UK_BULK_STATUS["fout"] = str(e)
+        GOV_UK_BULK_STATUS["voortgang"] = f"Fout: {e}"
+    finally:
+        GOV_UK_BULK_STATUS["bezig"] = False
+        GOV_UK_BULK_STATUS["klaar"] = True
+
+@app.route("/importeer-gov-uk", methods=["GET", "POST"])
+def importeer_gov_uk():
+    if request.method == "POST":
+        if not GOV_UK_BULK_STATUS["bezig"]:
+            gebruikersnaam = session.get("gebruikersnaam", "")
+            thread = threading.Thread(target=_gov_uk_bulk_worker, args=(gebruikersnaam,), daemon=True)
+            thread.start()
+        return redirect(url_for("importeer_gov_uk"))
+
+    inhoud = """
+<style>
+.bulk-log { max-height:200px; overflow-y:auto; background:var(--gray-50); border-radius:8px; padding:12px; font-size:0.85rem; margin-top:16px; }
+</style>
+<div class="page-title">UK overheidsregister importeren</div>
+<div class="info-kaart" style="max-width:600px;">
+    <p style="color:var(--gray-500);font-size:0.85rem;margin-bottom:16px;">
+        Haalt het officiële Environment Agency-register van geregistreerde afvalvervoerders/-makelaars/-handelaars op (Engeland),
+        filtert op Upper Tier + recycling-gerelateerde bedrijfsnamen (dus geen tuinmannen/loodgieters), en importeert max. 3000 nieuwe bedrijven.
+        Kan enkele minuten duren door geocoding.
+    </p>
+    <div id="knopWrap">
+        <button onclick="start()" style="padding:10px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Start import</button>
+    </div>
+    <div id="statusWrap" style="display:none;margin-top:16px;">
+        <div id="voortgangTekst" style="font-size:0.85rem;color:var(--gray-600);">Bezig...</div>
+    </div>
+</div>
+<script>
+function start() {
+    fetch("/importeer-gov-uk", {method:"POST"}).then(() => poll());
+    document.getElementById("knopWrap").style.display = "none";
+    document.getElementById("statusWrap").style.display = "block";
+}
+async function poll() {
+    const res = await fetch("/api/gov-uk-import-status");
+    const data = await res.json();
+    document.getElementById("voortgangTekst").textContent = data.voortgang + (data.totaal_nieuw ? ` (${data.totaal_nieuw} nieuw tot nu toe)` : "");
+    if (data.bezig) { setTimeout(poll, 3000); }
+}
+fetch("/api/gov-uk-import-status").then(r => r.json()).then(data => {
+    if (data.bezig) {
+        document.getElementById("knopWrap").style.display = "none";
+        document.getElementById("statusWrap").style.display = "block";
+        poll();
+    }
+});
+</script>
+    """
+    pagina = render_simple_page("UK overheidsregister importeren", "zoeken", inhoud)
+    return render_template_string(pagina)
+
+@app.route("/api/gov-uk-import-status")
+def gov_uk_import_status():
+    return jsonify(GOV_UK_BULK_STATUS)
+
 @app.route("/debug-gov-uk-register")
 def debug_gov_uk_register():
     import zipfile
@@ -4385,6 +4544,7 @@ def instellingen():
         <a href="/opschonen-dubbelen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Dubbele bedrijven opschonen</a>
         <a href="/herlabel-brontype" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Bedrijfstypes aanvullen</a>
         <a href="/importeer-scrapmonster" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ ScrapMonster-import (schroothandels)</a>
+        <a href="/importeer-gov-uk" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK overheidsregister-import</a>
         <a href="/export-data" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
     </div>
     """
