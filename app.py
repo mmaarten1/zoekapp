@@ -414,6 +414,7 @@ SCRAPMONSTER_IMPORT_HTML = '''
             </select>
             <button type="submit">Importeren vanuit ScrapMonster</button>
         </form>
+        <a href="/importeer-scrapmonster-alle" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#ea580c;">→ Of importeer in één keer álle landen op de achtergrond</a>
     </div>
 </body>
 </html>
@@ -434,6 +435,127 @@ def importeer_scrapmonster():
             bericht = f"Er ging iets mis: {e}"
 
     return render_template_string(SCRAPMONSTER_IMPORT_HTML, bericht=bericht, succes=succes, landen=sorted(SCRAPMONSTER_LANDEN.keys()))
+
+SCRAPMONSTER_BULK_STATUS = {
+    "bezig": False, "huidig_land": "", "klaar": 0, "totaal": len(SCRAPMONSTER_LANDEN),
+    "nieuw_totaal": 0, "log": [], "mislukt": [],
+}
+
+def _scrapmonster_bulk_worker(gebruikersnaam, landen_lijst=None):
+    landen_lijst = landen_lijst or sorted(SCRAPMONSTER_LANDEN.keys())
+    SCRAPMONSTER_BULK_STATUS["bezig"] = True
+    SCRAPMONSTER_BULK_STATUS["klaar"] = 0
+    SCRAPMONSTER_BULK_STATUS["nieuw_totaal"] = 0
+    SCRAPMONSTER_BULK_STATUS["log"] = []
+    SCRAPMONSTER_BULK_STATUS["mislukt"] = []
+    SCRAPMONSTER_BULK_STATUS["totaal"] = len(landen_lijst)
+
+    for land_naam in landen_lijst:
+        SCRAPMONSTER_BULK_STATUS["huidig_land"] = land_naam
+        try:
+            aantal_nieuw, aantal_gezien = scrapmonster_importeer_land(land_naam)
+            regel = f"✓ {land_naam}: {aantal_nieuw} nieuw ({aantal_gezien} gezien)"
+            SCRAPMONSTER_BULK_STATUS["nieuw_totaal"] += aantal_nieuw
+        except Exception as e:
+            regel = f"✗ {land_naam}: fout ({e})"
+            SCRAPMONSTER_BULK_STATUS["mislukt"].append(land_naam)
+        SCRAPMONSTER_BULK_STATUS["log"].append(regel)
+        SCRAPMONSTER_BULK_STATUS["klaar"] += 1
+        time.sleep(5)
+
+    SCRAPMONSTER_BULK_STATUS["huidig_land"] = "Opschonen van dubbelingen..."
+    dubbel_opgeschoond, _ = opschonen_bedrijven_en_fabrieken("streng")
+    SCRAPMONSTER_BULK_STATUS["huidig_land"] = ""
+    SCRAPMONSTER_BULK_STATUS["bezig"] = False
+
+    if gebruikersnaam:
+        alle_meldingen = laad_meldingen()
+        mislukt_tekst = f" ({len(SCRAPMONSTER_BULK_STATUS['mislukt'])} landen mislukt, kun je opnieuw proberen)" if SCRAPMONSTER_BULK_STATUS["mislukt"] else ""
+        alle_meldingen.append({
+            "id": str(uuid.uuid4()),
+            "tekst": f"ScrapMonster-import klaar! {SCRAPMONSTER_BULK_STATUS['nieuw_totaal']} nieuwe bedrijven toegevoegd over {SCRAPMONSTER_BULK_STATUS['totaal']} landen. {dubbel_opgeschoond} dubbelingen opgeschoond.{mislukt_tekst}",
+            "bedrijf": "", "van": "Systeem", "voor_gebruiker": gebruikersnaam, "voor_team": "",
+            "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+        })
+        bewaar_meldingen(alle_meldingen)
+
+@app.route("/importeer-scrapmonster-alle", methods=["GET", "POST"])
+def importeer_scrapmonster_alle():
+    if request.method == "POST":
+        if not SCRAPMONSTER_BULK_STATUS["bezig"]:
+            gebruikersnaam = session.get("gebruikersnaam", "")
+            alleen_mislukte = request.form.get("alleen_mislukte") == "1"
+            landen_lijst = list(SCRAPMONSTER_BULK_STATUS["mislukt"]) if alleen_mislukte and SCRAPMONSTER_BULK_STATUS["mislukt"] else None
+            thread = threading.Thread(target=_scrapmonster_bulk_worker, args=(gebruikersnaam, landen_lijst), daemon=True)
+            thread.start()
+        return redirect(url_for("importeer_scrapmonster_alle"))
+
+    inhoud = """
+<style>
+.bulk-log { max-height:300px; overflow-y:auto; background:var(--gray-50); border-radius:8px; padding:12px; font-size:0.8rem; font-family:monospace; margin-top:16px; }
+.bulk-log div { padding:2px 0; }
+.bulk-balk-track { background:var(--gray-100); border-radius:6px; height:14px; overflow:hidden; margin-top:12px; }
+.bulk-balk-fill { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); height:100%; transition:width 0.3s; }
+</style>
+<div class="page-title">Alle landen importeren (ScrapMonster)</div>
+<div class="info-kaart" style="max-width:600px;">
+    <p style="color:var(--gray-500);font-size:0.85rem;margin-bottom:16px;">
+        Haalt automatisch, land voor land, schroothandels op van scrapmonster.com voor alle {{ totaal }} ondersteunde landen.
+        Kan lang duren. Je kunt deze pagina open laten staan of sluiten — het draait op de achtergrond door.
+    </p>
+    <div id="bulkKnopWrap">
+        <button onclick="startBulk()" id="bulkStartBtn" style="padding:10px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Start import van alle landen</button>
+    </div>
+    <div id="bulkStatus" style="display:none;margin-top:16px;">
+        <div style="font-size:0.85rem;color:var(--gray-600);">Bezig met: <b id="bulkHuidig">—</b></div>
+        <div class="bulk-balk-track"><div class="bulk-balk-fill" id="bulkBalk" style="width:0%"></div></div>
+        <div style="font-size:0.8rem;color:var(--gray-400);margin-top:6px;"><span id="bulkKlaar">0</span> / <span id="bulkTotaal">{{ totaal }}</span> landen · <span id="bulkNieuw">0</span> nieuwe bedrijven tot nu toe</div>
+        <div class="bulk-log" id="bulkLog"></div>
+        <button onclick="startRetry()" id="bulkRetryBtn" style="display:none;margin-top:12px;padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Probeer mislukte landen opnieuw</button>
+    </div>
+</div>
+<script>
+function startBulk() {
+    fetch("/importeer-scrapmonster-alle", {method:"POST"}).then(() => pollBulk());
+    document.getElementById("bulkKnopWrap").style.display = "none";
+    document.getElementById("bulkStatus").style.display = "block";
+}
+function startRetry() {
+    fetch("/importeer-scrapmonster-alle", {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"alleen_mislukte=1"}).then(() => pollBulk());
+    document.getElementById("bulkRetryBtn").style.display = "none";
+}
+async function pollBulk() {
+    const res = await fetch("/api/scrapmonster-import-status");
+    const data = await res.json();
+    document.getElementById("bulkHuidig").textContent = data.huidig_land || (data.bezig ? "..." : "Klaar!");
+    document.getElementById("bulkBalk").style.width = (data.klaar / data.totaal * 100) + "%";
+    document.getElementById("bulkKlaar").textContent = data.klaar;
+    document.getElementById("bulkTotaal").textContent = data.totaal;
+    document.getElementById("bulkNieuw").textContent = data.nieuw_totaal;
+    document.getElementById("bulkLog").innerHTML = data.log.slice().reverse().map(r => `<div>${r}</div>`).join("");
+    if (data.bezig) {
+        document.getElementById("bulkRetryBtn").style.display = "none";
+        setTimeout(pollBulk, 3000);
+    } else if (data.mislukt && data.mislukt.length > 0) {
+        document.getElementById("bulkRetryBtn").style.display = "inline-block";
+        document.getElementById("bulkRetryBtn").textContent = `Probeer ${data.mislukt.length} mislukte landen opnieuw`;
+    }
+}
+fetch("/api/scrapmonster-import-status").then(r => r.json()).then(data => {
+    if (data.bezig || data.klaar > 0) {
+        document.getElementById("bulkKnopWrap").style.display = "none";
+        document.getElementById("bulkStatus").style.display = "block";
+        pollBulk();
+    }
+});
+</script>
+    """
+    pagina = render_simple_page("Alle landen importeren (ScrapMonster)", "zoeken", inhoud)
+    return render_template_string(pagina, totaal=len(SCRAPMONSTER_LANDEN))
+
+@app.route("/api/scrapmonster-import-status")
+def scrapmonster_import_status():
+    return jsonify(SCRAPMONSTER_BULK_STATUS)
 
 OSM_IMPORT_HTML = '''
 <!DOCTYPE html>
