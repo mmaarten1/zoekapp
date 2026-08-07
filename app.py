@@ -420,6 +420,22 @@ SCRAPMONSTER_IMPORT_HTML = '''
 </html>
 '''
 
+@app.route("/debug-scrapmonster")
+def debug_scrapmonster():
+    land_naam = request.args.get("land", "Netherlands")
+    slug = SCRAPMONSTER_LANDEN.get(land_naam, "netherlands")
+    url = f"https://www.scrapmonster.com/scrap-yard/{slug}/"
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (RecycleFind/1.0)"}, timeout=30)
+        info = f"URL: {url}\nStatus: {resp.status_code}\nContent-Length: {len(resp.text)}\n\n"
+        info += f"Aantal keer '/scrap-yard/' in de HTML: {resp.text.count('/scrap-yard/')}\n"
+        info += f"Aantal keer 'tel:' in de HTML: {resp.text.count('tel:')}\n\n"
+        info += "--- EERSTE 3000 TEKENS VAN DE HTML ---\n\n"
+        info += resp.text[:3000]
+    except Exception as e:
+        info = f"FOUT bij ophalen: {e}"
+    return f"<pre style='white-space:pre-wrap;font-size:12px;padding:20px;'>{info}</pre>"
+
 @app.route("/importeer-scrapmonster", methods=["GET", "POST"])
 def importeer_scrapmonster():
     bericht = None
