@@ -316,6 +316,7 @@ def scrapmonster_importeer_land(land_naam, max_paginas=50):
     bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
     aantal_nieuw = 0
     aantal_gezien = 0
+    pagina_zonder_nieuw_op_rij = 0
 
     for pagina in range(1, max_paginas + 1):
         url = f"https://www.scrapmonster.com/scrap-yard/{slug}/" if pagina == 1 else f"https://www.scrapmonster.com/scrap-yard/{slug}/page/{pagina}"
@@ -336,6 +337,7 @@ def scrapmonster_importeer_land(land_naam, max_paginas=50):
             break
 
         gevonden_deze_pagina = 0
+        nieuw_deze_pagina = 0
         for i, m in enumerate(matches):
             naam = m.group(1).strip()
             naam = re.sub(r"\s*-\s*$", "", naam).strip()  # ScrapMonster zet soms een lege " - " achter de naam
@@ -368,6 +370,7 @@ def scrapmonster_importeer_land(land_naam, max_paginas=50):
             if sleutel in bestaande:
                 continue
             bestaande.add(sleutel)
+            nieuw_deze_pagina += 1
 
             ENF_BEDRIJVEN.append({
                 "naam": naam, "land": land_naam, "regio": stad,
@@ -380,6 +383,14 @@ def scrapmonster_importeer_land(land_naam, max_paginas=50):
 
         if gevonden_deze_pagina == 0:
             break
+
+        if nieuw_deze_pagina == 0:
+            pagina_zonder_nieuw_op_rij += 1
+        else:
+            pagina_zonder_nieuw_op_rij = 0
+        if pagina_zonder_nieuw_op_rij >= 3:
+            break
+
         time.sleep(2)
 
     # Geocoderen van de nieuw toegevoegde bedrijven zonder coördinaten (op basis van stad + land)
