@@ -441,6 +441,37 @@ SCRAPMONSTER_IMPORT_HTML = '''
 </html>
 '''
 
+@app.route("/debug-gov-uk-register")
+def debug_gov_uk_register():
+    import zipfile
+    import io as io_module
+
+    url = "https://environment.data.gov.uk/public-register/downloads/waste-carriers-brokers"
+    info = f"URL: {url}\n\n"
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (RecycleFind/1.0)"}, timeout=60)
+        info += f"Status: {resp.status_code}\nContent-Type: {resp.headers.get('Content-Type')}\nGrootte: {len(resp.content)} bytes\n\n"
+
+        if resp.status_code == 200:
+            zip_bestand = zipfile.ZipFile(io_module.BytesIO(resp.content))
+            info += f"Bestanden in de zip:\n"
+            for naam in zip_bestand.namelist():
+                info += f"  - {naam} ({zip_bestand.getinfo(naam).file_size} bytes)\n"
+            info += "\n"
+
+            csv_bestanden = [n for n in zip_bestand.namelist() if n.lower().endswith(".csv")]
+            if csv_bestanden:
+                eerste_csv = csv_bestanden[0]
+                with zip_bestand.open(eerste_csv) as f:
+                    inhoud = f.read().decode("utf-8", errors="replace")
+                info += f"--- EERSTE 2000 TEKENS VAN {eerste_csv} ---\n\n"
+                info += inhoud[:2000]
+    except Exception as e:
+        info += f"FOUT: {e}"
+
+    from markupsafe import escape
+    return f"<pre style='white-space:pre-wrap;font-size:12px;padding:20px;'>{escape(info)}</pre>"
+
 @app.route("/debug-scrapmonster")
 def debug_scrapmonster():
     land_naam = request.args.get("land", "Netherlands")
