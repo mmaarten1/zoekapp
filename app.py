@@ -430,11 +430,21 @@ def debug_scrapmonster():
         info = f"URL: {url}\nStatus: {resp.status_code}\nContent-Length: {len(resp.text)}\n\n"
         info += f"Aantal keer '/scrap-yard/' in de HTML: {resp.text.count('/scrap-yard/')}\n"
         info += f"Aantal keer 'tel:' in de HTML: {resp.text.count('tel:')}\n\n"
-        info += "--- EERSTE 3000 TEKENS VAN DE HTML ---\n\n"
-        info += resp.text[:3000]
+
+        # Zoek de eerste individuele bedrijfslink (met numeriek ID erachter) en toon de omgeving
+        m = re.search(r'/scrap-yard/[a-z0-9\-]+/\d+', resp.text)
+        if m:
+            start = max(0, m.start() - 400)
+            eind = min(len(resp.text), m.start() + 1200)
+            info += f"--- CONTEXT ROND EERSTE BEDRIJFSLINK (positie {m.start()}) ---\n\n"
+            info += resp.text[start:eind]
+        else:
+            info += "--- GEEN patroon '/scrap-yard/<naam>/<cijfers>' gevonden. Eerste 2000 tekens: ---\n\n"
+            info += resp.text[:2000]
     except Exception as e:
         info = f"FOUT bij ophalen: {e}"
-    return f"<pre style='white-space:pre-wrap;font-size:12px;padding:20px;'>{info}</pre>"
+    from markupsafe import escape
+    return f"<pre style='white-space:pre-wrap;font-size:12px;padding:20px;'>{escape(info)}</pre>"
 
 @app.route("/importeer-scrapmonster", methods=["GET", "POST"])
 def importeer_scrapmonster():
