@@ -327,32 +327,42 @@ def scrapmonster_importeer_land(land_naam, max_paginas=10):
             break
 
         html_tekst = resp.text
-        # Elke yard-kaart heeft een link naar /scrap-yard/<naam-slug>/<numeriek-id>
-        yard_pattern = re.compile(r'<a[^>]+href="(/scrap-yard/[a-z0-9\-]+/\d+)"[^>]*>([^<]+)</a>')
+        # Elke bedrijfsnaam-link staat in <div class="companynamehead"><a href="https://www.scrapmonster.com/scrap-yard/<slug>/<id>">Naam</a></div>
+        yard_pattern = re.compile(
+            r'<div class="companynamehead"><a href="https://www\.scrapmonster\.com/scrap-yard/[a-z0-9\-]+/\d+">([^<]*)</a>'
+        )
         matches = list(yard_pattern.finditer(html_tekst))
         if not matches:
             break
 
         gevonden_deze_pagina = 0
         for i, m in enumerate(matches):
-            naam = m.group(2).strip()
+            naam = m.group(1).strip()
+            naam = re.sub(r"\s*-\s*$", "", naam).strip()  # ScrapMonster zet soms een lege " - " achter de naam
             if not naam or len(naam) < 2:
                 continue
             gevonden_deze_pagina += 1
             aantal_gezien += 1
 
-            # Kaart-tekst = alles tussen deze link en de volgende (of einde bij de laatste)
+            # Kaart-tekst = alles tussen deze link en de volgende (of een vast venster bij de laatste)
             start = m.end()
-            eind = matches[i + 1].start() if i + 1 < len(matches) else min(len(html_tekst), start + 4000)
+            eind = matches[i + 1].start() if i + 1 < len(matches) else min(len(html_tekst), start + 3000)
             kaart_segment = html_tekst[start:eind]
 
             telefoon_match = re.search(r"tel:([+\d()\-\s]{6,20})", kaart_segment)
             telefoon = telefoon_match.group(1).strip() if telefoon_match else ""
 
             stad = ""
-            stad_match = re.search(rf'href="/scrap-yard/{slug}/[a-z\-]+/([a-z\-]+)/?"[^>]*>([^<]+)</a>', kaart_segment)
-            if stad_match:
-                stad = stad_match.group(2).strip()
+            straat = ""
+            adres_match = re.search(r'<div class="yardaddress">(.*?)</div>', kaart_segment, re.S)
+            if adres_match:
+                regels_ruw = re.split(r"<br\s*/?>", adres_match.group(1))
+                regels = [re.sub(r"<[^>]+>", "", r).strip() for r in regels_ruw]
+                regels = [r for r in regels if r]
+                if len(regels) >= 1:
+                    stad = regels[0]
+                if len(regels) >= 2:
+                    straat = regels[1]
 
             sleutel = (naam.strip().lower(), land_naam.strip().lower(), stad.strip().lower())
             if sleutel in bestaande:
@@ -363,7 +373,7 @@ def scrapmonster_importeer_land(land_naam, max_paginas=10):
                 "naam": naam, "land": land_naam, "regio": stad,
                 "materialen": "Metal", "klanttype": "", "volume": "", "url": "",
                 "lat": None, "lon": None,
-                "adres": "", "telefoon": telefoon,
+                "adres": straat, "telefoon": telefoon,
                 "bedrijf_id": TENANT_ID, "brontype": "Schroothandel",
             })
             aantal_nieuw += 1
