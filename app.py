@@ -295,6 +295,146 @@ OSM_LANDEN = {
     "Mexico": "MX", "India": "IN", "China": "CN", "Japan": "JP",
 }
 
+# ============================================
+# SCRAPMONSTER.COM IMPORT (schroothandels/recyclingcentra)
+# ============================================
+SCRAPMONSTER_LANDEN = {
+    "Netherlands": "netherlands", "Germany": "germany", "United Kingdom": "united-kingdom",
+    "France": "france", "Belgium": "belgium", "Spain": "spain", "Italy": "italy",
+    "Poland": "poland", "Switzerland": "switzerland", "Austria": "austria",
+    "Sweden": "sweden", "Portugal": "portugal", "Ireland": "ireland", "Finland": "finland",
+    "Greece": "greece", "Romania": "romania", "Norway": "norway", "Denmark": "denmark",
+    "United States": "united-states", "Canada": "canada", "Australia": "australia",
+}
+
+def scrapmonster_importeer_land(land_naam, max_paginas=10):
+    """Scrapet ScrapMonster.com voor schroothandels/recyclingcentra per land. Geeft (aantal_nieuw, aantal_gezien) terug."""
+    slug = SCRAPMONSTER_LANDEN.get(land_naam)
+    if not slug:
+        raise ValueError(f"Onbekend land voor ScrapMonster: {land_naam}")
+
+    bestaande = {(b["naam"].strip().lower(), b["land"].strip().lower(), b.get("regio","").strip().lower()) for b in ENF_BEDRIJVEN}
+    aantal_nieuw = 0
+    aantal_gezien = 0
+
+    for pagina in range(1, max_paginas + 1):
+        url = f"https://www.scrapmonster.com/scrap-yard/{slug}/" if pagina == 1 else f"https://www.scrapmonster.com/scrap-yard/{slug}/page/{pagina}"
+        try:
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (RecycleFind/1.0)"}, timeout=30)
+        except Exception:
+            break
+        if resp.status_code != 200:
+            break
+
+        html_tekst = resp.text
+        # Elke yard-kaart heeft een link naar /scrap-yard/<naam-slug>/<numeriek-id>
+        yard_pattern = re.compile(r'<a[^>]+href="(/scrap-yard/[a-z0-9\-]+/\d+)"[^>]*>([^<]+)</a>')
+        matches = list(yard_pattern.finditer(html_tekst))
+        if not matches:
+            break
+
+        gevonden_deze_pagina = 0
+        for i, m in enumerate(matches):
+            naam = m.group(2).strip()
+            if not naam or len(naam) < 2:
+                continue
+            gevonden_deze_pagina += 1
+            aantal_gezien += 1
+
+            # Kaart-tekst = alles tussen deze link en de volgende (of einde bij de laatste)
+            start = m.end()
+            eind = matches[i + 1].start() if i + 1 < len(matches) else min(len(html_tekst), start + 4000)
+            kaart_segment = html_tekst[start:eind]
+
+            telefoon_match = re.search(r"tel:([+\d()\-\s]{6,20})", kaart_segment)
+            telefoon = telefoon_match.group(1).strip() if telefoon_match else ""
+
+            stad = ""
+            stad_match = re.search(rf'href="/scrap-yard/{slug}/[a-z\-]+/([a-z\-]+)/?"[^>]*>([^<]+)</a>', kaart_segment)
+            if stad_match:
+                stad = stad_match.group(2).strip()
+
+            sleutel = (naam.strip().lower(), land_naam.strip().lower(), stad.strip().lower())
+            if sleutel in bestaande:
+                continue
+            bestaande.add(sleutel)
+
+            ENF_BEDRIJVEN.append({
+                "naam": naam, "land": land_naam, "regio": stad,
+                "materialen": "Metal", "klanttype": "", "volume": "", "url": "",
+                "lat": None, "lon": None,
+                "adres": "", "telefoon": telefoon,
+                "bedrijf_id": TENANT_ID, "brontype": "Schroothandel",
+            })
+            aantal_nieuw += 1
+
+        if gevonden_deze_pagina == 0:
+            break
+        time.sleep(2)
+
+    # Geocoderen van de nieuw toegevoegde bedrijven zonder coördinaten (op basis van stad + land)
+    for b in ENF_BEDRIJVEN:
+        if b.get("bedrijf_id") == TENANT_ID and b.get("brontype") == "Schroothandel" and not b.get("lat") and b.get("land") == land_naam:
+            geo = geocode_adres(b.get("regio",""), land_naam)
+            if geo:
+                b["lat"] = geo["lat"]
+                b["lon"] = geo["lon"]
+
+    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
+    return aantal_nieuw, aantal_gezien
+
+SCRAPMONSTER_IMPORT_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>ScrapMonster importeren</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; padding: 40px; }
+        .box { background: white; padding: 30px; border-radius: 12px; max-width: 480px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { font-size: 18px; margin-bottom: 8px; }
+        p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+        select, button { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        button { background: #ea580c; color: white; border: none; cursor: pointer; font-weight: 600; }
+        .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+        .succes { background: #f0fdf4; color: #16a34a; }
+        .fout { background: #fef2f2; color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Bedrijven importeren via ScrapMonster</h1>
+        <p>Haalt schroothandels/recyclingcentra op van scrapmonster.com voor het gekozen land (max. 10 pagina's, ca. 200 bedrijven). Kan 30-60 seconden duren.</p>
+        {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
+        <form method="POST">
+            <select name="land" required>
+                {% for naam in landen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
+            </select>
+            <button type="submit">Importeren vanuit ScrapMonster</button>
+        </form>
+    </div>
+</body>
+</html>
+'''
+
+@app.route("/importeer-scrapmonster", methods=["GET", "POST"])
+def importeer_scrapmonster():
+    bericht = None
+    succes = False
+    if request.method == "POST":
+        land_naam = request.form.get("land", "")
+        try:
+            aantal_nieuw, aantal_gezien = scrapmonster_importeer_land(land_naam)
+            dubbel, _ = opschonen_bedrijven_en_fabrieken("streng")
+            bericht = f"Gelukt! {aantal_nieuw} nieuwe bedrijven toegevoegd uit ScrapMonster voor {land_naam} ({aantal_gezien} gezien). {dubbel} dubbelingen automatisch opgeschoond."
+            succes = True
+        except Exception as e:
+            bericht = f"Er ging iets mis: {e}"
+
+    return render_template_string(SCRAPMONSTER_IMPORT_HTML, bericht=bericht, succes=succes, landen=sorted(SCRAPMONSTER_LANDEN.keys()))
+
 OSM_IMPORT_HTML = '''
 <!DOCTYPE html>
 <html lang="nl">
@@ -325,6 +465,7 @@ OSM_IMPORT_HTML = '''
             <button type="submit">Importeren vanuit OpenStreetMap</button>
         </form>
         <a href="/importeer-osm-alle" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#ea580c;">→ Of importeer in één keer álle landen op de achtergrond</a>
+        <a href="/importeer-scrapmonster" style="display:block;text-align:center;margin-top:8px;font-size:13px;color:#ea580c;">→ Of importeer schroothandels vanuit ScrapMonster.com</a>
     </div>
 </body>
 </html>
@@ -4043,6 +4184,7 @@ def instellingen():
         <a href="/importeer-osm" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ OpenStreetMap-import</a>
         <a href="/opschonen-dubbelen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Dubbele bedrijven opschonen</a>
         <a href="/herlabel-brontype" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Bedrijfstypes aanvullen</a>
+        <a href="/importeer-scrapmonster" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ ScrapMonster-import (schroothandels)</a>
         <a href="/export-data" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
     </div>
     """
