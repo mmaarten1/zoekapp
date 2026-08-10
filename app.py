@@ -5167,6 +5167,15 @@ def orders_pagina():
     alle_orders.sort(key=lambda o: o.get("aangemaakt", ""), reverse=True)
     open_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] in ("Open", "Onderhandeling") and o.get("prijs", "").replace(".","",1).isdigit())
     gewonnen_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] == "Gewonnen" and o.get("prijs", "").replace(".","",1).isdigit())
+    _vandaag_kpi = datetime.date.today()
+    aantal_verlopen = 0
+    for o in alle_orders:
+        if o.get("status") in ("Open", "Onderhandeling") and o.get("verwachte_datum"):
+            try:
+                if datetime.datetime.strptime(o["verwachte_datum"], "%Y-%m-%d").date() < _vandaag_kpi:
+                    aantal_verlopen += 1
+            except (ValueError, TypeError):
+                pass
     vooringevuld_bedrijf = request.args.get("bedrijf", "")
 
     _status_alle = laad_status()
@@ -5186,6 +5195,16 @@ def orders_pagina():
 
     alle_materialen_in_orders = sorted({o.get("materiaal") for o in alle_orders if o.get("materiaal")})
     alle_verantwoordelijken = sorted({o.get("verantwoordelijke") for o in alle_orders if o.get("verantwoordelijke")})
+
+    _vandaag = datetime.date.today()
+    for o in getoonde_orders:
+        o["is_verlopen"] = False
+        if o.get("status") in ("Open", "Onderhandeling") and o.get("verwachte_datum"):
+            try:
+                verwachte_datum_obj = datetime.datetime.strptime(o["verwachte_datum"], "%Y-%m-%d").date()
+                o["is_verlopen"] = verwachte_datum_obj < _vandaag
+            except (ValueError, TypeError):
+                pass
 
     inhoud = """
 <style>
@@ -5208,6 +5227,7 @@ def orders_pagina():
     <div><div class="getal">€{{ "{:,.0f}".format(open_waarde) }}</div><div class="label">Openstaande waarde</div></div>
     <div><div class="getal">€{{ "{:,.0f}".format(gewonnen_waarde) }}</div><div class="label">Gewonnen (totaal)</div></div>
     <div><div class="getal">{{ alle_orders|length }}</div><div class="label">Totaal orders</div></div>
+    {% if aantal_verlopen > 0 %}<div style="border-color:#fecaca;"><div class="getal" style="color:#dc2626;">{{ aantal_verlopen }}</div><div class="label">⚠ Verlopen</div></div>{% endif %}
 </div>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
@@ -5268,7 +5288,7 @@ def orders_pagina():
 <div class="order-kaart">
     <div class="order-top">
         <div>
-            <div class="order-bedrijf">{{ o.bedrijf }}</div>
+            <div class="order-bedrijf">{{ o.bedrijf }}{% if o.is_verlopen %} <span style="background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;vertical-align:middle;">⚠ Verlopen</span>{% endif %}</div>
             <div class="order-details">
                 {% if o.materiaal %}{{ o.materiaal }} · {% endif %}
                 {% if o.hoeveelheid %}{{ o.hoeveelheid }} · {% endif %}
@@ -5309,7 +5329,7 @@ def orders_pagina():
                                     filter_status=filter_status, filter_materiaal=filter_materiaal, filter_verantwoordelijke=filter_verantwoordelijke,
                                     alle_materialen_in_orders=alle_materialen_in_orders, alle_verantwoordelijken=alle_verantwoordelijken,
                                     vooringevuld_bedrijf=vooringevuld_bedrijf, materiaal_taxonomie=laad_materiaal_taxonomie(),
-                                    alle_bedrijfsnamen=alle_bedrijfsnamen)
+                                    alle_bedrijfsnamen=alle_bedrijfsnamen, aantal_verlopen=aantal_verlopen)
 
 @app.route("/contacten")
 def contacten():
