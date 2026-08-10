@@ -4974,6 +4974,20 @@ def dashboard():
     {% endif %}
 </div>
 
+<div class="dg-kaart">
+    <div class="dg-kaart-titel">Teamprestaties</div>
+    {% if team_prestaties %}
+        {% for t in team_prestaties %}
+        <div class="dg-activiteit-item">
+            <b>{{ t.naam }}</b>
+            <small>{{ t.bedrijven }} bedrijven toegewezen · {{ t.orders }} orders · €{{ "{:,.0f}".format(t.waarde) }}</small>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="dg-lege">Nog geen accountmanagers of orders toegewezen.</div>
+    {% endif %}
+</div>
+
 </div>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -5000,6 +5014,21 @@ dKaart.addLayer(dCluster);
 </script>
     """
     pagina = render_simple_page("Dashboard", "dashboard", inhoud)
+    accountmanagers_alle = laad_accountmanagers()
+    orders_alle = laad_orders()
+    _teamnamen = sorted(set(laad_users().keys()) | set(accountmanagers_alle.values()) | {o.get("verantwoordelijke","") for o in orders_alle if o.get("verantwoordelijke")})
+    team_prestaties = []
+    for naam in _teamnamen:
+        if not naam:
+            continue
+        aantal_bedrijven = sum(1 for am in accountmanagers_alle.values() if am == naam)
+        orders_van_gebruiker = [o for o in orders_alle if o.get("verantwoordelijke") == naam]
+        waarde = sum(float(o["prijs"]) for o in orders_van_gebruiker if o.get("prijs","").replace(".","",1).isdigit())
+        if aantal_bedrijven == 0 and len(orders_van_gebruiker) == 0:
+            continue
+        team_prestaties.append({"naam": naam, "bedrijven": aantal_bedrijven, "orders": len(orders_van_gebruiker), "waarde": waarde})
+    team_prestaties.sort(key=lambda t: -t["waarde"])
+
     return render_template_string(pagina,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN, fabrieken=len(PAPIERFABRIEKEN),
         klant=aantal_klant, potentie=aantal_potentie, proces=aantal_proces, geen=aantal_geen,
@@ -5007,7 +5036,8 @@ dKaart.addLayer(dCluster);
         volume_klant=volume_klant, openstaand=openstaand, kaart_bedrijven=kaart_bedrijven,
         donut_segmenten=donut_segmenten, regio_kaarten=regio_kaarten,
         groei_pct=groei_pct, groei_periode=groei_periode,
-        openstaande_orders=sorted([o for o in laad_orders() if o["status"] in ("Open", "Onderhandeling")], key=lambda o: o.get("aangemaakt",""), reverse=True)[:5])
+        openstaande_orders=sorted([o for o in laad_orders() if o["status"] in ("Open", "Onderhandeling")], key=lambda o: o.get("aangemaakt",""), reverse=True)[:5],
+        team_prestaties=team_prestaties)
 
 @app.route("/inzichten")
 def inzichten():
