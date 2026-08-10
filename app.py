@@ -3192,6 +3192,11 @@ function toggleMobielMenu() {
                 </select>
             </div>
 
+            <div class="filter-group">
+                <label class="filter-label">Kwaliteiten</label>
+                <input type="text" class="filter-select" name="kwaliteiten" value="{{ kwaliteiten }}" placeholder="bv. OCC, HDPE...">
+            </div>
+
             <hr class="filter-divider">
             <button type="submit" class="btn-apply">Filters toepassen</button>
         </aside>
@@ -3264,6 +3269,10 @@ function toggleMobielMenu() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <div style="font-weight:700;" id="fabriekAnalyseTitel">Leveranciers</div>
         <button onclick="document.getElementById('fabriekAnalysePaneel').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:16px;">✕</button>
+    </div>
+    <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #f1f5f9;">
+        <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Kwaliteiten die deze fabriek aanneemt</label>
+        <input type="text" id="fabriekKwaliteitenInput" placeholder="bv. OCC, Mixed Paper..." onblur="wijzigFabriekKwaliteiten()" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
     </div>
     <div id="fabriekAnalyseLijst"></div>
 </div>
@@ -3721,6 +3730,7 @@ if (window.actieveRelatieLijnen) {
         window.actieveRelatieLijnen.forEach(lijn => kaart.removeLayer(lijn));
     }
     window.actieveRelatieLijnen = [];
+    window.huidigeFabriekNaam = fabriekNaam;
     const paneel = document.getElementById("fabriekAnalysePaneel");
     const titel = document.getElementById("fabriekAnalyseTitel");
     const lijstDiv = document.getElementById("fabriekAnalyseLijst");
@@ -3729,6 +3739,10 @@ if (window.actieveRelatieLijnen) {
     lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Laden...</p>";
 
     try {
+        const kwalRes = await fetch("/api/fabriek-kwaliteiten?fabriek=" + encodeURIComponent(fabriekNaam));
+        const kwalData = await kwalRes.json();
+        document.getElementById("fabriekKwaliteitenInput").value = kwalData.kwaliteiten || "";
+
         const res = await fetch("/api/fabriek-analyse?fabriek=" + encodeURIComponent(fabriekNaam));
         const resultaten = await res.json();
         if (resultaten.error) {
@@ -3749,6 +3763,7 @@ if (window.actieveRelatieLijnen) {
                         <span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-size:11px;">${r.gedeelde_materialen}</span>
                         <span style="font-weight:700;color:#ea580c;">${r.afstand_km} km</span>
                     </div>
+                    ${r.gedeelde_kwaliteiten ? `<div style="margin-top:4px;"><span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:4px;font-size:11px;">✓ ${r.gedeelde_kwaliteiten}</span></div>` : ""}
                 </div>`;
         });
         lijstDiv.innerHTML = html;
@@ -3771,6 +3786,13 @@ if (window.actieveRelatieLijnen) {
         lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>Er ging iets mis.</p>";
         console.error(err);
     }
+}
+
+async function wijzigFabriekKwaliteiten() {
+    const input = document.getElementById("fabriekKwaliteitenInput");
+    if (!window.huidigeFabriekNaam) return;
+    await fetch("/api/fabriek-kwaliteiten", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({fabriek: window.huidigeFabriekNaam, waarde: input.value})});
+    toonFabriekAnalyse(window.huidigeFabriekNaam);
 }
 
 async function laadTransport() {
@@ -3980,6 +4002,7 @@ def export_csv():
     materiaal = request.args.get("materiaal", "")
     brontype  = request.args.get("brontype", "")
     accountmanager = request.args.get("accountmanager", "")
+    kwaliteiten = request.args.get("kwaliteiten", "")
 
     bedrijven = ENF_BEDRIJVEN
     if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
@@ -3988,6 +4011,7 @@ def export_csv():
     if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
     if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
     if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
+    if kwaliteiten: bedrijven = [b for b in bedrijven if kwaliteiten.strip().lower() in b.get("kwaliteiten","").lower()]
     if accountmanager:
         accountmanagers_alle = laad_accountmanagers()
         gezocht_am = session.get("gebruikersnaam", "") if accountmanager == "__mij__" else accountmanager
@@ -3995,13 +4019,13 @@ def export_csv():
 
     output = io.StringIO()
     schrijver = csv.writer(output)
-    schrijver.writerow(["Naam", "Land", "Stad/Regio", "Bedrijfstype", "Materialen", "Klanttype", "Volume (t/jaar)",
-                         "Adres", "Telefoonnummer", "Certificeringen", "Website"])
+    schrijver.writerow(["Naam", "Land", "Stad/Regio", "Bedrijfstype", "Materialen", "Kwaliteiten", "Klanttype", "Volume (t/jaar)",
+                         "Adres", "Telefoonnummer", "Contactpersoon", "Certificeringen", "Website"])
     for b in bedrijven:
         schrijver.writerow([
             b.get("naam",""), b.get("land",""), b.get("regio",""), b.get("brontype",""),
-            b.get("materialen",""), b.get("klanttype",""), b.get("volume",""),
-            b.get("adres",""), b.get("telefoon",""), b.get("certificeringen",""), b.get("url",""),
+            b.get("materialen",""), b.get("kwaliteiten",""), b.get("klanttype",""), b.get("volume",""),
+            b.get("adres",""), b.get("telefoon",""), b.get("contactpersoon",""), b.get("certificeringen",""), b.get("url",""),
         ])
 
     from flask import Response
@@ -4036,6 +4060,7 @@ def fabriek_analyse():
         return jsonify({"error": "Fabriek niet gevonden"}), 404
 
     fabriek_materialen = [m.strip().lower() for m in fabriek.get("materialen", "").split(",")]
+    fabriek_kwaliteiten = [k.strip().lower() for k in fabriek.get("kwaliteiten", "").split(",") if k.strip()]
 
     resultaten = []
     for b in ENF_BEDRIJVEN:
@@ -4045,6 +4070,8 @@ def fabriek_analyse():
         gedeeld = [m for m in fabriek_materialen if m in bedrijf_materialen]
         if not gedeeld:
             continue
+        bedrijf_kwaliteiten = [k.strip().lower() for k in b.get("kwaliteiten", "").split(",") if k.strip()]
+        gedeelde_kwaliteiten = [k for k in fabriek_kwaliteiten if k in bedrijf_kwaliteiten]
         afstand = bereken_afstand_km(fabriek["lat"], fabriek["lon"], b["lat"], b["lon"])
         resultaten.append({
             "naam": b["naam"],
@@ -4052,10 +4079,11 @@ def fabriek_analyse():
             "regio": b["regio"],
             "materialen": b.get("materialen", ""),
             "gedeelde_materialen": ", ".join(gedeeld),
+            "gedeelde_kwaliteiten": ", ".join(gedeelde_kwaliteiten),
             "afstand_km": round(afstand, 1)
         })
 
-    resultaten.sort(key=lambda x: x["afstand_km"])
+    resultaten.sort(key=lambda x: (0 if x["gedeelde_kwaliteiten"] else 1, x["afstand_km"]))
     return jsonify(resultaten[:25])
 @app.route("/api/fotos", methods=["GET"])
 def get_fotos():
@@ -4239,7 +4267,7 @@ def set_accountmanager():
     bewaar_accountmanagers(alle)
     return jsonify({"accountmanager": nieuwe_am})
 
-BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon"}
+BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten"}
 
 @app.route("/api/bedrijf-veld", methods=["POST"])
 def set_bedrijf_veld():
@@ -4256,6 +4284,25 @@ def set_bedrijf_veld():
                 json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
             return jsonify({"veld": veld, "waarde": waarde})
     return jsonify({"error": "Bedrijf niet gevonden"}), 404
+
+@app.route("/api/fabriek-kwaliteiten", methods=["GET"])
+def get_fabriek_kwaliteiten():
+    naam = request.args.get("fabriek", "")
+    fabriek = next((f for f in PAPIERFABRIEKEN if f["naam"] == naam), None)
+    return jsonify({"kwaliteiten": fabriek.get("kwaliteiten", "") if fabriek else ""})
+
+@app.route("/api/fabriek-kwaliteiten", methods=["POST"])
+def set_fabriek_kwaliteiten():
+    data = request.get_json()
+    naam = data.get("fabriek", "")
+    waarde = data.get("waarde", "")
+    for f in PAPIERFABRIEKEN:
+        if f["naam"] == naam:
+            f["kwaliteiten"] = waarde
+            with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as fh:
+                json.dump(PAPIERFABRIEKEN, fh, ensure_ascii=False, indent=2)
+            return jsonify({"kwaliteiten": waarde})
+    return jsonify({"error": "Fabriek niet gevonden"}), 404
 
 @app.route("/api/status", methods=["POST"])
 def set_status():
@@ -4315,7 +4362,7 @@ PAGINA_GROOTTE = 200
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = ""
+    zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = kwaliteiten = ""
     pagina = 1
 
     if request.method == "POST":
@@ -4326,6 +4373,7 @@ def index():
         materiaal = request.form.get("materiaal", "")
         brontype  = request.form.get("brontype", "")
         accountmanager = request.form.get("accountmanager", "")
+        kwaliteiten = request.form.get("kwaliteiten", "")
         pagina    = request.form.get("pagina", "1")
     else:
         zoekterm = request.args.get("zoekterm", "").lower()
@@ -4335,6 +4383,7 @@ def index():
         materiaal = request.args.get("materiaal", "")
         brontype  = request.args.get("brontype", "")
         accountmanager = request.args.get("accountmanager", "")
+        kwaliteiten = request.args.get("kwaliteiten", "")
         pagina    = request.args.get("pagina", "1")
 
     try:
@@ -4349,13 +4398,14 @@ def index():
     if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
     if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
     if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
+    if kwaliteiten: bedrijven = [b for b in bedrijven if kwaliteiten.strip().lower() in b.get("kwaliteiten","").lower()]
     if accountmanager:
         accountmanagers_alle = laad_accountmanagers()
         gezocht_am = session.get("gebruikersnaam", "") if accountmanager == "__mij__" else accountmanager
         bedrijven = [b for b in bedrijven if accountmanagers_alle.get(b["naam"], "") == gezocht_am]
 
     totaal_gevonden = len(bedrijven)
-    er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype or accountmanager)
+    er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype or accountmanager or kwaliteiten)
     totaal_paginas = max(1, (totaal_gevonden + PAGINA_GROOTTE - 1) // PAGINA_GROOTTE)
     pagina = min(pagina, totaal_paginas)
     start = (pagina - 1) * PAGINA_GROOTTE
@@ -4364,18 +4414,20 @@ def index():
 
     def maak_pagina_url(p):
         params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
-                   "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager, "pagina": p}
+                   "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager,
+                   "kwaliteiten": kwaliteiten, "pagina": p}
         params = {k: v for k, v in params.items() if v}
         return "/?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
 
     export_params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
-                      "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager}
+                      "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager, "kwaliteiten": kwaliteiten}
     export_params = {k: v for k, v in export_params.items() if v}
     export_query = "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in export_params.items())
 
     return render_template_string(HTML,
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
         klanttype=klanttype, materiaal=materiaal, brontype=brontype, accountmanager=accountmanager,
+        kwaliteiten=kwaliteiten,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
@@ -5285,6 +5337,9 @@ def bedrijf_profiel(naam):
             </span></div>
             <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">
                 <input type="text" value="{{ bedrijf.materialen or '' }}" data-veld="materialen" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
+            </span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Kwaliteiten</span><span class="drawer-row-value">
+                <input type="text" value="{{ bedrijf.kwaliteiten or '' }}" data-veld="kwaliteiten" onblur="wijzigBedrijfVeld(this)" placeholder="bv. OCC, Mixed Paper, HDPE..." style="width:200px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
             </span></div>
             <div class="drawer-row"><span class="drawer-row-label">Contactpersoon</span><span class="drawer-row-value">
                 <input type="text" value="{{ bedrijf.contactpersoon or '' }}" data-veld="contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="Naam invullen..." style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
