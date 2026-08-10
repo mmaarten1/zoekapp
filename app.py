@@ -5103,6 +5103,20 @@ def orders_pagina():
     gewonnen_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] == "Gewonnen" and o.get("prijs", "").replace(".","",1).isdigit())
     vooringevuld_bedrijf = request.args.get("bedrijf", "")
 
+    filter_status = request.args.get("filter_status", "")
+    filter_materiaal = request.args.get("filter_materiaal", "")
+    filter_verantwoordelijke = request.args.get("filter_verantwoordelijke", "")
+    getoonde_orders = alle_orders
+    if filter_status:
+        getoonde_orders = [o for o in getoonde_orders if o.get("status") == filter_status]
+    if filter_materiaal:
+        getoonde_orders = [o for o in getoonde_orders if o.get("materiaal") == filter_materiaal]
+    if filter_verantwoordelijke:
+        getoonde_orders = [o for o in getoonde_orders if o.get("verantwoordelijke") == filter_verantwoordelijke]
+
+    alle_materialen_in_orders = sorted({o.get("materiaal") for o in alle_orders if o.get("materiaal")})
+    alle_verantwoordelijken = sorted({o.get("verantwoordelijke") for o in alle_orders if o.get("verantwoordelijke")})
+
     inhoud = """
 <style>
 .order-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:16px 18px; margin-bottom:10px; }
@@ -5125,6 +5139,23 @@ def orders_pagina():
     <div><div class="getal">€{{ "{:,.0f}".format(gewonnen_waarde) }}</div><div class="label">Gewonnen (totaal)</div></div>
     <div><div class="getal">{{ alle_orders|length }}</div><div class="label">Totaal orders</div></div>
 </div>
+
+<form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle statussen</option>
+        {% for s in statussen %}<option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+    <select name="filter_materiaal" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle materialen</option>
+        {% for m in alle_materialen_in_orders %}<option value="{{ m }}" {% if filter_materiaal == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+    </select>
+    <select name="filter_verantwoordelijke" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Iedereen</option>
+        {% for v in alle_verantwoordelijken %}<option value="{{ v }}" {% if filter_verantwoordelijke == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+    {% if filter_status or filter_materiaal or filter_verantwoordelijke %}<a href="/orders" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
+    <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_orders|length }} van {{ alle_orders|length }} orders</span>
+</form>
 
 <div class="form-nieuw-order">
     <form method="POST">
@@ -5158,8 +5189,8 @@ def orders_pagina():
     </form>
 </div>
 
-{% if alle_orders %}
-{% for o in alle_orders %}
+{% if getoonde_orders %}
+{% for o in getoonde_orders %}
 <div class="order-kaart">
     <div class="order-top">
         <div>
@@ -5191,12 +5222,18 @@ def orders_pagina():
 </div>
 {% endfor %}
 {% else %}
+{% if alle_orders %}
+<div class="lege-staat">Geen orders gevonden voor deze filters.</div>
+{% else %}
 <div class="lege-staat">Nog geen orders. Voeg je eerste order toe via het formulier hierboven.</div>
+{% endif %}
 {% endif %}
     """
     pagina = render_simple_page("Orders", "orders", inhoud)
-    return render_template_string(pagina, alle_orders=alle_orders, statussen=ORDER_STATUSSEN,
+    return render_template_string(pagina, alle_orders=alle_orders, getoonde_orders=getoonde_orders, statussen=ORDER_STATUSSEN,
                                     statuskleuren=ORDER_KLEUREN, open_waarde=open_waarde, gewonnen_waarde=gewonnen_waarde,
+                                    filter_status=filter_status, filter_materiaal=filter_materiaal, filter_verantwoordelijke=filter_verantwoordelijke,
+                                    alle_materialen_in_orders=alle_materialen_in_orders, alle_verantwoordelijken=alle_verantwoordelijken,
                                     vooringevuld_bedrijf=vooringevuld_bedrijf, materiaal_taxonomie=laad_materiaal_taxonomie())
 
 @app.route("/contacten")
