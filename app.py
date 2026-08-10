@@ -4542,6 +4542,19 @@ def add_notitie():
     alle[bedrijf].append(nieuwe_notitie)
     bewaar_notities(alle)
 
+    if type_ == "team":
+        toegewezen_am = laad_accountmanagers().get(bedrijf, "")
+        if toegewezen_am and toegewezen_am != nieuwe_notitie["gebruikersnaam"]:
+            alle_meldingen = laad_meldingen()
+            alle_meldingen.append({
+                "id": str(uuid.uuid4()),
+                "tekst": f"{nieuwe_notitie['gebruikersnaam']} heeft een notitie toegevoegd bij {bedrijf} (jouw bedrijf): \"{tekst[:80]}{'...' if len(tekst) > 80 else ''}\"",
+                "bedrijf": bedrijf, "van": nieuwe_notitie["gebruikersnaam"],
+                "voor_gebruiker": toegewezen_am, "voor_team": "",
+                "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+            })
+            bewaar_meldingen(alle_meldingen)
+
     return jsonify(nieuwe_notitie)
 
 @app.route("/api/notities", methods=["DELETE"])
