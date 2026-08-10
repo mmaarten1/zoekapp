@@ -3387,6 +3387,7 @@ function toggleMobielMenu() {
 <div id="meldingenPaneel" style="display:none;position:fixed;top:60px;right:20px;width:340px;max-height:400px;overflow-y:auto;background:white;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:9998;padding:12px;">
     <div style="font-weight:700;margin-bottom:8px;">Meldingen</div>
     <div id="meldingenLijst"></div>
+    <a href="/meldingen-overzicht" style="display:block;text-align:center;margin-top:10px;font-size:12px;color:var(--brand-600);text-decoration:none;font-weight:600;">Alle meldingen bekijken →</a>
 </div>
 <!-- DETAIL DRAWER -->
 <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
@@ -4371,6 +4372,55 @@ def markeer_gelezen(melding_id):
             m["gelezen"] = True
     bewaar_meldingen(alle)
     return jsonify({"ok": True})
+
+@app.route("/api/meldingen/alles-gelezen", methods=["POST"])
+def markeer_alles_gelezen():
+    gebruiker = session.get("gebruikersnaam", "")
+    team = session.get("team", "")
+    alle = laad_meldingen()
+    for m in alle:
+        if m.get("voor_gebruiker") == gebruiker or (m.get("voor_team") and m.get("voor_team") == team):
+            m["gelezen"] = True
+    bewaar_meldingen(alle)
+    return jsonify({"ok": True})
+
+@app.route("/meldingen-overzicht")
+def meldingen_overzicht():
+    gebruiker = session.get("gebruikersnaam", "")
+    team = session.get("team", "")
+    alle = laad_meldingen()
+    van_mij = [m for m in alle if m.get("voor_gebruiker") == gebruiker or (m.get("voor_team") and m.get("voor_team") == team)]
+    van_mij.sort(key=lambda m: m.get("timestamp",""), reverse=True)
+    aantal_ongelezen = sum(1 for m in van_mij if not m.get("gelezen"))
+
+    inhoud = """
+    <div class="page-title">Meldingen</div>
+    {% if aantal_ongelezen > 0 %}
+    <button onclick="alleMeldingenGelezen()" style="padding:6px 14px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:12.5px;margin-top:-16px;margin-bottom:16px;">Alles gelezen markeren ({{ aantal_ongelezen }})</button>
+    <script>
+    async function alleMeldingenGelezen() {
+        await fetch("/api/meldingen/alles-gelezen", {method: "POST"});
+        window.location.reload();
+    }
+    </script>
+    {% endif %}
+    {% if van_mij %}
+    <div class="info-kaart" style="max-width:700px;">
+        {% for m in van_mij %}
+        <div class="dg-activiteit-item" style="background:{{ '#eff6ff' if not m.gelezen else 'transparent' }};padding:10px;border-radius:6px;">
+            {% if m.bedrijf %}<a href="/bedrijf/{{ m.bedrijf|urlencode }}" style="color:var(--gray-800);font-weight:700;text-decoration:none;">{{ m.bedrijf }}</a><br>{% endif %}
+            {{ m.tekst }}
+            <small>{{ m.timestamp }}{% if m.van %} · van {{ m.van }}{% endif %}</small>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="lege-staat">Nog geen meldingen.</div>
+    {% endif %}
+    """
+    pagina = render_simple_page("Meldingen", "instellingen", inhoud)
+    return render_template_string(pagina, van_mij=van_mij, aantal_ongelezen=aantal_ongelezen)
+
 @app.route("/details")
 def details():
     url = request.args.get("url", "")
