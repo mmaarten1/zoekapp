@@ -3343,6 +3343,7 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
         <option value="geen_interesse">⚪ Geen Interesse</option>
     </select>
 </span></div>
+        <div class="drawer-row"><span class="drawer-row-label">Accountmanager</span><span class="drawer-row-value" id="accountmanagerWaarde">—</span></div>
         <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
         <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
         <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div>
@@ -3416,6 +3417,7 @@ function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, 
     laadNotities();
     laadTransport();
     laadStatus();
+    laadAccountmanager();
     vulMeldingDropdowns();
     laadFotos();
 
@@ -3446,6 +3448,7 @@ function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, 
             laadNotities();
             laadTransport();
             laadStatus();
+            laadAccountmanager();
             vulMeldingDropdowns();
             laadFotos();
         });
@@ -3555,6 +3558,19 @@ async function laadStatus() {
         const res = await fetch("/api/status?bedrijf=" + encodeURIComponent(bedrijf));
         const data = await res.json();
         select.value = data.status || "";
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function laadAccountmanager() {
+    const bedrijf = window.currentDrawerData.naam;
+    const el = document.getElementById("accountmanagerWaarde");
+    if (!el) return;
+    try {
+        const res = await fetch("/api/accountmanager?bedrijf=" + encodeURIComponent(bedrijf));
+        const data = await res.json();
+        el.textContent = data.accountmanager ? ("👤 " + data.accountmanager) : "Niet toegewezen";
     } catch (err) {
         console.error(err);
     }
