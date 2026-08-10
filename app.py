@@ -160,6 +160,42 @@ def zet_user_cookie(response):
 
 TENANT_ID = os.environ.get("TENANT_ID", "peute")
 
+# ============================================
+# COMPANIES HOUSE (UK) - status-check tegen faillissement/ontbinding
+# ============================================
+COMPANIES_HOUSE_API_KEY = os.environ.get("COMPANIES_HOUSE_API_KEY", "")
+CH_FAILLIET_STATUSSEN = {
+    "dissolved", "liquidation", "administration", "insolvency-proceedings",
+    "receivership", "voluntary-arrangement", "converted-closed",
+}
+
+def companies_house_status(bedrijfsnaam):
+    """Zoekt een bedrijfsnaam op bij Companies House. Geeft (status, gevonden_naam) terug, of (None, None) als niet gevonden/geen key."""
+    if not COMPANIES_HOUSE_API_KEY:
+        return None, None
+    try:
+        resp = requests.get(
+            "https://api.company-information.service.gov.uk/search/companies",
+            params={"q": bedrijfsnaam, "items_per_page": 1},
+            auth=(COMPANIES_HOUSE_API_KEY, ""),
+            timeout=15
+        )
+        if resp.status_code != 200:
+            return None, None
+        items = resp.json().get("items", [])
+        if not items:
+            return None, None
+        return items[0].get("company_status"), items[0].get("title")
+    except Exception:
+        return None, None
+
+def is_ch_financieel_gezond(bedrijfsnaam):
+    """True = gezond of onbekend (geen key/geen match -> voordeel van de twijfel). False = aantoonbaar failliet/ontbonden."""
+    status, _ = companies_house_status(bedrijfsnaam)
+    if status is None:
+        return True
+    return status not in CH_FAILLIET_STATUSSEN
+
 with open(datapad("bedrijven.json"), "r", encoding="utf-8") as f:
     ENF_BEDRIJVEN = json.load(f)
 with open(datapad("papierfabrieken.json"), "r", encoding="utf-8") as f:
@@ -509,6 +545,20 @@ def _gov_uk_bulk_worker(gebruikersnaam, max_nieuw=3000):
                 })
                 aantal_nieuw += 1
 
+        aantal_failliet = 0
+        if COMPANIES_HOUSE_API_KEY:
+            GOV_UK_BULK_STATUS["voortgang"] = f"Financiële status checken bij Companies House ({len(nieuwe_bedrijven_tmp)} bedrijven)..."
+            nog_gezond = []
+            for i, b in enumerate(nieuwe_bedrijven_tmp):
+                if is_ch_financieel_gezond(b["naam"]):
+                    nog_gezond.append(b)
+                else:
+                    aantal_failliet += 1
+                if i % 20 == 0:
+                    GOV_UK_BULK_STATUS["voortgang"] = f"Companies House-check: {i+1}/{len(nieuwe_bedrijven_tmp)} ({aantal_failliet} failliet overgeslagen)..."
+            nieuwe_bedrijven_tmp = nog_gezond
+            aantal_nieuw = len(nieuwe_bedrijven_tmp)
+
         GOV_UK_BULK_STATUS["voortgang"] = f"Geocoderen van {len(nieuwe_bedrijven_tmp)} nieuwe bedrijven..."
         for i, b in enumerate(nieuwe_bedrijven_tmp):
             zoekterm = b.get("regio") or b.get("adres","").split(",")[0]
@@ -533,7 +583,7 @@ def _gov_uk_bulk_worker(gebruikersnaam, max_nieuw=3000):
             alle_meldingen = laad_meldingen()
             alle_meldingen.append({
                 "id": str(uuid.uuid4()),
-                "tekst": f"UK overheidsregister-import klaar! {aantal_nieuw} nieuwe bedrijven toegevoegd (van {aantal_gezien} doorzochte registraties). {dubbel} dubbelingen opgeschoond.",
+                "tekst": f"UK overheidsregister-import klaar! {aantal_nieuw} nieuwe bedrijven toegevoegd (van {aantal_gezien} doorzochte registraties). {aantal_failliet} failliete/ontbonden bedrijven overgeslagen. {dubbel} dubbelingen opgeschoond.",
                 "bedrijf": "", "van": "Systeem", "voor_gebruiker": gebruikersnaam, "voor_team": "",
                 "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
             })
@@ -599,6 +649,104 @@ fetch("/api/gov-uk-import-status").then(r => r.json()).then(data => {
 @app.route("/api/gov-uk-import-status")
 def gov_uk_import_status():
     return jsonify(GOV_UK_BULK_STATUS)
+
+CH_CLEANUP_STATUS = {"bezig": False, "voortgang": "", "gecontroleerd": 0, "totaal": 0, "verwijderd": 0, "klaar": False, "fout": ""}
+
+def _ch_cleanup_worker(gebruikersnaam):
+    global ENF_BEDRIJVEN
+    CH_CLEANUP_STATUS.update({"bezig": True, "klaar": False, "fout": "", "gecontroleerd": 0, "verwijderd": 0})
+    try:
+        if not COMPANIES_HOUSE_API_KEY:
+            CH_CLEANUP_STATUS["fout"] = "Geen COMPANIES_HOUSE_API_KEY ingesteld op Railway."
+            return
+
+        uk_bedrijven = [b for b in ENF_BEDRIJVEN if b.get("land","").strip().lower() == "united kingdom"]
+        CH_CLEANUP_STATUS["totaal"] = len(uk_bedrijven)
+        te_verwijderen_namen = set()
+
+        for i, b in enumerate(uk_bedrijven):
+            if not is_ch_financieel_gezond(b["naam"]):
+                te_verwijderen_namen.add((b["naam"], b.get("regio","")))
+                CH_CLEANUP_STATUS["verwijderd"] += 1
+            CH_CLEANUP_STATUS["gecontroleerd"] = i + 1
+            if i % 20 == 0:
+                CH_CLEANUP_STATUS["voortgang"] = f"{i+1}/{len(uk_bedrijven)} gecontroleerd, {CH_CLEANUP_STATUS['verwijderd']} failliet/ontbonden gevonden..."
+
+        if te_verwijderen_namen:
+            ENF_BEDRIJVEN = [b for b in ENF_BEDRIJVEN if (b["naam"], b.get("regio","")) not in te_verwijderen_namen or b.get("land","").strip().lower() != "united kingdom"]
+            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
+        CH_CLEANUP_STATUS["voortgang"] = "Klaar!"
+
+        if gebruikersnaam:
+            alle_meldingen = laad_meldingen()
+            alle_meldingen.append({
+                "id": str(uuid.uuid4()),
+                "tekst": f"UK-controle klaar! {CH_CLEANUP_STATUS['gecontroleerd']} bedrijven gecontroleerd bij Companies House, {CH_CLEANUP_STATUS['verwijderd']} failliete/ontbonden bedrijven verwijderd.",
+                "bedrijf": "", "van": "Systeem", "voor_gebruiker": gebruikersnaam, "voor_team": "",
+                "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+            })
+            bewaar_meldingen(alle_meldingen)
+    except Exception as e:
+        CH_CLEANUP_STATUS["fout"] = str(e)
+    finally:
+        CH_CLEANUP_STATUS["bezig"] = False
+        CH_CLEANUP_STATUS["klaar"] = True
+
+@app.route("/controleer-uk-status", methods=["GET", "POST"])
+def controleer_uk_status():
+    if request.method == "POST":
+        if not CH_CLEANUP_STATUS["bezig"]:
+            gebruikersnaam = session.get("gebruikersnaam", "")
+            thread = threading.Thread(target=_ch_cleanup_worker, args=(gebruikersnaam,), daemon=True)
+            thread.start()
+        return redirect(url_for("controleer_uk_status"))
+
+    inhoud = """
+<div class="page-title">UK-bedrijven controleren (Companies House)</div>
+<div class="info-kaart" style="max-width:600px;">
+    <p style="color:var(--gray-500);font-size:0.85rem;margin-bottom:16px;">
+        Controleert al je bestaande UK-bedrijven bij Companies House en verwijdert bedrijven met status
+        "dissolved", "liquidation", "administration" of vergelijkbaar. Kan lang duren bij veel UK-bedrijven
+        (ca. 2 per seconde, dus 1000 bedrijven ≈ 8 minuten).
+    </p>
+    <div id="knopWrap">
+        <button onclick="start()" style="padding:10px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Start controle</button>
+    </div>
+    <div id="statusWrap" style="display:none;margin-top:16px;">
+        <div id="voortgangTekst" style="font-size:0.85rem;color:var(--gray-600);">Bezig...</div>
+    </div>
+</div>
+<script>
+function start() {
+    fetch("/controleer-uk-status", {method:"POST"}).then(() => poll());
+    document.getElementById("knopWrap").style.display = "none";
+    document.getElementById("statusWrap").style.display = "block";
+}
+async function poll() {
+    const res = await fetch("/api/ch-cleanup-status");
+    const data = await res.json();
+    let tekst = data.voortgang || "Bezig...";
+    if (data.fout) tekst = "Fout: " + data.fout;
+    document.getElementById("voortgangTekst").textContent = tekst;
+    if (data.bezig) { setTimeout(poll, 3000); }
+}
+fetch("/api/ch-cleanup-status").then(r => r.json()).then(data => {
+    if (data.bezig) {
+        document.getElementById("knopWrap").style.display = "none";
+        document.getElementById("statusWrap").style.display = "block";
+        poll();
+    }
+});
+</script>
+    """
+    pagina = render_simple_page("UK-bedrijven controleren", "zoeken", inhoud)
+    return render_template_string(pagina)
+
+@app.route("/api/ch-cleanup-status")
+def ch_cleanup_status():
+    return jsonify(CH_CLEANUP_STATUS)
 
 @app.route("/debug-gov-uk-register")
 def debug_gov_uk_register():
@@ -4545,6 +4693,7 @@ def instellingen():
         <a href="/herlabel-brontype" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Bedrijfstypes aanvullen</a>
         <a href="/importeer-scrapmonster" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ ScrapMonster-import (schroothandels)</a>
         <a href="/importeer-gov-uk" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK overheidsregister-import</a>
+        <a href="/controleer-uk-status" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK-bedrijven controleren (Companies House)</a>
         <a href="/export-data" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
     </div>
     """
