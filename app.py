@@ -22,7 +22,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "bedrijven.json", "papierfabrieken.json", "users.json", "status.json",
         "notities.json", "meldingen.json", "fotos.json", "transport_prijzen.json",
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
-        "orders.json",
+        "orders.json", "accountmanagers.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -41,6 +41,19 @@ def laad_users():
     except:
         return {}
 STATUS_FILE = datapad("status.json")
+
+ACCOUNTMANAGERS_FILE = datapad("accountmanagers.json")
+
+def laad_accountmanagers():
+    try:
+        with open(ACCOUNTMANAGERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_accountmanagers(data):
+    with open(ACCOUNTMANAGERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 def laad_status():
     try:
@@ -4127,6 +4140,27 @@ def get_status():
     alle = laad_status()
     return jsonify({"status": alle.get(bedrijf, "")})
 
+@app.route("/api/accountmanager", methods=["GET"])
+def get_accountmanager():
+    bedrijf = request.args.get("bedrijf", "")
+    alle = laad_accountmanagers()
+    return jsonify({"accountmanager": alle.get(bedrijf, "")})
+
+@app.route("/api/accountmanager", methods=["POST"])
+def set_accountmanager():
+    data = request.get_json()
+    bedrijf = data.get("bedrijf", "")
+    nieuwe_am = data.get("accountmanager", "")
+    if not bedrijf:
+        return jsonify({"error": "Bedrijf is verplicht"}), 400
+    alle = laad_accountmanagers()
+    if nieuwe_am:
+        alle[bedrijf] = nieuwe_am
+    else:
+        alle.pop(bedrijf, None)
+    bewaar_accountmanagers(alle)
+    return jsonify({"accountmanager": nieuwe_am})
+
 @app.route("/api/status", methods=["POST"])
 def set_status():
     data = request.get_json()
@@ -4748,13 +4782,14 @@ def orders_pagina():
 @app.route("/contacten")
 def contacten():
     status_alle = laad_status()
+    accountmanagers_alle = laad_accountmanagers()
     labels = {"klant": ("🟢 Klant","var(--green-600)"), "potentie": ("🟡 Potentie","var(--brand-600)"), "in_proces": ("🔵 In Proces","#3b82f6"), "geen_interesse": ("⚪ Geen Interesse","var(--gray-400)")}
     contacten_lijst = []
     for b in ENF_BEDRIJVEN:
         s = status_alle.get(b["naam"], "")
         if s:
             label, kleur = labels.get(s, (s, "var(--gray-400)"))
-            contacten_lijst.append({"naam": b["naam"], "land": b["land"], "regio": b.get("regio",""), "materialen": b.get("materialen",""), "status_label": label, "status_kleur": kleur})
+            contacten_lijst.append({"naam": b["naam"], "land": b["land"], "regio": b.get("regio",""), "materialen": b.get("materialen",""), "status_label": label, "status_kleur": kleur, "accountmanager": accountmanagers_alle.get(b["naam"], "")})
 
     inhoud = """
     <div class="page-title">Contacten</div>
@@ -4766,7 +4801,7 @@ def contacten():
                 <div class="mat-naam" style="margin-bottom:2px;">{{ c.naam }}</div>
                 <span style="font-size:0.7rem;font-weight:700;color:{{ c.status_kleur }};white-space:nowrap;">{{ c.status_label }}</span>
             </div>
-            <div class="mat-sub" style="margin-bottom:8px;">📍 {{ c.regio }}, {{ c.land }}</div>
+            <div class="mat-sub" style="margin-bottom:8px;">📍 {{ c.regio }}, {{ c.land }}{% if c.accountmanager %} · 👤 {{ c.accountmanager }}{% endif %}</div>
             <div class="company-tags" style="padding-left:0;">
                 {% if c.materialen %}{% for m in c.materialen.split(",")[:3] %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
             </div>
@@ -5131,6 +5166,14 @@ def bedrijf_profiel(naam):
                     <option value="geen_interesse" {% if status=='geen_interesse' %}selected{% endif %}>⚪ Geen Interesse</option>
                 </select>
             </span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Accountmanager</span><span class="drawer-row-value">
+                <select id="accountmanagerSelect" onchange="wijzigAccountmanagerProfiel()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+                    <option value="" {% if not accountmanager %}selected{% endif %}>Niet toegewezen</option>
+                    {% for gebruikersnaam in alle_gebruikersnamen %}
+                    <option value="{{ gebruikersnaam }}" {% if accountmanager == gebruikersnaam %}selected{% endif %}>{{ gebruikersnaam }}</option>
+                    {% endfor %}
+                </select>
+            </span></div>
             {% if bedrijf.brontype %}<div class="drawer-row"><span class="drawer-row-label">Type</span><span class="drawer-row-value">{{ bedrijf.brontype }}</span></div>{% endif %}
             <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">{{ bedrijf.klanttype or "—" }}</span></div>
             <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">{{ bedrijf.materialen or "—" }}</span></div>
@@ -5243,6 +5286,10 @@ async function wijzigStatusProfiel() {
     const select = document.getElementById("statusSelect");
     await fetch("/api/status", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, status: select.value})});
 }
+async function wijzigAccountmanagerProfiel() {
+    const select = document.getElementById("accountmanagerSelect");
+    await fetch("/api/accountmanager", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, accountmanager: select.value})});
+}
 async function toggleOpslaanProfiel(el) {
     const res = await fetch("/api/opgeslagen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({naam: BEDRIJF_NAAM})});
     const data = await res.json();
@@ -5255,7 +5302,9 @@ laadNotities();
     pagina = render_simple_page(bedrijf["naam"], "zoeken", inhoud)
     return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd,
                                     bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
-                                    orderkleuren=ORDER_KLEUREN)
+                                    orderkleuren=ORDER_KLEUREN,
+                                    accountmanager=laad_accountmanagers().get(bedrijf["naam"], ""),
+                                    alle_gebruikersnamen=sorted(laad_users().keys()))
 
 FOUTPAGINA_HTML = '''
 <!DOCTYPE html>
