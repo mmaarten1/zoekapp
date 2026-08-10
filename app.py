@@ -5801,15 +5801,35 @@ def bedrijf_profiel(naam):
             <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">
                 <input type="text" value="{{ bedrijf.klanttype or '' }}" data-veld="klanttype" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
             </span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">
-                <input type="text" value="{{ bedrijf.materialen or '' }}" data-veld="materialen" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
-            </span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Kwaliteiten</span><span class="drawer-row-value">
-                <input type="text" value="{{ bedrijf.kwaliteiten or '' }}" data-veld="kwaliteiten" onblur="wijzigBedrijfVeld(this)" placeholder="bv. OCC, Mixed Paper, HDPE..." style="width:200px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
-            </span></div>
             <div class="drawer-row"><span class="drawer-row-label">Contactpersoon</span><span class="drawer-row-value">
                 <input type="text" value="{{ bedrijf.contactpersoon or '' }}" data-veld="contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="Naam invullen..." style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
             </span></div>
+        </div>
+
+        <div class="info-kaart" style="margin-bottom:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Materialen &amp; Kwaliteiten</div>
+            {% set gekozen_materialen = (bedrijf.materialen or "").split(",") | map("trim") | list %}
+            {% set gekozen_kwaliteiten = (bedrijf.kwaliteiten or "").split(",") | map("trim") | list %}
+            {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
+            <div style="padding:8px 0;border-bottom:1px solid var(--gray-50);">
+                <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--gray-700);cursor:pointer;">
+                    <input type="checkbox" class="materiaal-checkbox" data-categorie="{{ categorie }}" {% if categorie in gekozen_materialen %}checked{% endif %} onchange="wijzigMateriaalCheckbox()">
+                    {{ categorie }}
+                </label>
+                {% if kwaliteiten_lijst %}
+                <div style="margin-left:24px;margin-top:6px;display:flex;flex-wrap:wrap;gap:10px;">
+                    {% for kw in kwaliteiten_lijst %}
+                    <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-500);cursor:pointer;">
+                        <input type="checkbox" class="kwaliteit-checkbox" value="{{ kw }}" {% if kw in gekozen_kwaliteiten %}checked{% endif %} onchange="wijzigKwaliteitCheckbox()">
+                        {{ kw }}
+                    </label>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div style="font-size:0.8rem;color:var(--gray-300);">Nog geen materialen gedefinieerd. Ga naar Instellingen → Materialen beheren (admin).</div>
+            {% endfor %}
         </div>
 
         <div class="info-kaart" style="margin-bottom:16px;">
@@ -5970,6 +5990,14 @@ async function wijzigBedrijfVeld(input) {
         input.style.opacity = "1";
     }
 }
+async function wijzigMateriaalCheckbox() {
+    const aangevinkt = Array.from(document.querySelectorAll(".materiaal-checkbox:checked")).map(el => el.dataset.categorie);
+    await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: "materialen", waarde: aangevinkt.join(", ")})});
+}
+async function wijzigKwaliteitCheckbox() {
+    const aangevinkt = Array.from(document.querySelectorAll(".kwaliteit-checkbox:checked")).map(el => el.value);
+    await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: "kwaliteiten", waarde: aangevinkt.join(", ")})});
+}
 async function wijzigMateriaalVolume(input) {
     const materiaal = input.dataset.materiaal;
     const origineel = input.dataset.origineel !== undefined ? input.dataset.origineel : input.defaultValue;
@@ -6089,7 +6117,8 @@ initFotoBrowser();
                                     accountmanager=laad_accountmanagers().get(bedrijf["naam"], ""),
                                     alle_gebruikersnamen=sorted(laad_users().keys()),
                                     gebruikersnaam=session.get("gebruikersnaam", ""),
-                                    materiaal_categorieen_lijst=sorted(laad_materiaal_taxonomie().keys()))
+                                    materiaal_categorieen_lijst=sorted(laad_materiaal_taxonomie().keys()),
+                                    materiaal_taxonomie=laad_materiaal_taxonomie())
 
 FOUTPAGINA_HTML = '''
 <!DOCTYPE html>
