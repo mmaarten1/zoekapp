@@ -4422,11 +4422,25 @@ def set_accountmanager():
     if not bedrijf:
         return jsonify({"error": "Bedrijf is verplicht"}), 400
     alle = laad_accountmanagers()
+    oude_am = alle.get(bedrijf, "")
     if nieuwe_am:
         alle[bedrijf] = nieuwe_am
     else:
         alle.pop(bedrijf, None)
     bewaar_accountmanagers(alle)
+
+    huidige_gebruikersnaam = session.get("gebruikersnaam", "")
+    if nieuwe_am and nieuwe_am != oude_am and nieuwe_am != huidige_gebruikersnaam:
+        alle_meldingen = laad_meldingen()
+        alle_meldingen.append({
+            "id": str(uuid.uuid4()),
+            "tekst": f"{huidige_gebruikersnaam} heeft jou toegewezen als accountmanager voor {bedrijf}.",
+            "bedrijf": bedrijf, "van": huidige_gebruikersnaam,
+            "voor_gebruiker": nieuwe_am, "voor_team": "",
+            "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+        })
+        bewaar_meldingen(alle_meldingen)
+
     return jsonify({"accountmanager": nieuwe_am})
 
 BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten"}
@@ -5191,10 +5205,27 @@ def orders_pagina():
         elif actie == "status_wijzigen":
             order_id = request.form.get("order_id", "")
             nieuwe_status = request.form.get("nieuwe_status", "")
+            gewijzigde_order = None
             for o in alle_orders:
                 if o["id"] == order_id:
                     o["status"] = nieuwe_status
+                    gewijzigde_order = o
             bewaar_orders(alle_orders)
+
+            if gewijzigde_order and nieuwe_status == "Gewonnen":
+                huidige_gebruikersnaam = session.get("gebruikersnaam", "")
+                toegewezen_am = laad_accountmanagers().get(gewijzigde_order["bedrijf"], "")
+                if toegewezen_am and toegewezen_am != huidige_gebruikersnaam:
+                    alle_meldingen = laad_meldingen()
+                    prijs_tekst = f" (€{gewijzigde_order['prijs']})" if gewijzigde_order.get("prijs") else ""
+                    alle_meldingen.append({
+                        "id": str(uuid.uuid4()),
+                        "tekst": f"🎉 Order gewonnen! {huidige_gebruikersnaam} heeft een order voor {gewijzigde_order['bedrijf']} (jouw bedrijf) op 'Gewonnen' gezet{prijs_tekst}.",
+                        "bedrijf": gewijzigde_order["bedrijf"], "van": huidige_gebruikersnaam,
+                        "voor_gebruiker": toegewezen_am, "voor_team": "",
+                        "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+                    })
+                    bewaar_meldingen(alle_meldingen)
 
         elif actie == "verwijderen":
             order_id = request.form.get("order_id", "")
