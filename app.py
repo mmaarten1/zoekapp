@@ -3575,15 +3575,24 @@ async function laadNotities() {
         notities.forEach(n => {
             const badge = n.type === "team" ? "🟢 Team" : "🔒 Privé";
             html += `
-                <div style="background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;">
-                    <div style="color:#334155;">${n.tekst}</div>
+                <div style="background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;position:relative;">
+                    <div style="color:#334155;padding-right:16px;">${n.tekst}</div>
                     <div style="color:#94a3b8;font-size:11px;margin-top:4px;">${badge} · ${n.timestamp}</div>
+                    <button onclick="verwijderNotitieDrawer('${n.id}')" title="Verwijderen" style="position:absolute;top:6px;right:6px;background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:12px;">✕</button>
                 </div>`;
         });
         lijstDiv.innerHTML = html;
     } catch (err) {
         lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>Kon notities niet laden.</p>";
     }
+}
+
+async function verwijderNotitieDrawer(id) {
+    if (!confirm("Deze notitie verwijderen?")) return;
+    const bedrijf = window.currentDrawerData.naam;
+    const res = await fetch("/api/notities", {method:"DELETE", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: bedrijf, id: id})});
+    const data = await res.json();
+    if (data.error) { alert(data.error); } else { laadNotities(); }
 }
 
 async function voegNotitieToe() {
@@ -4154,6 +4163,33 @@ def upload_foto():
 
     return jsonify({"ok": True, "bestandsnaam": bestandsnaam})
 
+@app.route("/api/fotos", methods=["DELETE"])
+def verwijder_foto():
+    data = request.get_json()
+    bedrijf = data.get("bedrijf", "")
+    bestandsnaam = data.get("bestandsnaam", "")
+
+    alle = laad_fotos()
+    lijst = alle.get(bedrijf, [])
+    doel = next((f for f in lijst if f.get("bestandsnaam") == bestandsnaam), None)
+    if not doel:
+        return jsonify({"error": "Foto niet gevonden"}), 404
+    if doel.get("geupload_door") != session.get("gebruikersnaam", "") and not is_huidige_gebruiker_admin():
+        return jsonify({"error": "Je kunt alleen je eigen foto's verwijderen."}), 403
+
+    alle[bedrijf] = [f for f in lijst if f.get("bestandsnaam") != bestandsnaam]
+    bewaar_fotos(alle)
+
+    pad = os.path.join(FOTOS_MAP, bestandsnaam)
+    if os.path.exists(pad):
+        try:
+            os.remove(pad)
+        except Exception:
+            pass
+
+    return jsonify({"ok": True})
+
+
 @app.route("/api/fotomappen", methods=["GET"])
 def get_fotomappen():
     bedrijf = request.args.get("bedrijf", "")
@@ -4345,6 +4381,13 @@ def get_notities():
     user_id = get_user_id()
     alle = laad_notities()
     lijst = alle.get(bedrijf, [])
+    gewijzigd = False
+    for n in lijst:
+        if "id" not in n:
+            n["id"] = str(uuid.uuid4())
+            gewijzigd = True
+    if gewijzigd:
+        bewaar_notities(alle)
     zichtbaar = [n for n in lijst if n["type"] == "team" or n["user_id"] == user_id]
     return jsonify(zichtbaar)
 
@@ -4364,15 +4407,39 @@ def add_notitie():
         alle[bedrijf] = []
 
     nieuwe_notitie = {
+        "id": str(uuid.uuid4()),
         "tekst": tekst,
         "type": type_,
         "user_id": user_id,
+        "gebruikersnaam": session.get("gebruikersnaam", ""),
         "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
     }
     alle[bedrijf].append(nieuwe_notitie)
     bewaar_notities(alle)
 
     return jsonify(nieuwe_notitie)
+
+@app.route("/api/notities", methods=["DELETE"])
+def verwijder_notitie():
+    data = request.get_json()
+    bedrijf = data.get("bedrijf", "")
+    notitie_id = data.get("id", "")
+    huidige_gebruikersnaam = session.get("gebruikersnaam", "")
+
+    alle = laad_notities()
+    lijst = alle.get(bedrijf, [])
+    doel = next((n for n in lijst if n.get("id") == notitie_id), None)
+    if not doel:
+        return jsonify({"error": "Notitie niet gevonden"}), 404
+    # gebruikersnaam is de betrouwbare eigenaarscheck; user_id (anoniem cookie) alleen als fallback voor oude notities
+    is_eigenaar = doel.get("gebruikersnaam") == huidige_gebruikersnaam if doel.get("gebruikersnaam") else doel.get("user_id") == get_user_id()
+    if not is_eigenaar and not is_huidige_gebruiker_admin():
+        return jsonify({"error": "Je kunt alleen je eigen notities verwijderen."}), 403
+
+    alle[bedrijf] = [n for n in lijst if n.get("id") != notitie_id]
+    bewaar_notities(alle)
+    return jsonify({"ok": True})
+
 @app.route("/api/company-analysis", methods=["POST"])
 def company_analysis():
     from ai_filter import analyseer_uitrusting
@@ -5058,9 +5125,11 @@ def genereer_wachtwoord():
 
 def is_huidige_gebruiker_admin():
     users = laad_users()
-    info = users.get(session.get("gebruikersnaam", ""), {})
+    gebruikersnaam = session.get("gebruikersnaam", "")
+    if gebruikersnaam not in users:
+        return False  # onbekende/niet-bestaande gebruiker: nooit admin
     # Backwards-compatible: bestaande gebruikers zonder is_admin-veld blijven admin
-    return info.get("is_admin", True)
+    return users[gebruikersnaam].get("is_admin", True)
 
 def vereist_admin_of_403():
     """Geef een 403-response terug als de ingelogde gebruiker geen admin is, anders None."""
@@ -5562,6 +5631,7 @@ def bedrijf_profiel(naam):
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 var BEDRIJF_NAAM = {{ (bedrijf.naam or "")|tojson }};
+var HUIDIGE_GEBRUIKER = {{ (gebruikersnaam or "")|tojson }};
 var BEDRIJF_URL = {{ (bedrijf.url or "")|tojson }};
 var pKaart = L.map("profielKaart", {zoomControl:true}).setView([{{ bedrijf.lat or 20 }}, {{ bedrijf.lon or 0 }}], {{ 12 if bedrijf.lat else 2 }});
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(pKaart);
@@ -5594,9 +5664,15 @@ async function laadNotities() {
     let html = "";
     notities.forEach(n => {
         const badge = n.type === "team" ? "🟢 Team" : "🔒 Privé";
-        html += `<div style="background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;"><div style="color:#334155;">${n.tekst}</div><div style="color:#94a3b8;font-size:11px;margin-top:4px;">${badge} · ${n.timestamp}</div></div>`;
+        html += `<div style="background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;position:relative;"><div style="color:#334155;padding-right:16px;">${n.tekst}</div><div style="color:#94a3b8;font-size:11px;margin-top:4px;">${badge} · ${n.timestamp}</div><button onclick="verwijderNotitieProfiel('${n.id}')" title="Verwijderen" style="position:absolute;top:6px;right:6px;background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:12px;">✕</button></div>`;
     });
     div.innerHTML = html;
+}
+async function verwijderNotitieProfiel(id) {
+    if (!confirm("Deze notitie verwijderen?")) return;
+    const res = await fetch("/api/notities", {method:"DELETE", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, id: id})});
+    const data = await res.json();
+    if (data.error) { alert(data.error); } else { laadNotities(); }
 }
 async function voegNotitieToeProfiel() {
     const input = document.getElementById("notitieInput");
@@ -5686,8 +5762,18 @@ async function laadFotoBrowser() {
     const res2 = await fetch("/api/fotos?bedrijf=" + encodeURIComponent(BEDRIJF_NAAM) + "&categorie=" + encodeURIComponent(FOTO_STAAT.categorie) + "&submap=" + encodeURIComponent(FOTO_STAAT.submap));
     const fotos = await res2.json();
     fotoGrid.innerHTML = fotos.map(f =>
-        `<img src="/fotos_uploads/${f.bestandsnaam}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;cursor:pointer;" onclick="window.open('/fotos_uploads/${f.bestandsnaam}','_blank')" title="Door ${f.geupload_door} op ${f.timestamp}">`
+        `<div style="position:relative;width:70px;height:70px;">
+            <img src="/fotos_uploads/${f.bestandsnaam}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;cursor:pointer;" onclick="window.open('/fotos_uploads/${f.bestandsnaam}','_blank')" title="Door ${f.geupload_door} op ${f.timestamp}">
+            <button onclick="verwijderFotoProfiel('${f.bestandsnaam}')" title="Verwijderen" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:2px solid #fff;cursor:pointer;font-size:10px;line-height:1;padding:0;">✕</button>
+        </div>`
     ).join("") || `<div style="font-size:0.78rem;color:var(--gray-300);">Nog geen foto's hier.</div>`;
+}
+
+async function verwijderFotoProfiel(bestandsnaam) {
+    if (!confirm("Deze foto verwijderen?")) return;
+    const res = await fetch("/api/fotos", {method:"DELETE", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, bestandsnaam: bestandsnaam})});
+    const data = await res.json();
+    if (data.error) { alert(data.error); } else { laadFotoBrowser(); }
 }
 
 async function maakFotoSubmapProfiel() {
@@ -5722,7 +5808,8 @@ initFotoBrowser();
                                     bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
                                     orderkleuren=ORDER_KLEUREN,
                                     accountmanager=laad_accountmanagers().get(bedrijf["naam"], ""),
-                                    alle_gebruikersnamen=sorted(laad_users().keys()))
+                                    alle_gebruikersnamen=sorted(laad_users().keys()),
+                                    gebruikersnaam=session.get("gebruikersnaam", ""))
 
 FOUTPAGINA_HTML = '''
 <!DOCTYPE html>
