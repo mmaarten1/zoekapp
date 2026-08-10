@@ -22,6 +22,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "bedrijven.json", "papierfabrieken.json", "users.json", "status.json",
         "notities.json", "meldingen.json", "fotos.json", "transport_prijzen.json",
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
+        "orders.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -53,6 +54,19 @@ def bewaar_status(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 MELDINGEN_FILE = datapad("meldingen.json")
+
+ORDERS_FILE = datapad("orders.json")
+
+def laad_orders():
+    try:
+        with open(ORDERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_orders(data):
+    with open(ORDERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 def laad_meldingen():
     try:
@@ -2268,6 +2282,7 @@ def sidebar_html(actief):
         ("materialen", "/materialen", "🧱", "Materials"),
         ("certificeringen", "/certificeringen", "🏅", "Certifications"),
         ("contacten", "/contacten", "👥", "Contacten"),
+        ("orders", "/orders", "📦", "Orders"),
         ("opslagen", "/opslagen", "⭐", "Opslagen"),
         ("notities", "/notities-overzicht", "📝", "Notities"),
         ("instellingen", "/instellingen", "⚙️", "Instellingen"),
@@ -2982,6 +2997,7 @@ HTML = '''
         <a href="/materialen" class="sidebar-link"><span class="icoon">🧱</span> Materials</a>
         <a href="/certificeringen" class="sidebar-link"><span class="icoon">🏅</span> Certifications</a>
         <a href="/contacten" class="sidebar-link"><span class="icoon">👥</span> Contacten</a>
+        <a href="/orders" class="sidebar-link"><span class="icoon">📦</span> Orders</a>
         <a href="/opslagen" class="sidebar-link"><span class="icoon">⭐</span> Opslagen</a>
         <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">📝</span> Notities</a>
         <a href="/instellingen" class="sidebar-link"><span class="icoon">⚙️</span> Instellingen</a>
@@ -4501,7 +4517,17 @@ def dashboard():
 
 <div class="dg-kaart">
     <div class="dg-kaart-titel">Openstaande orders</div>
-    <div class="dg-lege">Er is nog geen inkoop-/verkoop-ordermodule. Zodra die er is, komt hier een overzicht van openstaande verkoop- en inkooporders met bedragen en status. Zeg het als je wilt dat ik die nu bouw.</div>
+    {% if openstaande_orders %}
+        {% for o in openstaande_orders %}
+        <div class="dg-activiteit-item">
+            <b>{{ o.bedrijf }}</b>{% if o.materiaal %} · {{ o.materiaal }}{% endif %}{% if o.prijs %} · €{{ o.prijs }}{% endif %}
+            <small>{{ o.status }} · {{ o.verantwoordelijke }}</small>
+        </div>
+        {% endfor %}
+        <a href="/orders" style="display:block;margin-top:10px;font-size:0.8rem;color:var(--brand-600);text-decoration:none;font-weight:600;">Alle orders bekijken →</a>
+    {% else %}
+    <div class="dg-lege">Nog geen openstaande orders. <a href="/orders" style="color:var(--brand-600);">Voeg er een toe →</a></div>
+    {% endif %}
 </div>
 
 </div>
@@ -4536,7 +4562,8 @@ dKaart.addLayer(dCluster);
         status_totaal=status_totaal, top_materialen=top_materialen, max_materiaal=max_materiaal,
         volume_klant=volume_klant, openstaand=openstaand, kaart_bedrijven=kaart_bedrijven,
         donut_segmenten=donut_segmenten, regio_kaarten=regio_kaarten,
-        groei_pct=groei_pct, groei_periode=groei_periode)
+        groei_pct=groei_pct, groei_periode=groei_periode,
+        openstaande_orders=sorted([o for o in laad_orders() if o["status"] in ("Open", "Onderhandeling")], key=lambda o: o.get("aangemaakt",""), reverse=True)[:5])
 
 @app.route("/inzichten")
 def inzichten():
@@ -4584,6 +4611,137 @@ def inzichten():
     """
     pagina = render_simple_page("Inzichten", "inzichten", inhoud)
     return render_template_string(pagina, top_landen=top_landen, top_materialen=top_materialen, max_land=max_land, max_mat=max_mat)
+
+ORDER_STATUSSEN = ["Open", "Onderhandeling", "Gewonnen", "Verloren"]
+ORDER_KLEUREN = {"Open": "#3b82f6", "Onderhandeling": "var(--brand-600)", "Gewonnen": "var(--green-600)", "Verloren": "var(--gray-400)"}
+
+@app.route("/orders", methods=["GET", "POST"])
+def orders_pagina():
+    if request.method == "POST":
+        actie = request.form.get("actie", "")
+        alle_orders = laad_orders()
+
+        if actie == "toevoegen":
+            nieuwe_order = {
+                "id": str(uuid.uuid4()),
+                "bedrijf": request.form.get("bedrijf", "").strip(),
+                "materiaal": request.form.get("materiaal", "").strip(),
+                "hoeveelheid": request.form.get("hoeveelheid", "").strip(),
+                "prijs": request.form.get("prijs", "").strip(),
+                "status": request.form.get("status", "Open"),
+                "verantwoordelijke": session.get("gebruikersnaam", ""),
+                "verwachte_datum": request.form.get("verwachte_datum", "").strip(),
+                "notitie": request.form.get("notitie", "").strip(),
+                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            }
+            if nieuwe_order["bedrijf"]:
+                alle_orders.append(nieuwe_order)
+                bewaar_orders(alle_orders)
+
+        elif actie == "status_wijzigen":
+            order_id = request.form.get("order_id", "")
+            nieuwe_status = request.form.get("nieuwe_status", "")
+            for o in alle_orders:
+                if o["id"] == order_id:
+                    o["status"] = nieuwe_status
+            bewaar_orders(alle_orders)
+
+        elif actie == "verwijderen":
+            order_id = request.form.get("order_id", "")
+            alle_orders = [o for o in alle_orders if o["id"] != order_id]
+            bewaar_orders(alle_orders)
+
+        return redirect(url_for("orders_pagina"))
+
+    alle_orders = laad_orders()
+    alle_orders.sort(key=lambda o: o.get("aangemaakt", ""), reverse=True)
+    open_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] in ("Open", "Onderhandeling") and o.get("prijs", "").replace(".","",1).isdigit())
+    gewonnen_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] == "Gewonnen" and o.get("prijs", "").replace(".","",1).isdigit())
+
+    inhoud = """
+<style>
+.order-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:16px 18px; margin-bottom:10px; }
+.order-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.order-bedrijf { font-weight:700; color:var(--gray-800); font-size:0.95rem; }
+.order-details { font-size:0.8rem; color:var(--gray-500); margin-top:4px; }
+.order-status-select { font-size:0.75rem; font-weight:700; padding:4px 8px; border-radius:6px; border:none; cursor:pointer; }
+.form-nieuw-order { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:18px; margin-bottom:20px; }
+.form-nieuw-order input, .form-nieuw-order select, .form-nieuw-order textarea { width:100%; padding:8px 10px; border:1px solid var(--gray-200); border-radius:6px; font-size:13px; margin-bottom:10px; font-family:inherit; box-sizing:border-box; }
+.form-rij-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.kpi-mini { display:flex; gap:16px; margin-bottom:20px; }
+.kpi-mini div { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:14px 18px; flex:1; }
+.kpi-mini .getal { font-size:1.4rem; font-weight:800; color:var(--brand-600); }
+.kpi-mini .label { font-size:0.75rem; color:var(--gray-400); }
+</style>
+<div class="page-title">Orders</div>
+
+<div class="kpi-mini">
+    <div><div class="getal">€{{ "{:,.0f}".format(open_waarde) }}</div><div class="label">Openstaande waarde</div></div>
+    <div><div class="getal">€{{ "{:,.0f}".format(gewonnen_waarde) }}</div><div class="label">Gewonnen (totaal)</div></div>
+    <div><div class="getal">{{ alle_orders|length }}</div><div class="label">Totaal orders</div></div>
+</div>
+
+<div class="form-nieuw-order">
+    <form method="POST">
+        <input type="hidden" name="actie" value="toevoegen">
+        <div class="form-rij-2">
+            <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" required>
+            <input type="text" name="materiaal" placeholder="Materiaal (bv. Paper, Metal)">
+        </div>
+        <div class="form-rij-2">
+            <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (bv. 500 ton)">
+            <input type="text" name="prijs" placeholder="Waarde in € (bv. 15000)">
+        </div>
+        <div class="form-rij-2">
+            <select name="status">
+                {% for s in statussen %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select>
+            <input type="date" name="verwachte_datum">
+        </div>
+        <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
+        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">+ Order toevoegen</button>
+    </form>
+</div>
+
+{% if alle_orders %}
+{% for o in alle_orders %}
+<div class="order-kaart">
+    <div class="order-top">
+        <div>
+            <div class="order-bedrijf">{{ o.bedrijf }}</div>
+            <div class="order-details">
+                {% if o.materiaal %}{{ o.materiaal }} · {% endif %}
+                {% if o.hoeveelheid %}{{ o.hoeveelheid }} · {% endif %}
+                {% if o.prijs %}€{{ o.prijs }}{% endif %}
+                {% if o.verwachte_datum %} · verwacht: {{ o.verwachte_datum }}{% endif %}
+            </div>
+            {% if o.notitie %}<div class="order-details" style="margin-top:6px;font-style:italic;">{{ o.notitie }}</div>{% endif %}
+            <div class="order-details" style="margin-top:6px;color:var(--gray-300);">{{ o.verantwoordelijke }} · {{ o.aangemaakt }}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <form method="POST" style="margin:0;">
+                <input type="hidden" name="actie" value="status_wijzigen">
+                <input type="hidden" name="order_id" value="{{ o.id }}">
+                <select name="nieuwe_status" class="order-status-select" style="background:{{ statuskleuren.get(o.status, '#94a3b8') }};color:#fff;" onchange="this.form.submit()">
+                    {% for s in statussen %}<option value="{{ s }}" {% if s == o.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                </select>
+            </form>
+            <form method="POST" style="margin:0;" onsubmit="return confirm('Order verwijderen?');">
+                <input type="hidden" name="actie" value="verwijderen">
+                <input type="hidden" name="order_id" value="{{ o.id }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:1rem;">✕</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="lege-staat">Nog geen orders. Voeg je eerste order toe via het formulier hierboven.</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Orders", "orders", inhoud)
+    return render_template_string(pagina, alle_orders=alle_orders, statussen=ORDER_STATUSSEN,
+                                    statuskleuren=ORDER_KLEUREN, open_waarde=open_waarde, gewonnen_waarde=gewonnen_waarde)
 
 @app.route("/contacten")
 def contacten():
