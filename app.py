@@ -4499,6 +4499,21 @@ def set_status():
     alle = laad_status()
     alle[bedrijf] = nieuwe_status
     bewaar_status(alle)
+
+    huidige_gebruikersnaam = session.get("gebruikersnaam", "")
+    toegewezen_am = laad_accountmanagers().get(bedrijf, "")
+    if toegewezen_am and toegewezen_am != huidige_gebruikersnaam and nieuwe_status:
+        status_labels = {"klant": "Klant", "potentie": "Potentie", "in_proces": "In Proces", "geen_interesse": "Geen Interesse"}
+        alle_meldingen = laad_meldingen()
+        alle_meldingen.append({
+            "id": str(uuid.uuid4()),
+            "tekst": f"{huidige_gebruikersnaam} heeft de status van {bedrijf} (jouw bedrijf) gewijzigd naar \"{status_labels.get(nieuwe_status, nieuwe_status)}\".",
+            "bedrijf": bedrijf, "van": huidige_gebruikersnaam,
+            "voor_gebruiker": toegewezen_am, "voor_team": "",
+            "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+        })
+        bewaar_meldingen(alle_meldingen)
+
     return jsonify({"status": nieuwe_status})
 @app.route("/api/notities", methods=["GET"])
 def get_notities():
