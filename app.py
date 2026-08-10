@@ -2376,6 +2376,11 @@ PAGINA_HOOFD = """<!DOCTYPE html>
 """
 
 def sidebar_html(actief):
+    try:
+        aantal_open_orders = sum(1 for o in laad_orders() if o.get("status") in ("Open", "Onderhandeling"))
+    except Exception:
+        aantal_open_orders = 0
+
     items = [
         ("zoeken", "/", "🔍", "Zoeken"),
         ("wereldkaart", "/wereldkaart", "🌍", "World Map"),
@@ -2392,7 +2397,10 @@ def sidebar_html(actief):
     links = ""
     for key, href, icoon, label in items:
         cls = "sidebar-link active" if key == actief else "sidebar-link"
-        links += "<a href=\"" + href + "\" class=\"" + cls + "\"><span class=\"icoon\">" + icoon + "</span> " + label + "</a>\n        "
+        badge_html = ""
+        if key == "orders" and aantal_open_orders > 0:
+            badge_html = f'<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{aantal_open_orders}</span>'
+        links += "<a href=\"" + href + "\" class=\"" + cls + "\" style=\"display:flex;align-items:center;\"><span class=\"icoon\">" + icoon + "</span> " + label + badge_html + "</a>\n        "
     return '''<button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
 <div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
 <aside class="sidebar" id="mobielSidebar">
@@ -3102,7 +3110,7 @@ HTML = '''
         <a href="/materialen" class="sidebar-link"><span class="icoon">🧱</span> Materials</a>
         <a href="/certificeringen" class="sidebar-link"><span class="icoon">🏅</span> Certifications</a>
         <a href="/contacten" class="sidebar-link"><span class="icoon">👥</span> Contacten</a>
-        <a href="/orders" class="sidebar-link"><span class="icoon">📦</span> Orders</a>
+        <a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">📦</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>
         <a href="/opslagen" class="sidebar-link"><span class="icoon">⭐</span> Opslagen</a>
         <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">📝</span> Notities</a>
         <a href="/instellingen" class="sidebar-link"><span class="icoon">⚙️</span> Instellingen</a>
@@ -4688,7 +4696,8 @@ def index():
         maak_pagina_url=maak_pagina_url, export_query=export_query,
         alle_gebruikersnamen=sorted(laad_users().keys()),
         actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst,
-        materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()))
+        materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()),
+        aantal_open_orders=sum(1 for o in laad_orders() if o.get("status") in ("Open", "Onderhandeling")))
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
@@ -5089,6 +5098,33 @@ def inzichten():
 ORDER_STATUSSEN = ["Open", "Onderhandeling", "Gewonnen", "Verloren"]
 ORDER_KLEUREN = {"Open": "#3b82f6", "Onderhandeling": "var(--brand-600)", "Gewonnen": "var(--green-600)", "Verloren": "var(--gray-400)"}
 
+@app.route("/export-orders-csv")
+def export_orders_csv():
+    import csv, io
+    filter_status = request.args.get("filter_status", "")
+    filter_materiaal = request.args.get("filter_materiaal", "")
+    filter_verantwoordelijke = request.args.get("filter_verantwoordelijke", "")
+
+    orders = laad_orders()
+    if filter_status:
+        orders = [o for o in orders if o.get("status") == filter_status]
+    if filter_materiaal:
+        orders = [o for o in orders if o.get("materiaal") == filter_materiaal]
+    if filter_verantwoordelijke:
+        orders = [o for o in orders if o.get("verantwoordelijke") == filter_verantwoordelijke]
+
+    output = io.StringIO()
+    schrijver = csv.writer(output)
+    schrijver.writerow(["Bedrijf", "Materiaal", "Hoeveelheid", "Prijs", "Status", "Verantwoordelijke", "Verwachte datum", "Notitie", "Aangemaakt"])
+    for o in orders:
+        schrijver.writerow([o.get("bedrijf",""), o.get("materiaal",""), o.get("hoeveelheid",""), o.get("prijs",""),
+                             o.get("status",""), o.get("verantwoordelijke",""), o.get("verwachte_datum",""),
+                             o.get("notitie",""), o.get("aangemaakt","")])
+
+    from flask import Response
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=orders_export.csv"})
+
 @app.route("/orders", methods=["GET", "POST"])
 def orders_pagina():
     if request.method == "POST":
@@ -5185,6 +5221,7 @@ def orders_pagina():
     </select>
     {% if filter_status or filter_materiaal or filter_verantwoordelijke %}<a href="/orders" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
     <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_orders|length }} van {{ alle_orders|length }} orders</span>
+    <a href="/export-orders-csv?filter_status={{ filter_status }}&filter_materiaal={{ filter_materiaal|urlencode }}&filter_verantwoordelijke={{ filter_verantwoordelijke }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;">⬇ Export CSV</a>
 </form>
 
 <div class="form-nieuw-order">
