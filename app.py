@@ -5812,10 +5812,16 @@ def bedrijf_profiel(naam):
             {% set gekozen_kwaliteiten = (bedrijf.kwaliteiten or "").split(",") | map("trim") | list %}
             {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
             <div style="padding:8px 0;border-bottom:1px solid var(--gray-50);">
-                <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--gray-700);cursor:pointer;">
-                    <input type="checkbox" class="materiaal-checkbox" data-categorie="{{ categorie }}" {% if categorie in gekozen_materialen %}checked{% endif %} onchange="wijzigMateriaalCheckbox()">
-                    {{ categorie }}
-                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--gray-700);cursor:pointer;">
+                        <input type="checkbox" class="materiaal-checkbox" data-categorie="{{ categorie }}" {% if categorie in gekozen_materialen %}checked{% endif %} onchange="wijzigMateriaalCheckbox()">
+                        {{ categorie }}
+                    </label>
+                    <span class="volume-veld-wrap" data-categorie-volume="{{ categorie }}" style="display:{{ 'inline-flex' if categorie in gekozen_materialen else 'none' }};align-items:center;gap:4px;">
+                        <input type="text" value="{{ bedrijf.get('materiaal_volumes', {}).get(categorie, '') }}" data-materiaal="{{ categorie }}" onblur="wijzigMateriaalVolume(this)" placeholder="0" style="width:70px;padding:3px 6px;border:1px solid #e2e8f0;border-radius:5px;font-size:12px;text-align:right;font-family:inherit;">
+                        <span style="font-size:11px;color:var(--gray-400);">t/j</span>
+                    </span>
+                </div>
                 {% if kwaliteiten_lijst %}
                 <div style="margin-left:24px;margin-top:6px;display:flex;flex-wrap:wrap;gap:10px;">
                     {% for kw in kwaliteiten_lijst %}
@@ -5835,21 +5841,9 @@ def bedrijf_profiel(naam):
         <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Recycling Operations</div>
             <div class="drawer-row"><span class="drawer-row-label">Annual Capacity (totaal)</span><span class="drawer-row-value">{{ (bedrijf.volume ~ " t/y") if bedrijf.volume else "—" }}</span></div>
-            <div class="company-tags" style="padding-left:0;margin-top:8px;margin-bottom:10px;">
+            <div class="company-tags" style="padding-left:0;margin-top:8px;">
                 {% if bedrijf.materialen %}{% for m in bedrijf.materialen.split(",") %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
             </div>
-            {% if bedrijf.materialen %}
-            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Volume per materiaal (t/jaar)</div>
-            {% for m in bedrijf.materialen.split(",") %}
-            {% set materiaal_naam = m.strip() %}
-            <div class="drawer-row">
-                <span class="drawer-row-label">{{ materiaal_naam }}</span>
-                <span class="drawer-row-value">
-                    <input type="text" value="{{ bedrijf.get('materiaal_volumes', {}).get(materiaal_naam, '') }}" data-materiaal="{{ materiaal_naam }}" onblur="wijzigMateriaalVolume(this)" placeholder="—" style="width:100px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
-                </span>
-            </div>
-            {% endfor %}
-            {% endif %}
         </div>
 
         {% if bedrijf.certificeringen %}
@@ -5992,6 +5986,9 @@ async function wijzigBedrijfVeld(input) {
 }
 async function wijzigMateriaalCheckbox() {
     const aangevinkt = Array.from(document.querySelectorAll(".materiaal-checkbox:checked")).map(el => el.dataset.categorie);
+    document.querySelectorAll(".volume-veld-wrap").forEach(el => {
+        el.style.display = aangevinkt.includes(el.dataset.categorieVolume) ? "inline-flex" : "none";
+    });
     await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: "materialen", waarde: aangevinkt.join(", ")})});
 }
 async function wijzigKwaliteitCheckbox() {
