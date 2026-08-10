@@ -170,7 +170,7 @@ def bewaar_geocode_cache(data):
 import math
 
 def voldoet_aan_materiaal_min_volume(bedrijf, materiaal_naam, min_volume_str):
-    """Check of een bedrijf voor het gegeven materiaal minstens min_volume_str t/jaar heeft opgegeven."""
+    """Check of een bedrijf voor het gegeven materiaal (of de kwaliteiten daaronder samen) minstens min_volume_str t/jaar heeft opgegeven."""
     if not min_volume_str:
         return True
     try:
@@ -178,16 +178,25 @@ def voldoet_aan_materiaal_min_volume(bedrijf, materiaal_naam, min_volume_str):
     except (ValueError, TypeError):
         return True
     volumes = bedrijf.get("materiaal_volumes", {})
-    if not isinstance(volumes, dict):
+    if not isinstance(volumes, dict) or not volumes:
         return False
     materiaal_naam_laag = (materiaal_naam or "").strip().lower()
+    taxonomie = laad_materiaal_taxonomie()
+    kwaliteiten_onder_categorie = {k.strip().lower() for k in taxonomie.get(materiaal_naam, [])}
+
+    totaal = 0.0
+    gevonden = False
     for naam, waarde in volumes.items():
-        if naam.strip().lower() == materiaal_naam_laag:
+        naam_laag = naam.strip().lower()
+        if naam_laag == materiaal_naam_laag or naam_laag in kwaliteiten_onder_categorie:
             try:
-                return float(str(waarde).replace(",", "").strip()) >= min_volume
+                totaal += float(str(waarde).replace(",", "").strip())
+                gevonden = True
             except (ValueError, TypeError):
-                return False
-    return False
+                pass
+    if not gevonden:
+        return False
+    return totaal >= min_volume
 
 def bereken_afstand_km(lat1, lon1, lat2, lon2):
     R = 6371
@@ -5812,21 +5821,15 @@ def bedrijf_profiel(naam):
             {% set gekozen_kwaliteiten = (bedrijf.kwaliteiten or "").split(",") | map("trim") | list %}
             {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
             <div style="padding:8px 0;border-bottom:1px solid var(--gray-50);">
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--gray-700);cursor:pointer;">
-                        <input type="checkbox" class="materiaal-checkbox" data-categorie="{{ categorie }}" {% if categorie in gekozen_materialen %}checked{% endif %} onchange="wijzigMateriaalCheckbox()">
-                        {{ categorie }}
-                    </label>
-                    <span class="volume-veld-wrap" data-categorie-volume="{{ categorie }}" style="display:{{ 'inline-flex' if categorie in gekozen_materialen else 'none' }};align-items:center;gap:4px;">
-                        <input type="text" value="{{ bedrijf.get('materiaal_volumes', {}).get(categorie, '') }}" data-materiaal="{{ categorie }}" onblur="wijzigMateriaalVolume(this)" placeholder="0" style="width:70px;padding:3px 6px;border:1px solid #e2e8f0;border-radius:5px;font-size:12px;text-align:right;font-family:inherit;">
-                        <span style="font-size:11px;color:var(--gray-400);">t/j</span>
-                    </span>
-                </div>
+                <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--gray-700);cursor:pointer;">
+                    <input type="checkbox" class="materiaal-checkbox" data-categorie="{{ categorie }}" {% if categorie in gekozen_materialen %}checked{% endif %} onchange="wijzigMateriaalCheckbox()">
+                    {{ categorie }}
+                </label>
                 {% if kwaliteiten_lijst %}
                 <div style="margin-left:24px;margin-top:6px;display:flex;flex-wrap:wrap;gap:10px;">
                     {% for kw in kwaliteiten_lijst %}
                     <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-500);cursor:pointer;">
-                        <input type="checkbox" class="kwaliteit-checkbox" value="{{ kw }}" {% if kw in gekozen_kwaliteiten %}checked{% endif %} onchange="wijzigKwaliteitCheckbox()">
+                        <input type="checkbox" class="kwaliteit-checkbox" data-categorie="{{ categorie }}" value="{{ kw }}" {% if kw in gekozen_kwaliteiten %}checked{% endif %} onchange="wijzigKwaliteitCheckbox()">
                         {{ kw }}
                     </label>
                     {% endfor %}
@@ -5841,9 +5844,10 @@ def bedrijf_profiel(naam):
         <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Recycling Operations</div>
             <div class="drawer-row"><span class="drawer-row-label">Annual Capacity (totaal)</span><span class="drawer-row-value">{{ (bedrijf.volume ~ " t/y") if bedrijf.volume else "—" }}</span></div>
-            <div class="company-tags" style="padding-left:0;margin-top:8px;">
+            <div class="company-tags" style="padding-left:0;margin-top:8px;margin-bottom:10px;">
                 {% if bedrijf.materialen %}{% for m in bedrijf.materialen.split(",") %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
             </div>
+            <div id="volumeRijenContainer"></div>
         </div>
 
         {% if bedrijf.certificeringen %}
@@ -5913,6 +5917,8 @@ def bedrijf_profiel(naam):
 <script>
 var BEDRIJF_NAAM = {{ (bedrijf.naam or "")|tojson }};
 var HUIDIGE_GEBRUIKER = {{ (gebruikersnaam or "")|tojson }};
+var MATERIAAL_TAXONOMIE = {{ materiaal_taxonomie|tojson }};
+var BEDRIJF_MATERIAAL_VOLUMES = {{ (bedrijf.get('materiaal_volumes', {}))|tojson }};
 var BEDRIJF_URL = {{ (bedrijf.url or "")|tojson }};
 var pKaart = L.map("profielKaart", {zoomControl:true}).setView([{{ bedrijf.lat or 20 }}, {{ bedrijf.lon or 0 }}], {{ 12 if bedrijf.lat else 2 }});
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(pKaart);
@@ -5986,19 +5992,19 @@ async function wijzigBedrijfVeld(input) {
 }
 async function wijzigMateriaalCheckbox() {
     const aangevinkt = Array.from(document.querySelectorAll(".materiaal-checkbox:checked")).map(el => el.dataset.categorie);
-    document.querySelectorAll(".volume-veld-wrap").forEach(el => {
-        el.style.display = aangevinkt.includes(el.dataset.categorieVolume) ? "inline-flex" : "none";
-    });
+    herbouwVolumeRijen();
     await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: "materialen", waarde: aangevinkt.join(", ")})});
 }
 async function wijzigKwaliteitCheckbox() {
     const aangevinkt = Array.from(document.querySelectorAll(".kwaliteit-checkbox:checked")).map(el => el.value);
+    herbouwVolumeRijen();
     await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: "kwaliteiten", waarde: aangevinkt.join(", ")})});
 }
 async function wijzigMateriaalVolume(input) {
     const materiaal = input.dataset.materiaal;
     const origineel = input.dataset.origineel !== undefined ? input.dataset.origineel : input.defaultValue;
     if (input.value === origineel) return;
+    BEDRIJF_MATERIAAL_VOLUMES[materiaal] = input.value;
     input.style.opacity = "0.5";
     try {
         await fetch("/api/materiaal-volume", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, materiaal: materiaal, volume: input.value})});
@@ -6006,6 +6012,40 @@ async function wijzigMateriaalVolume(input) {
     } finally {
         input.style.opacity = "1";
     }
+}
+function herbouwVolumeRijen() {
+    const container = document.getElementById("volumeRijenContainer");
+    if (!container) return;
+    const aangevinkteMaterialen = Array.from(document.querySelectorAll(".materiaal-checkbox:checked")).map(el => el.dataset.categorie);
+    const aangevinkteKwaliteiten = Array.from(document.querySelectorAll(".kwaliteit-checkbox:checked")).map(el => ({categorie: el.dataset.categorie, naam: el.value}));
+
+    let regels = [];
+    aangevinkteMaterialen.forEach(cat => {
+        const kwaliteitenOnderCat = aangevinkteKwaliteiten.filter(k => k.categorie === cat);
+        if (kwaliteitenOnderCat.length > 0) {
+            kwaliteitenOnderCat.forEach(k => regels.push(k.naam));
+        } else {
+            regels.push(cat);
+        }
+    });
+
+    if (regels.length === 0) {
+        container.innerHTML = "";
+        return;
+    }
+
+    let html = '<div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin:10px 0 8px;">Volume per kwaliteit (t/jaar)</div>';
+    regels.forEach(naam => {
+        const waarde = BEDRIJF_MATERIAAL_VOLUMES[naam] || "";
+        const veiligeNaam = naam.replace(/"/g, "&quot;");
+        html += `<div class="drawer-row">
+            <span class="drawer-row-label">${naam}</span>
+            <span class="drawer-row-value">
+                <input type="text" value="${waarde}" data-materiaal="${veiligeNaam}" onblur="wijzigMateriaalVolume(this)" placeholder="0" style="width:90px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
+            </span>
+        </div>`;
+    });
+    container.innerHTML = html;
 }
 async function toggleOpslaanProfiel(el) {
     const res = await fetch("/api/opgeslagen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({naam: BEDRIJF_NAAM})});
@@ -6105,6 +6145,7 @@ async function uploadFotoProfiel() {
 }
 
 initFotoBrowser();
+herbouwVolumeRijen();
 </script>
     """
     pagina = render_simple_page(bedrijf["naam"], "zoeken", inhoud)
