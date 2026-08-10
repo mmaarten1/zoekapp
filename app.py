@@ -5169,6 +5169,10 @@ def orders_pagina():
     gewonnen_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] == "Gewonnen" and o.get("prijs", "").replace(".","",1).isdigit())
     vooringevuld_bedrijf = request.args.get("bedrijf", "")
 
+    _status_alle = laad_status()
+    _accountmanagers_alle = laad_accountmanagers()
+    alle_bedrijfsnamen = sorted(set(_status_alle.keys()) | set(_accountmanagers_alle.keys()))[:500]
+
     filter_status = request.args.get("filter_status", "")
     filter_materiaal = request.args.get("filter_materiaal", "")
     filter_verantwoordelijke = request.args.get("filter_verantwoordelijke", "")
@@ -5228,7 +5232,10 @@ def orders_pagina():
     <form method="POST">
         <input type="hidden" name="actie" value="toevoegen">
         <div class="form-rij-2">
-            <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" required>
+            <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" list="bedrijvenLijst" required>
+            <datalist id="bedrijvenLijst">
+                {% for naam in alle_bedrijfsnamen %}<option value="{{ naam }}">{% endfor %}
+            </datalist>
             <select name="materiaal">
                 <option value="">Materiaal kiezen...</option>
                 {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
@@ -5301,7 +5308,8 @@ def orders_pagina():
                                     statuskleuren=ORDER_KLEUREN, open_waarde=open_waarde, gewonnen_waarde=gewonnen_waarde,
                                     filter_status=filter_status, filter_materiaal=filter_materiaal, filter_verantwoordelijke=filter_verantwoordelijke,
                                     alle_materialen_in_orders=alle_materialen_in_orders, alle_verantwoordelijken=alle_verantwoordelijken,
-                                    vooringevuld_bedrijf=vooringevuld_bedrijf, materiaal_taxonomie=laad_materiaal_taxonomie())
+                                    vooringevuld_bedrijf=vooringevuld_bedrijf, materiaal_taxonomie=laad_materiaal_taxonomie(),
+                                    alle_bedrijfsnamen=alle_bedrijfsnamen)
 
 @app.route("/contacten")
 def contacten():
