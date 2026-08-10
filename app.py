@@ -637,6 +637,8 @@ def _gov_uk_bulk_worker(gebruikersnaam, max_nieuw=3000):
 
 @app.route("/importeer-gov-uk", methods=["GET", "POST"])
 def importeer_gov_uk():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     if request.method == "POST":
         if not GOV_UK_BULK_STATUS["bezig"]:
             gebruikersnaam = session.get("gebruikersnaam", "")
@@ -736,6 +738,8 @@ def _ch_cleanup_worker(gebruikersnaam):
 
 @app.route("/controleer-uk-status", methods=["GET", "POST"])
 def controleer_uk_status():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     if request.method == "POST":
         if not CH_CLEANUP_STATUS["bezig"]:
             gebruikersnaam = session.get("gebruikersnaam", "")
@@ -790,6 +794,8 @@ def ch_cleanup_status():
 
 @app.route("/debug-gov-uk-register")
 def debug_gov_uk_register():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     import zipfile
     import io as io_module
 
@@ -821,6 +827,8 @@ def debug_gov_uk_register():
 
 @app.route("/debug-scrapmonster")
 def debug_scrapmonster():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     land_naam = request.args.get("land", "Netherlands")
     slug = SCRAPMONSTER_LANDEN.get(land_naam, "netherlands")
     url = f"https://www.scrapmonster.com/scrap-yard/{slug}/"
@@ -847,6 +855,8 @@ def debug_scrapmonster():
 
 @app.route("/importeer-scrapmonster", methods=["GET", "POST"])
 def importeer_scrapmonster():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     bericht = None
     succes = False
     if request.method == "POST":
@@ -906,6 +916,8 @@ def _scrapmonster_bulk_worker(gebruikersnaam, landen_lijst=None):
 
 @app.route("/importeer-scrapmonster-alle", methods=["GET", "POST"])
 def importeer_scrapmonster_alle():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     if request.method == "POST":
         if not SCRAPMONSTER_BULK_STATUS["bezig"]:
             gebruikersnaam = session.get("gebruikersnaam", "")
@@ -1148,6 +1160,8 @@ def _bepaal_brontype_uit_materiaal(materialen):
 
 @app.route("/herlabel-brontype", methods=["GET", "POST"])
 def herlabel_brontype():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     bericht = None
     if request.method == "POST":
         actie = request.form.get("actie", "aanvullen")
@@ -1188,6 +1202,8 @@ def herlabel_brontype():
 
 @app.route("/opschonen-dubbelen", methods=["GET", "POST"])
 def opschonen_dubbelen():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     bericht = None
     if request.method == "POST":
         modus = request.form.get("modus", "normaal")
@@ -1301,6 +1317,8 @@ def osm_importeer_land(land_naam):
 
 @app.route("/importeer-osm", methods=["GET", "POST"])
 def importeer_osm():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     bericht = None
     succes = False
     if request.method == "POST":
@@ -1368,6 +1386,8 @@ def _osm_bulk_worker(gebruikersnaam, landen_lijst=None):
 
 @app.route("/importeer-osm-alle", methods=["GET", "POST"])
 def importeer_osm_alle():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     if request.method == "POST":
         if not OSM_BULK_STATUS["bezig"]:
             gebruikersnaam = session.get("gebruikersnaam", "")
@@ -1447,6 +1467,8 @@ def osm_import_status():
 
 @app.route("/importeer", methods=["GET", "POST"])
 def importeer_bedrijven():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     bericht = None
     succes = False
     if request.method == "POST":
@@ -4037,6 +4059,8 @@ def export_csv():
 
 @app.route("/export-data")
 def export_data():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
     from flask import Response
     pakket = {
         "bedrijven": ENF_BEDRIJVEN,
@@ -5032,8 +5056,25 @@ def genereer_wachtwoord():
     tekens = string.ascii_letters + string.digits
     return "".join(secrets.choice(tekens) for _ in range(10))
 
+def is_huidige_gebruiker_admin():
+    users = laad_users()
+    info = users.get(session.get("gebruikersnaam", ""), {})
+    # Backwards-compatible: bestaande gebruikers zonder is_admin-veld blijven admin
+    return info.get("is_admin", True)
+
+def vereist_admin_of_403():
+    """Geef een 403-response terug als de ingelogde gebruiker geen admin is, anders None."""
+    if not is_huidige_gebruiker_admin():
+        pagina = render_simple_page("Geen toegang", "instellingen", '<div class="page-title">Geen toegang</div><div class="lege-staat">Deze functie is alleen voor admins. Vraag een admin om je rechten aan te passen.</div>')
+        return render_template_string(pagina), 403
+    return None
+
 @app.route("/gebruikers-beheer", methods=["GET", "POST"])
 def gebruikers_beheer():
+    if not is_huidige_gebruiker_admin():
+        pagina = render_simple_page("Geen toegang", "instellingen", '<div class="page-title">Geen toegang</div><div class="lege-staat">Alleen admins kunnen gebruikers beheren. Vraag een admin om je rechten aan te passen.</div>')
+        return render_template_string(pagina), 403
+
     bericht = None
     nieuw_wachtwoord = None
     if request.method == "POST":
@@ -5041,6 +5082,7 @@ def gebruikers_beheer():
         if actie == "toevoegen":
             nieuwe_naam = request.form.get("gebruikersnaam", "").strip()
             team = request.form.get("team", "").strip()
+            is_admin_nieuw = request.form.get("is_admin") == "on"
             users = laad_users()
             if not nieuwe_naam:
                 bericht = "Gebruikersnaam is verplicht."
@@ -5048,7 +5090,7 @@ def gebruikers_beheer():
                 bericht = f"'{nieuwe_naam}' bestaat al."
             else:
                 nieuw_wachtwoord = genereer_wachtwoord()
-                users[nieuwe_naam] = {"wachtwoord": generate_password_hash(nieuw_wachtwoord), "team": team}
+                users[nieuwe_naam] = {"wachtwoord": generate_password_hash(nieuw_wachtwoord), "team": team, "is_admin": is_admin_nieuw}
                 with open(USERS_FILE, "w", encoding="utf-8") as f:
                     json.dump(users, f, ensure_ascii=False, indent=2)
                 bericht = f"'{nieuwe_naam}' toegevoegd!"
@@ -5062,11 +5104,22 @@ def gebruikers_beheer():
                 with open(USERS_FILE, "w", encoding="utf-8") as f:
                     json.dump(users, f, ensure_ascii=False, indent=2)
                 bericht = f"'{te_verwijderen}' verwijderd."
+        elif actie == "toggle_admin":
+            doelnaam = request.form.get("gebruikersnaam", "")
+            users = laad_users()
+            if doelnaam == session.get("gebruikersnaam"):
+                bericht = "Je kunt je eigen adminrechten niet aanpassen."
+            elif doelnaam in users:
+                huidige = users[doelnaam].get("is_admin", True)
+                users[doelnaam]["is_admin"] = not huidige
+                with open(USERS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(users, f, ensure_ascii=False, indent=2)
+                bericht = f"'{doelnaam}' is nu {'wel' if not huidige else 'geen'} admin."
 
     users = laad_users()
     inhoud = """
     <div class="page-title">Gebruikers beheren</div>
-    {% if bericht %}<div style="background:{{ '#f0fdf4' if nieuw_wachtwoord or 'verwijderd' in bericht else '#fef2f2' }};color:{{ '#16a34a' if nieuw_wachtwoord or 'verwijderd' in bericht else '#dc2626' }};padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;">{{ bericht }}
+    {% if bericht %}<div style="background:{{ '#f0fdf4' if nieuw_wachtwoord or 'verwijderd' in bericht or 'nu' in bericht else '#fef2f2' }};color:{{ '#16a34a' if nieuw_wachtwoord or 'verwijderd' in bericht or 'nu' in bericht else '#dc2626' }};padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;">{{ bericht }}
         {% if nieuw_wachtwoord %}<br><b>Wachtwoord: <code style="background:#fff;padding:3px 8px;border-radius:4px;">{{ nieuw_wachtwoord }}</code></b><br><span style="font-size:12px;">Bewaar dit nu — dit wordt niet nogmaals getoond. Geef het handmatig door aan de gebruiker.</span>{% endif %}
     </div>{% endif %}
 
@@ -5076,6 +5129,9 @@ def gebruikers_beheer():
             <input type="hidden" name="actie" value="toevoegen">
             <input type="text" name="gebruikersnaam" placeholder="Gebruikersnaam (bv. leander)" required style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
             <input type="text" name="team" placeholder="Team (bv. papier-nl)" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--gray-600);margin-bottom:12px;">
+                <input type="checkbox" name="is_admin"> Admin (mag ook gebruikers beheren)
+            </label>
             <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Toevoegen (wachtwoord wordt automatisch gegenereerd)</button>
         </form>
     </div>
@@ -5087,13 +5143,21 @@ def gebruikers_beheer():
             <div>
                 <b style="color:var(--gray-800);">{{ naam }}</b>
                 <span style="color:var(--gray-400);font-size:12px;"> · {{ info.team or "geen team" }}</span>
+                {% if info.get("is_admin", True) %}<span style="background:var(--brand-50);color:var(--brand-600);font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;">ADMIN</span>{% endif %}
             </div>
             {% if naam != gebruikersnaam %}
-            <form method="POST" onsubmit="return confirm('{{ naam }} verwijderen?');" style="margin:0;">
-                <input type="hidden" name="actie" value="verwijderen">
-                <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
-                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.9rem;">✕</button>
-            </form>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <form method="POST" style="margin:0;">
+                    <input type="hidden" name="actie" value="toggle_admin">
+                    <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
+                    <button type="submit" style="background:none;border:1px solid var(--gray-200);border-radius:6px;padding:3px 8px;color:var(--gray-500);cursor:pointer;font-size:11px;">{{ "Admin intrekken" if info.get("is_admin", True) else "Maak admin" }}</button>
+                </form>
+                <form method="POST" onsubmit="return confirm('{{ naam }} verwijderen?');" style="margin:0;">
+                    <input type="hidden" name="actie" value="verwijderen">
+                    <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
+                    <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.9rem;">✕</button>
+                </form>
+            </div>
             {% endif %}
         </div>
         {% endfor %}
