@@ -5131,7 +5131,17 @@ def orders_pagina():
         <input type="hidden" name="actie" value="toevoegen">
         <div class="form-rij-2">
             <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" required>
-            <input type="text" name="materiaal" placeholder="Materiaal (bv. Paper, Metal)">
+            <select name="materiaal">
+                <option value="">Materiaal kiezen...</option>
+                {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
+                <optgroup label="{{ categorie }}">
+                    <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
+                    {% for kw in kwaliteiten_lijst %}
+                    <option value="{{ kw }}">{{ kw }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
         </div>
         <div class="form-rij-2">
             <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (bv. 500 ton)">
@@ -5187,7 +5197,7 @@ def orders_pagina():
     pagina = render_simple_page("Orders", "orders", inhoud)
     return render_template_string(pagina, alle_orders=alle_orders, statussen=ORDER_STATUSSEN,
                                     statuskleuren=ORDER_KLEUREN, open_waarde=open_waarde, gewonnen_waarde=gewonnen_waarde,
-                                    vooringevuld_bedrijf=vooringevuld_bedrijf)
+                                    vooringevuld_bedrijf=vooringevuld_bedrijf, materiaal_taxonomie=laad_materiaal_taxonomie())
 
 @app.route("/contacten")
 def contacten():
