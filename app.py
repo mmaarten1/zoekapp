@@ -3159,10 +3159,25 @@ function toggleMobielMenu() {
         <input type="hidden" name="land" value="{{ land }}">
         <input type="hidden" name="regio" value="{{ regio }}">
         <aside class="filters-panel">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);">
-                <div class="filters-title" style="margin-bottom:0;display:flex;align-items:center;gap:6px;">🎚️ Filters</div>
-                <a href="/" style="font-size:var(--text-xs);color:var(--gray-400);text-decoration:none;font-weight:600;">Wis filters</a>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3);">
+                <div class="filters-title" style="margin-bottom:0;display:flex;align-items:center;gap:8px;">
+                    🎚️ Filters
+                    {% if actieve_filter_count > 0 %}<span style="background:var(--brand-600);color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;">{{ actieve_filter_count }}</span>{% endif %}
+                </div>
+                {% if actieve_filter_count > 0 %}<a href="/" style="font-size:var(--text-xs);color:var(--gray-400);text-decoration:none;font-weight:600;">Wis alles</a>{% endif %}
             </div>
+
+            {% if actieve_filters_lijst %}
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid var(--gray-100);">
+                {% for af in actieve_filters_lijst %}
+                <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-50);color:var(--brand-700);border:1px solid #fed7aa;border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;text-decoration:none;">
+                    {{ af.label }}<span style="font-weight:800;">✕</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:var(--space-2);">Bedrijfsprofiel</div>
 
             <div class="filter-group">
                 <label class="filter-label">Customer Type</label>
@@ -3171,29 +3186,6 @@ function toggleMobielMenu() {
                     <option value="Commercial" {% if klanttype == "Commercial" %}selected{% endif %}>Commercial</option>
                     <option value="Industrial" {% if klanttype == "Industrial" %}selected{% endif %}>Industrial</option>
                     <option value="Residential" {% if klanttype == "Residential" %}selected{% endif %}>Residential</option>
-                </select>
-            </div>
-
-            <div class="filter-group">
-                <label class="filter-label">Material</label>
-                <select class="filter-select" name="materiaal">
-                    <option value="">All materials</option>
-                    <option value="Paper" {% if materiaal == "Paper" %}selected{% endif %}>Paper</option>
-                    <option value="Plastic" {% if materiaal == "Plastic" %}selected{% endif %}>Plastic</option>
-                    <option value="Metal" {% if materiaal == "Metal" %}selected{% endif %}>Metal</option>
-                    <option value="Glass" {% if materiaal == "Glass" %}selected{% endif %}>Glass</option>
-                    <option value="Wood" {% if materiaal == "Wood" %}selected{% endif %}>Wood</option>
-                    <option value="Electronic" {% if materiaal == "Electronic" %}selected{% endif %}>Electronic</option>
-                </select>
-            </div>
-
-            <div class="filter-group">
-                <label class="filter-label">Annual Volume</label>
-                <select class="filter-select" name="volume_filter">
-                    <option value="">Any volume</option>
-                    <option value="small">Under 1,000 t/y</option>
-                    <option value="medium">1,000 – 10,000 t/y</option>
-                    <option value="large">Over 10,000 t/y</option>
                 </select>
             </div>
 
@@ -3209,6 +3201,38 @@ function toggleMobielMenu() {
                 </select>
             </div>
 
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin:var(--space-4) 0 var(--space-2);">Materiaal</div>
+
+            <div class="filter-group">
+                <label class="filter-label">Material</label>
+                <select class="filter-select" name="materiaal">
+                    <option value="">All materials</option>
+                    <option value="Paper" {% if materiaal == "Paper" %}selected{% endif %}>Paper</option>
+                    <option value="Plastic" {% if materiaal == "Plastic" %}selected{% endif %}>Plastic</option>
+                    <option value="Metal" {% if materiaal == "Metal" %}selected{% endif %}>Metal</option>
+                    <option value="Glass" {% if materiaal == "Glass" %}selected{% endif %}>Glass</option>
+                    <option value="Wood" {% if materiaal == "Wood" %}selected{% endif %}>Wood</option>
+                    <option value="Electronic" {% if materiaal == "Electronic" %}selected{% endif %}>Electronic</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label class="filter-label">Kwaliteiten</label>
+                <input type="text" class="filter-select" name="kwaliteiten" value="{{ kwaliteiten }}" placeholder="bv. OCC, HDPE...">
+            </div>
+
+            <div class="filter-group">
+                <label class="filter-label">Annual Volume</label>
+                <select class="filter-select" name="volume_filter">
+                    <option value="">Any volume</option>
+                    <option value="small" {% if volume_filter == "small" %}selected{% endif %}>Under 1,000 t/y</option>
+                    <option value="medium" {% if volume_filter == "medium" %}selected{% endif %}>1,000 – 10,000 t/y</option>
+                    <option value="large" {% if volume_filter == "large" %}selected{% endif %}>Over 10,000 t/y</option>
+                </select>
+            </div>
+
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin:var(--space-4) 0 var(--space-2);">Team</div>
+
             <div class="filter-group">
                 <label class="filter-label">Accountmanager</label>
                 <select class="filter-select" name="accountmanager">
@@ -3218,11 +3242,6 @@ function toggleMobielMenu() {
                     <option value="{{ gebruikersnaam }}" {% if accountmanager == gebruikersnaam %}selected{% endif %}>{{ gebruikersnaam }}</option>
                     {% endfor %}
                 </select>
-            </div>
-
-            <div class="filter-group">
-                <label class="filter-label">Kwaliteiten</label>
-                <input type="text" class="filter-select" name="kwaliteiten" value="{{ kwaliteiten }}" placeholder="bv. OCC, HDPE...">
             </div>
 
             <hr class="filter-divider">
@@ -4040,6 +4059,7 @@ def export_csv():
     brontype  = request.args.get("brontype", "")
     accountmanager = request.args.get("accountmanager", "")
     kwaliteiten = request.args.get("kwaliteiten", "")
+    volume_filter = request.args.get("volume_filter", "")
 
     bedrijven = ENF_BEDRIJVEN
     if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
@@ -4049,6 +4069,18 @@ def export_csv():
     if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
     if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
     if kwaliteiten: bedrijven = [b for b in bedrijven if kwaliteiten.strip().lower() in b.get("kwaliteiten","").lower()]
+    if volume_filter:
+        def _volume_getal_csv(b):
+            try:
+                return float(str(b.get("volume","")).replace(",", "").strip())
+            except (ValueError, TypeError):
+                return None
+        if volume_filter == "small":
+            bedrijven = [b for b in bedrijven if (v := _volume_getal_csv(b)) is not None and v < 1000]
+        elif volume_filter == "medium":
+            bedrijven = [b for b in bedrijven if (v := _volume_getal_csv(b)) is not None and 1000 <= v <= 10000]
+        elif volume_filter == "large":
+            bedrijven = [b for b in bedrijven if (v := _volume_getal_csv(b)) is not None and v > 10000]
     if accountmanager:
         accountmanagers_alle = laad_accountmanagers()
         gezocht_am = session.get("gebruikersnaam", "") if accountmanager == "__mij__" else accountmanager
@@ -4459,7 +4491,7 @@ PAGINA_GROOTTE = 200
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = kwaliteiten = ""
+    zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = kwaliteiten = volume_filter = ""
     pagina = 1
 
     if request.method == "POST":
@@ -4471,6 +4503,7 @@ def index():
         brontype  = request.form.get("brontype", "")
         accountmanager = request.form.get("accountmanager", "")
         kwaliteiten = request.form.get("kwaliteiten", "")
+        volume_filter = request.form.get("volume_filter", "")
         pagina    = request.form.get("pagina", "1")
     else:
         zoekterm = request.args.get("zoekterm", "").lower()
@@ -4481,6 +4514,7 @@ def index():
         brontype  = request.args.get("brontype", "")
         accountmanager = request.args.get("accountmanager", "")
         kwaliteiten = request.args.get("kwaliteiten", "")
+        volume_filter = request.args.get("volume_filter", "")
         pagina    = request.args.get("pagina", "1")
 
     try:
@@ -4496,41 +4530,80 @@ def index():
     if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
     if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
     if kwaliteiten: bedrijven = [b for b in bedrijven if kwaliteiten.strip().lower() in b.get("kwaliteiten","").lower()]
+    if volume_filter:
+        def _volume_getal(b):
+            try:
+                return float(str(b.get("volume","")).replace(",", "").strip())
+            except (ValueError, TypeError):
+                return None
+        if volume_filter == "small":
+            bedrijven = [b for b in bedrijven if (v := _volume_getal(b)) is not None and v < 1000]
+        elif volume_filter == "medium":
+            bedrijven = [b for b in bedrijven if (v := _volume_getal(b)) is not None and 1000 <= v <= 10000]
+        elif volume_filter == "large":
+            bedrijven = [b for b in bedrijven if (v := _volume_getal(b)) is not None and v > 10000]
     if accountmanager:
         accountmanagers_alle = laad_accountmanagers()
         gezocht_am = session.get("gebruikersnaam", "") if accountmanager == "__mij__" else accountmanager
         bedrijven = [b for b in bedrijven if accountmanagers_alle.get(b["naam"], "") == gezocht_am]
 
     totaal_gevonden = len(bedrijven)
-    er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype or accountmanager or kwaliteiten)
+    er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype or accountmanager or kwaliteiten or volume_filter)
     totaal_paginas = max(1, (totaal_gevonden + PAGINA_GROOTTE - 1) // PAGINA_GROOTTE)
     pagina = min(pagina, totaal_paginas)
     start = (pagina - 1) * PAGINA_GROOTTE
     bedrijven = bedrijven[start:start + PAGINA_GROOTTE]
     opgeslagen_namen = set(laad_opgeslagen())
 
+    _volume_labels = {"small": "Volume: <1.000 t/j", "medium": "Volume: 1.000-10.000 t/j", "large": "Volume: >10.000 t/j"}
+    _accountmanager_label = "Accountmanager: Mijn bedrijven" if accountmanager == "__mij__" else (f"Accountmanager: {accountmanager}" if accountmanager else "")
+    _alle_filter_velden = [
+        ("klanttype", klanttype, f"Customer Type: {klanttype}"),
+        ("brontype", brontype, f"Bedrijfstype: {brontype}"),
+        ("materiaal", materiaal, f"Materiaal: {materiaal}"),
+        ("kwaliteiten", kwaliteiten, f"Kwaliteiten: {kwaliteiten}"),
+        ("volume_filter", volume_filter, _volume_labels.get(volume_filter, "")),
+        ("accountmanager", accountmanager, _accountmanager_label),
+    ]
+    actieve_filter_count = sum(1 for _, waarde, _ in _alle_filter_velden if waarde)
+
+    def _maak_filter_url_zonder(uit_te_sluiten_key):
+        params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
+                   "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager,
+                   "kwaliteiten": kwaliteiten, "volume_filter": volume_filter}
+        params[uit_te_sluiten_key] = ""
+        params = {k: v for k, v in params.items() if v}
+        return "/?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
+
+    actieve_filters_lijst = [
+        {"label": label, "url": _maak_filter_url_zonder(key)}
+        for key, waarde, label in _alle_filter_velden if waarde
+    ]
+
     def maak_pagina_url(p):
         params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
                    "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager,
-                   "kwaliteiten": kwaliteiten, "pagina": p}
+                   "kwaliteiten": kwaliteiten, "volume_filter": volume_filter, "pagina": p}
         params = {k: v for k, v in params.items() if v}
         return "/?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
 
     export_params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
-                      "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager, "kwaliteiten": kwaliteiten}
+                      "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager,
+                      "kwaliteiten": kwaliteiten, "volume_filter": volume_filter}
     export_params = {k: v for k, v in export_params.items() if v}
     export_query = "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in export_params.items())
 
     return render_template_string(HTML,
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
         klanttype=klanttype, materiaal=materiaal, brontype=brontype, accountmanager=accountmanager,
-        kwaliteiten=kwaliteiten,
+        kwaliteiten=kwaliteiten, volume_filter=volume_filter,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
         er_is_gefilterd=er_is_gefilterd, pagina=pagina, totaal_paginas=totaal_paginas,
         maak_pagina_url=maak_pagina_url, export_query=export_query,
-        alle_gebruikersnamen=sorted(laad_users().keys()))
+        alle_gebruikersnamen=sorted(laad_users().keys()),
+        actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst)
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
