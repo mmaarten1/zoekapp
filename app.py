@@ -5148,6 +5148,18 @@ def orders_pagina():
                 alle_orders.append(nieuwe_order)
                 bewaar_orders(alle_orders)
 
+                toegewezen_am = laad_accountmanagers().get(nieuwe_order["bedrijf"], "")
+                if toegewezen_am and toegewezen_am != nieuwe_order["verantwoordelijke"]:
+                    alle_meldingen = laad_meldingen()
+                    alle_meldingen.append({
+                        "id": str(uuid.uuid4()),
+                        "tekst": f"{nieuwe_order['verantwoordelijke']} heeft een order aangemaakt voor {nieuwe_order['bedrijf']} (jouw bedrijf) — {nieuwe_order.get('materiaal','') or 'geen materiaal'}{', €' + nieuwe_order['prijs'] if nieuwe_order.get('prijs') else ''}.",
+                        "bedrijf": nieuwe_order["bedrijf"], "van": nieuwe_order["verantwoordelijke"],
+                        "voor_gebruiker": toegewezen_am, "voor_team": "",
+                        "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+                    })
+                    bewaar_meldingen(alle_meldingen)
+
         elif actie == "status_wijzigen":
             order_id = request.form.get("order_id", "")
             nieuwe_status = request.form.get("nieuwe_status", "")
