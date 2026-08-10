@@ -147,6 +147,26 @@ def bewaar_geocode_cache(data):
 
 import math
 
+def voldoet_aan_materiaal_min_volume(bedrijf, materiaal_naam, min_volume_str):
+    """Check of een bedrijf voor het gegeven materiaal minstens min_volume_str t/jaar heeft opgegeven."""
+    if not min_volume_str:
+        return True
+    try:
+        min_volume = float(min_volume_str)
+    except (ValueError, TypeError):
+        return True
+    volumes = bedrijf.get("materiaal_volumes", {})
+    if not isinstance(volumes, dict):
+        return False
+    materiaal_naam_laag = (materiaal_naam or "").strip().lower()
+    for naam, waarde in volumes.items():
+        if naam.strip().lower() == materiaal_naam_laag:
+            try:
+                return float(str(waarde).replace(",", "").strip()) >= min_volume
+            except (ValueError, TypeError):
+                return False
+    return False
+
 def bereken_afstand_km(lat1, lon1, lat2, lon2):
     R = 6371
     dlat = math.radians(lat2 - lat1)
@@ -3217,6 +3237,11 @@ function toggleMobielMenu() {
             </div>
 
             <div class="filter-group">
+                <label class="filter-label">Min. volume van dit materiaal (t/j)</label>
+                <input type="number" class="filter-select" name="materiaal_min_volume" value="{{ materiaal_min_volume }}" placeholder="bv. 1000" min="0">
+            </div>
+
+            <div class="filter-group">
                 <label class="filter-label">Kwaliteiten</label>
                 <input type="text" class="filter-select" name="kwaliteiten" value="{{ kwaliteiten }}" placeholder="bv. OCC, HDPE...">
             </div>
@@ -4060,6 +4085,7 @@ def export_csv():
     accountmanager = request.args.get("accountmanager", "")
     kwaliteiten = request.args.get("kwaliteiten", "")
     volume_filter = request.args.get("volume_filter", "")
+    materiaal_min_volume = request.args.get("materiaal_min_volume", "")
 
     bedrijven = ENF_BEDRIJVEN
     if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
@@ -4067,6 +4093,8 @@ def export_csv():
     if regio:     bedrijven = [b for b in bedrijven if b.get("regio","").strip().lower() == regio.strip().lower()]
     if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
     if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
+    if materiaal and materiaal_min_volume:
+        bedrijven = [b for b in bedrijven if voldoet_aan_materiaal_min_volume(b, materiaal, materiaal_min_volume)]
     if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
     if kwaliteiten: bedrijven = [b for b in bedrijven if kwaliteiten.strip().lower() in b.get("kwaliteiten","").lower()]
     if volume_filter:
@@ -4383,6 +4411,29 @@ def set_bedrijf_veld():
             return jsonify({"veld": veld, "waarde": waarde})
     return jsonify({"error": "Bedrijf niet gevonden"}), 404
 
+@app.route("/api/materiaal-volume", methods=["POST"])
+def set_materiaal_volume():
+    data = request.get_json()
+    bedrijf_naam = data.get("bedrijf", "")
+    materiaal = data.get("materiaal", "").strip()
+    volume = data.get("volume", "").strip()
+    if not bedrijf_naam or not materiaal:
+        return jsonify({"error": "Bedrijf en materiaal zijn verplicht"}), 400
+    for b in ENF_BEDRIJVEN:
+        if b["naam"] == bedrijf_naam:
+            volumes = b.get("materiaal_volumes", {})
+            if not isinstance(volumes, dict):
+                volumes = {}
+            if volume:
+                volumes[materiaal] = volume
+            else:
+                volumes.pop(materiaal, None)
+            b["materiaal_volumes"] = volumes
+            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            return jsonify({"materiaal": materiaal, "volume": volume})
+    return jsonify({"error": "Bedrijf niet gevonden"}), 404
+
 @app.route("/api/fabriek-kwaliteiten", methods=["GET"])
 def get_fabriek_kwaliteiten():
     naam = request.args.get("fabriek", "")
@@ -4491,7 +4542,7 @@ PAGINA_GROOTTE = 200
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = kwaliteiten = volume_filter = ""
+    zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = kwaliteiten = volume_filter = materiaal_min_volume = ""
     pagina = 1
 
     if request.method == "POST":
@@ -4504,6 +4555,7 @@ def index():
         accountmanager = request.form.get("accountmanager", "")
         kwaliteiten = request.form.get("kwaliteiten", "")
         volume_filter = request.form.get("volume_filter", "")
+        materiaal_min_volume = request.form.get("materiaal_min_volume", "")
         pagina    = request.form.get("pagina", "1")
     else:
         zoekterm = request.args.get("zoekterm", "").lower()
@@ -4515,6 +4567,7 @@ def index():
         accountmanager = request.args.get("accountmanager", "")
         kwaliteiten = request.args.get("kwaliteiten", "")
         volume_filter = request.args.get("volume_filter", "")
+        materiaal_min_volume = request.args.get("materiaal_min_volume", "")
         pagina    = request.args.get("pagina", "1")
 
     try:
@@ -4528,6 +4581,8 @@ def index():
     if regio:     bedrijven = [b for b in bedrijven if b.get("regio","").strip().lower() == regio.strip().lower()]
     if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
     if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
+    if materiaal and materiaal_min_volume:
+        bedrijven = [b for b in bedrijven if voldoet_aan_materiaal_min_volume(b, materiaal, materiaal_min_volume)]
     if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
     if kwaliteiten: bedrijven = [b for b in bedrijven if kwaliteiten.strip().lower() in b.get("kwaliteiten","").lower()]
     if volume_filter:
@@ -4561,6 +4616,7 @@ def index():
         ("klanttype", klanttype, f"Customer Type: {klanttype}"),
         ("brontype", brontype, f"Bedrijfstype: {brontype}"),
         ("materiaal", materiaal, f"Materiaal: {materiaal}"),
+        ("materiaal_min_volume", materiaal_min_volume, f"Min. volume {materiaal}: {materiaal_min_volume} t/j" if materiaal_min_volume else ""),
         ("kwaliteiten", kwaliteiten, f"Kwaliteiten: {kwaliteiten}"),
         ("volume_filter", volume_filter, _volume_labels.get(volume_filter, "")),
         ("accountmanager", accountmanager, _accountmanager_label),
@@ -4570,7 +4626,7 @@ def index():
     def _maak_filter_url_zonder(uit_te_sluiten_key):
         params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
                    "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager,
-                   "kwaliteiten": kwaliteiten, "volume_filter": volume_filter}
+                   "kwaliteiten": kwaliteiten, "volume_filter": volume_filter, "materiaal_min_volume": materiaal_min_volume}
         params[uit_te_sluiten_key] = ""
         params = {k: v for k, v in params.items() if v}
         return "/?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
@@ -4583,20 +4639,20 @@ def index():
     def maak_pagina_url(p):
         params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
                    "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager,
-                   "kwaliteiten": kwaliteiten, "volume_filter": volume_filter, "pagina": p}
+                   "kwaliteiten": kwaliteiten, "volume_filter": volume_filter, "materiaal_min_volume": materiaal_min_volume, "pagina": p}
         params = {k: v for k, v in params.items() if v}
         return "/?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
 
     export_params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
                       "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager,
-                      "kwaliteiten": kwaliteiten, "volume_filter": volume_filter}
+                      "kwaliteiten": kwaliteiten, "volume_filter": volume_filter, "materiaal_min_volume": materiaal_min_volume}
     export_params = {k: v for k, v in export_params.items() if v}
     export_query = "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in export_params.items())
 
     return render_template_string(HTML,
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
         klanttype=klanttype, materiaal=materiaal, brontype=brontype, accountmanager=accountmanager,
-        kwaliteiten=kwaliteiten, volume_filter=volume_filter,
+        kwaliteiten=kwaliteiten, volume_filter=volume_filter, materiaal_min_volume=materiaal_min_volume,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
@@ -5638,10 +5694,22 @@ def bedrijf_profiel(naam):
 
         <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Recycling Operations</div>
-            <div class="drawer-row"><span class="drawer-row-label">Annual Capacity</span><span class="drawer-row-value">{{ (bedrijf.volume ~ " t/y") if bedrijf.volume else "—" }}</span></div>
-            <div class="company-tags" style="padding-left:0;margin-top:8px;">
+            <div class="drawer-row"><span class="drawer-row-label">Annual Capacity (totaal)</span><span class="drawer-row-value">{{ (bedrijf.volume ~ " t/y") if bedrijf.volume else "—" }}</span></div>
+            <div class="company-tags" style="padding-left:0;margin-top:8px;margin-bottom:10px;">
                 {% if bedrijf.materialen %}{% for m in bedrijf.materialen.split(",") %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
             </div>
+            {% if bedrijf.materialen %}
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Volume per materiaal (t/jaar)</div>
+            {% for m in bedrijf.materialen.split(",") %}
+            {% set materiaal_naam = m.strip() %}
+            <div class="drawer-row">
+                <span class="drawer-row-label">{{ materiaal_naam }}</span>
+                <span class="drawer-row-value">
+                    <input type="text" value="{{ bedrijf.get('materiaal_volumes', {}).get(materiaal_naam, '') }}" data-materiaal="{{ materiaal_naam }}" onblur="wijzigMateriaalVolume(this)" placeholder="—" style="width:100px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
+                </span>
+            </div>
+            {% endfor %}
+            {% endif %}
         </div>
 
         {% if bedrijf.certificeringen %}
@@ -5777,6 +5845,18 @@ async function wijzigBedrijfVeld(input) {
     input.style.opacity = "0.5";
     try {
         await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: veld, waarde: input.value})});
+        input.dataset.origineel = input.value;
+    } finally {
+        input.style.opacity = "1";
+    }
+}
+async function wijzigMateriaalVolume(input) {
+    const materiaal = input.dataset.materiaal;
+    const origineel = input.dataset.origineel !== undefined ? input.dataset.origineel : input.defaultValue;
+    if (input.value === origineel) return;
+    input.style.opacity = "0.5";
+    try {
+        await fetch("/api/materiaal-volume", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, materiaal: materiaal, volume: input.value})});
         input.dataset.origineel = input.value;
     } finally {
         input.style.opacity = "1";
