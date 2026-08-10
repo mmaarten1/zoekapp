@@ -4657,6 +4657,7 @@ def orders_pagina():
     alle_orders.sort(key=lambda o: o.get("aangemaakt", ""), reverse=True)
     open_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] in ("Open", "Onderhandeling") and o.get("prijs", "").replace(".","",1).isdigit())
     gewonnen_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] == "Gewonnen" and o.get("prijs", "").replace(".","",1).isdigit())
+    vooringevuld_bedrijf = request.args.get("bedrijf", "")
 
     inhoud = """
 <style>
@@ -4685,7 +4686,7 @@ def orders_pagina():
     <form method="POST">
         <input type="hidden" name="actie" value="toevoegen">
         <div class="form-rij-2">
-            <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" required>
+            <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" required>
             <input type="text" name="materiaal" placeholder="Materiaal (bv. Paper, Metal)">
         </div>
         <div class="form-rij-2">
@@ -4741,7 +4742,8 @@ def orders_pagina():
     """
     pagina = render_simple_page("Orders", "orders", inhoud)
     return render_template_string(pagina, alle_orders=alle_orders, statussen=ORDER_STATUSSEN,
-                                    statuskleuren=ORDER_KLEUREN, open_waarde=open_waarde, gewonnen_waarde=gewonnen_waarde)
+                                    statuskleuren=ORDER_KLEUREN, open_waarde=open_waarde, gewonnen_waarde=gewonnen_waarde,
+                                    vooringevuld_bedrijf=vooringevuld_bedrijf)
 
 @app.route("/contacten")
 def contacten():
@@ -5151,6 +5153,22 @@ def bedrijf_profiel(naam):
         </div>
         {% endif %}
 
+        <div class="info-kaart" style="margin-bottom:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Orders</div>
+            {% if bedrijf_orders %}
+                {% for o in bedrijf_orders %}
+                <div class="dg-activiteit-item">
+                    {% if o.materiaal %}{{ o.materiaal }}{% endif %}{% if o.prijs %} · €{{ o.prijs }}{% endif %}
+                    <span style="color:{{ orderkleuren.get(o.status, '#94a3b8') }};font-weight:700;"> · {{ o.status }}</span>
+                    <small>{{ o.verantwoordelijke }} · {{ o.aangemaakt }}</small>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="font-size:0.82rem;color:var(--gray-400);margin-bottom:10px;">Nog geen orders voor dit bedrijf.</div>
+            {% endif %}
+            <a href="/orders?bedrijf={{ bedrijf.naam|urlencode }}" style="display:block;margin-top:8px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">+ Order toevoegen voor {{ bedrijf.naam }} →</a>
+        </div>
+
         <div class="info-kaart">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Notities</div>
             <div id="notitiesLijst" style="margin-bottom:12px;"></div>
@@ -5235,7 +5253,9 @@ laadNotities();
 </script>
     """
     pagina = render_simple_page(bedrijf["naam"], "zoeken", inhoud)
-    return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd)
+    return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd,
+                                    bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
+                                    orderkleuren=ORDER_KLEUREN)
 
 FOUTPAGINA_HTML = '''
 <!DOCTYPE html>
