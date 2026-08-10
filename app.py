@@ -1,7 +1,7 @@
 import os
 import json
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 import requests
 import re
 import uuid
@@ -5025,6 +5025,83 @@ def notities_overzicht():
     pagina = render_simple_page("Notities", "notities", inhoud)
     return render_template_string(pagina, rijen=rijen)
 
+import secrets
+import string
+
+def genereer_wachtwoord():
+    tekens = string.ascii_letters + string.digits
+    return "".join(secrets.choice(tekens) for _ in range(10))
+
+@app.route("/gebruikers-beheer", methods=["GET", "POST"])
+def gebruikers_beheer():
+    bericht = None
+    nieuw_wachtwoord = None
+    if request.method == "POST":
+        actie = request.form.get("actie", "toevoegen")
+        if actie == "toevoegen":
+            nieuwe_naam = request.form.get("gebruikersnaam", "").strip()
+            team = request.form.get("team", "").strip()
+            users = laad_users()
+            if not nieuwe_naam:
+                bericht = "Gebruikersnaam is verplicht."
+            elif nieuwe_naam in users:
+                bericht = f"'{nieuwe_naam}' bestaat al."
+            else:
+                nieuw_wachtwoord = genereer_wachtwoord()
+                users[nieuwe_naam] = {"wachtwoord": generate_password_hash(nieuw_wachtwoord), "team": team}
+                with open(USERS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(users, f, ensure_ascii=False, indent=2)
+                bericht = f"'{nieuwe_naam}' toegevoegd!"
+        elif actie == "verwijderen":
+            te_verwijderen = request.form.get("gebruikersnaam", "")
+            users = laad_users()
+            if te_verwijderen == session.get("gebruikersnaam"):
+                bericht = "Je kunt jezelf niet verwijderen."
+            elif te_verwijderen in users:
+                del users[te_verwijderen]
+                with open(USERS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(users, f, ensure_ascii=False, indent=2)
+                bericht = f"'{te_verwijderen}' verwijderd."
+
+    users = laad_users()
+    inhoud = """
+    <div class="page-title">Gebruikers beheren</div>
+    {% if bericht %}<div style="background:{{ '#f0fdf4' if nieuw_wachtwoord or 'verwijderd' in bericht else '#fef2f2' }};color:{{ '#16a34a' if nieuw_wachtwoord or 'verwijderd' in bericht else '#dc2626' }};padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;">{{ bericht }}
+        {% if nieuw_wachtwoord %}<br><b>Wachtwoord: <code style="background:#fff;padding:3px 8px;border-radius:4px;">{{ nieuw_wachtwoord }}</code></b><br><span style="font-size:12px;">Bewaar dit nu — dit wordt niet nogmaals getoond. Geef het handmatig door aan de gebruiker.</span>{% endif %}
+    </div>{% endif %}
+
+    <div class="info-kaart" style="max-width:420px;margin-bottom:20px;">
+        <div class="dg-kaart-titel">Nieuwe gebruiker toevoegen</div>
+        <form method="POST">
+            <input type="hidden" name="actie" value="toevoegen">
+            <input type="text" name="gebruikersnaam" placeholder="Gebruikersnaam (bv. leander)" required style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+            <input type="text" name="team" placeholder="Team (bv. papier-nl)" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+            <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Toevoegen (wachtwoord wordt automatisch gegenereerd)</button>
+        </form>
+    </div>
+
+    <div class="info-kaart" style="max-width:420px;">
+        <div class="dg-kaart-titel">Huidige gebruikers ({{ users|length }})</div>
+        {% for naam, info in users.items() %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--gray-100);">
+            <div>
+                <b style="color:var(--gray-800);">{{ naam }}</b>
+                <span style="color:var(--gray-400);font-size:12px;"> · {{ info.team or "geen team" }}</span>
+            </div>
+            {% if naam != gebruikersnaam %}
+            <form method="POST" onsubmit="return confirm('{{ naam }} verwijderen?');" style="margin:0;">
+                <input type="hidden" name="actie" value="verwijderen">
+                <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.9rem;">✕</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    """
+    pagina = render_simple_page("Gebruikers beheren", "instellingen", inhoud)
+    return render_template_string(pagina, users=users, bericht=bericht, nieuw_wachtwoord=nieuw_wachtwoord)
+
 @app.route("/instellingen")
 def instellingen():
     inhoud = """
@@ -5044,7 +5121,8 @@ def instellingen():
         <a href="/importeer-scrapmonster" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ ScrapMonster-import (schroothandels)</a>
         <a href="/importeer-gov-uk" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK overheidsregister-import</a>
         <a href="/controleer-uk-status" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK-bedrijven controleren (Companies House)</a>
-        <a href="/export-data" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
+        <a href="/export-data" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
+        <a href="/gebruikers-beheer" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
     </div>
     """
     pagina = render_simple_page("Instellingen", "instellingen", inhoud)
