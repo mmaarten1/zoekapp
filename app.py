@@ -22,7 +22,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "bedrijven.json", "papierfabrieken.json", "users.json", "status.json",
         "notities.json", "meldingen.json", "fotos.json", "transport_prijzen.json",
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
-        "orders.json", "accountmanagers.json", "fotomappen.json",
+        "orders.json", "accountmanagers.json", "fotomappen.json", "materiaal_taxonomie.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -96,6 +96,28 @@ FOTOS_FILE = datapad("fotos.json")
 FOTOS_MAP = datapad("fotos_uploads")
 FOTOMAPPEN_FILE = datapad("fotomappen.json")
 FOTO_CATEGORIEEN = ["Algemeen", "Paper", "Karton", "Plastic"]
+
+MATERIAAL_TAXONOMIE_FILE = datapad("materiaal_taxonomie.json")
+_STANDAARD_TAXONOMIE = {
+    "Paper": ["OCC (oud golfkarton)", "Krantenpapier", "Tijdschriften", "SOP (Sorted Office Paper)",
+              "Multidruk", "Multiprint", "Wit A4 archief", "Mixed Paper (sorteerresten)"],
+    "Karton": ["Kraftliner", "Testliner", "Fluting", "Gemengd karton", "Drankenkartons (Tetra Pak)"],
+    "Plastic": ["HDPE", "LDPE", "PET", "PP", "PS", "PVC", "Folie (gemengd)"],
+    "Metal": ["Ferro schroot", "Non-ferro (gemengd)", "Aluminium", "Koper", "RVS"],
+    "Glass": ["Helder glas", "Groen glas", "Bruin glas", "Gemengd glas"],
+}
+
+def laad_materiaal_taxonomie():
+    try:
+        with open(MATERIAAL_TAXONOMIE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        bewaar_materiaal_taxonomie(_STANDAARD_TAXONOMIE)
+        return dict(_STANDAARD_TAXONOMIE)
+
+def bewaar_materiaal_taxonomie(data):
+    with open(MATERIAAL_TAXONOMIE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 def laad_fotos():
     try:
@@ -3227,12 +3249,9 @@ function toggleMobielMenu() {
                 <label class="filter-label">Material</label>
                 <select class="filter-select" name="materiaal">
                     <option value="">All materials</option>
-                    <option value="Paper" {% if materiaal == "Paper" %}selected{% endif %}>Paper</option>
-                    <option value="Plastic" {% if materiaal == "Plastic" %}selected{% endif %}>Plastic</option>
-                    <option value="Metal" {% if materiaal == "Metal" %}selected{% endif %}>Metal</option>
-                    <option value="Glass" {% if materiaal == "Glass" %}selected{% endif %}>Glass</option>
-                    <option value="Wood" {% if materiaal == "Wood" %}selected{% endif %}>Wood</option>
-                    <option value="Electronic" {% if materiaal == "Electronic" %}selected{% endif %}>Electronic</option>
+                    {% for cat_naam in materiaal_categorieen %}
+                    <option value="{{ cat_naam }}" {% if materiaal == cat_naam %}selected{% endif %}>{{ cat_naam }}</option>
+                    {% endfor %}
                 </select>
             </div>
 
@@ -4659,7 +4678,8 @@ def index():
         er_is_gefilterd=er_is_gefilterd, pagina=pagina, totaal_paginas=totaal_paginas,
         maak_pagina_url=maak_pagina_url, export_query=export_query,
         alle_gebruikersnamen=sorted(laad_users().keys()),
-        actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst)
+        actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst,
+        materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()))
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
@@ -5273,6 +5293,105 @@ def vereist_admin_of_403():
         return render_template_string(pagina), 403
     return None
 
+@app.route("/materialen-beheer", methods=["GET", "POST"])
+def materialen_beheer():
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
+
+    bericht = None
+    if request.method == "POST":
+        actie = request.form.get("actie", "")
+        taxonomie = laad_materiaal_taxonomie()
+
+        if actie == "categorie_toevoegen":
+            naam = request.form.get("categorie_naam", "").strip()
+            if not naam:
+                bericht = "Naam van de grondstofgroep is verplicht."
+            elif naam in taxonomie:
+                bericht = f"'{naam}' bestaat al."
+            else:
+                taxonomie[naam] = []
+                bewaar_materiaal_taxonomie(taxonomie)
+                bericht = f"Grondstofgroep '{naam}' toegevoegd."
+
+        elif actie == "categorie_verwijderen":
+            naam = request.form.get("categorie_naam", "")
+            if naam in taxonomie:
+                del taxonomie[naam]
+                bewaar_materiaal_taxonomie(taxonomie)
+                bericht = f"'{naam}' verwijderd."
+
+        elif actie == "kwaliteit_toevoegen":
+            categorie = request.form.get("categorie", "")
+            kwaliteit = request.form.get("kwaliteit_naam", "").strip()
+            if categorie in taxonomie and kwaliteit:
+                if kwaliteit not in taxonomie[categorie]:
+                    taxonomie[categorie].append(kwaliteit)
+                    bewaar_materiaal_taxonomie(taxonomie)
+                bericht = f"'{kwaliteit}' toegevoegd aan {categorie}."
+
+        elif actie == "kwaliteit_verwijderen":
+            categorie = request.form.get("categorie", "")
+            kwaliteit = request.form.get("kwaliteit_naam", "")
+            if categorie in taxonomie and kwaliteit in taxonomie[categorie]:
+                taxonomie[categorie].remove(kwaliteit)
+                bewaar_materiaal_taxonomie(taxonomie)
+                bericht = f"'{kwaliteit}' verwijderd uit {categorie}."
+
+    taxonomie = laad_materiaal_taxonomie()
+    inhoud = """
+    <div class="page-title">Materialen beheren</div>
+    <p style="color:var(--gray-400);font-size:0.85rem;margin-top:-16px;margin-bottom:20px;max-width:600px;">
+        Deze grondstofgroepen en kwaliteiten gelden voor <b>alle</b> bedrijven in RecycleFind — pas je hier iets aan, dan zie je dat overal terug (zoekfilter, bedrijfsprofielen, fotomappen).
+    </p>
+    {% if bericht %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;max-width:600px;">{{ bericht }}</div>{% endif %}
+
+    <div class="info-kaart" style="max-width:500px;margin-bottom:20px;">
+        <div class="dg-kaart-titel">Nieuwe grondstofgroep</div>
+        <form method="POST" style="display:flex;gap:8px;">
+            <input type="hidden" name="actie" value="categorie_toevoegen">
+            <input type="text" name="categorie_naam" placeholder="bv. Textiel, Hout, E-waste..." required style="flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;font-family:inherit;">
+            <button type="submit" style="padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Toevoegen</button>
+        </form>
+    </div>
+
+    {% for categorie, kwaliteiten_lijst in taxonomie.items() %}
+    <div class="info-kaart" style="max-width:500px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div class="dg-kaart-titel" style="margin-bottom:0;">{{ categorie }}</div>
+            <form method="POST" onsubmit="return confirm('Grondstofgroep {{ categorie }} volledig verwijderen?');" style="margin:0;">
+                <input type="hidden" name="actie" value="categorie_verwijderen">
+                <input type="hidden" name="categorie_naam" value="{{ categorie }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:12px;">Groep verwijderen ✕</button>
+            </form>
+        </div>
+        <div class="company-tags" style="padding-left:0;margin-bottom:10px;">
+            {% for kw in kwaliteiten_lijst %}
+            <span class="tag tag-purple" style="display:inline-flex;align-items:center;gap:5px;">
+                {{ kw }}
+                <form method="POST" style="margin:0;display:inline;" onsubmit="return confirm('{{ kw }} verwijderen?');">
+                    <input type="hidden" name="actie" value="kwaliteit_verwijderen">
+                    <input type="hidden" name="categorie" value="{{ categorie }}">
+                    <input type="hidden" name="kwaliteit_naam" value="{{ kw }}">
+                    <button type="submit" style="background:none;border:none;color:inherit;cursor:pointer;font-size:10px;padding:0;">✕</button>
+                </form>
+            </span>
+            {% else %}
+            <span style="font-size:0.78rem;color:var(--gray-300);">Nog geen kwaliteiten toegevoegd.</span>
+            {% endfor %}
+        </div>
+        <form method="POST" style="display:flex;gap:8px;">
+            <input type="hidden" name="actie" value="kwaliteit_toevoegen">
+            <input type="hidden" name="categorie" value="{{ categorie }}">
+            <input type="text" name="kwaliteit_naam" placeholder="Nieuwe kwaliteit toevoegen..." required style="flex:1;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <button type="submit" style="padding:6px 12px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:12.5px;">+</button>
+        </form>
+    </div>
+    {% endfor %}
+    """
+    pagina = render_simple_page("Materialen beheren", "instellingen", inhoud)
+    return render_template_string(pagina, taxonomie=taxonomie, bericht=bericht)
+
 @app.route("/gebruikers-beheer", methods=["GET", "POST"])
 def gebruikers_beheer():
     if not is_huidige_gebruiker_admin():
@@ -5390,7 +5509,8 @@ def instellingen():
         <a href="/importeer-gov-uk" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK overheidsregister-import</a>
         <a href="/controleer-uk-status" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK-bedrijven controleren (Companies House)</a>
         <a href="/export-data" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
-        <a href="/gebruikers-beheer" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
+        <a href="/gebruikers-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
+        <a href="/materialen-beheer" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Materialen beheren</a>
     </div>
     """
     pagina = render_simple_page("Instellingen", "instellingen", inhoud)
@@ -5871,7 +5991,7 @@ async function toggleOpslaanProfiel(el) {
 laadNotities();
 
 const FOTO_STAAT = {categorie: "Algemeen", submap: ""};
-const FOTO_CATEGORIEEN_LIJST = ["Algemeen", "Paper", "Karton", "Plastic"];
+const FOTO_CATEGORIEEN_LIJST = {{ (["Algemeen"] + materiaal_categorieen_lijst)|tojson }};
 
 function initFotoBrowser() {
     const tabsDiv = document.getElementById("fotoCategorieTabs");
@@ -5968,7 +6088,8 @@ initFotoBrowser();
                                     orderkleuren=ORDER_KLEUREN,
                                     accountmanager=laad_accountmanagers().get(bedrijf["naam"], ""),
                                     alle_gebruikersnamen=sorted(laad_users().keys()),
-                                    gebruikersnaam=session.get("gebruikersnaam", ""))
+                                    gebruikersnaam=session.get("gebruikersnaam", ""),
+                                    materiaal_categorieen_lijst=sorted(laad_materiaal_taxonomie().keys()))
 
 FOUTPAGINA_HTML = '''
 <!DOCTYPE html>
