@@ -22,7 +22,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "bedrijven.json", "papierfabrieken.json", "users.json", "status.json",
         "notities.json", "meldingen.json", "fotos.json", "transport_prijzen.json",
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
-        "orders.json", "accountmanagers.json",
+        "orders.json", "accountmanagers.json", "fotomappen.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -94,6 +94,8 @@ def bewaar_meldingen(data):
 
 FOTOS_FILE = datapad("fotos.json")
 FOTOS_MAP = datapad("fotos_uploads")
+FOTOMAPPEN_FILE = datapad("fotomappen.json")
+FOTO_CATEGORIEEN = ["Algemeen", "Paper", "Karton", "Plastic"]
 
 def laad_fotos():
     try:
@@ -104,6 +106,17 @@ def laad_fotos():
 
 def bewaar_fotos(data):
     with open(FOTOS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def laad_fotomappen():
+    try:
+        with open(FOTOMAPPEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_fotomappen(data):
+    with open(FOTOMAPPEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def laad_notities():
@@ -4031,13 +4044,19 @@ def fabriek_analyse():
 @app.route("/api/fotos", methods=["GET"])
 def get_fotos():
     bedrijf = request.args.get("bedrijf", "")
-    alle = laad_fotos()
-    return jsonify(alle.get(bedrijf, []))
+    categorie = request.args.get("categorie", "")
+    submap = request.args.get("submap", "")
+    alle = laad_fotos().get(bedrijf, [])
+    if categorie:
+        alle = [f for f in alle if f.get("categorie", "Algemeen") == categorie and f.get("submap", "") == submap]
+    return jsonify(alle)
 
 @app.route("/api/fotos", methods=["POST"])
 def upload_foto():
     bedrijf = request.form.get("bedrijf", "")
     bestand = request.files.get("foto")
+    categorie = request.form.get("categorie", "Algemeen")
+    submap = request.form.get("submap", "")
 
     if not bedrijf or not bestand:
         return jsonify({"error": "Bedrijf en foto zijn verplicht"}), 400
@@ -4059,11 +4078,38 @@ def upload_foto():
     alle[bedrijf].append({
         "bestandsnaam": bestandsnaam,
         "geupload_door": session.get("gebruikersnaam", ""),
-        "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+        "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+        "categorie": categorie,
+        "submap": submap,
     })
     bewaar_fotos(alle)
 
     return jsonify({"ok": True, "bestandsnaam": bestandsnaam})
+
+@app.route("/api/fotomappen", methods=["GET"])
+def get_fotomappen():
+    bedrijf = request.args.get("bedrijf", "")
+    categorie = request.args.get("categorie", "")
+    alle = laad_fotomappen().get(bedrijf, {})
+    aangemaakte = alle.get(categorie, [])
+    # Ook submappen meenemen die impliciet bestaan doordat er al foto's in staan
+    foto_submappen = {f.get("submap","") for f in laad_fotos().get(bedrijf, []) if f.get("categorie","Algemeen") == categorie and f.get("submap","")}
+    return jsonify(sorted(set(aangemaakte) | foto_submappen))
+
+@app.route("/api/fotomappen", methods=["POST"])
+def maak_fotomap():
+    data = request.get_json()
+    bedrijf = data.get("bedrijf", "")
+    categorie = data.get("categorie", "")
+    submap = data.get("submap", "").strip()
+    if not bedrijf or not categorie or not submap:
+        return jsonify({"error": "Bedrijf, categorie en mapnaam zijn verplicht"}), 400
+    alle = laad_fotomappen()
+    alle.setdefault(bedrijf, {}).setdefault(categorie, [])
+    if submap not in alle[bedrijf][categorie]:
+        alle[bedrijf][categorie].append(submap)
+    bewaar_fotomappen(alle)
+    return jsonify({"ok": True, "submap": submap})
 
 from flask import send_from_directory
 
@@ -4176,6 +4222,24 @@ def set_accountmanager():
         alle.pop(bedrijf, None)
     bewaar_accountmanagers(alle)
     return jsonify({"accountmanager": nieuwe_am})
+
+BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon"}
+
+@app.route("/api/bedrijf-veld", methods=["POST"])
+def set_bedrijf_veld():
+    data = request.get_json()
+    bedrijf_naam = data.get("bedrijf", "")
+    veld = data.get("veld", "")
+    waarde = data.get("waarde", "")
+    if not bedrijf_naam or veld not in BEWERKBARE_BEDRIJFSVELDEN:
+        return jsonify({"error": "Ongeldig bedrijf of veld"}), 400
+    for b in ENF_BEDRIJVEN:
+        if b["naam"] == bedrijf_naam:
+            b[veld] = waarde
+            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            return jsonify({"veld": veld, "waarde": waarde})
+    return jsonify({"error": "Bedrijf niet gevonden"}), 404
 
 @app.route("/api/status", methods=["POST"])
 def set_status():
@@ -5190,9 +5254,18 @@ def bedrijf_profiel(naam):
                     {% endfor %}
                 </select>
             </span></div>
-            {% if bedrijf.brontype %}<div class="drawer-row"><span class="drawer-row-label">Type</span><span class="drawer-row-value">{{ bedrijf.brontype }}</span></div>{% endif %}
-            <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">{{ bedrijf.klanttype or "—" }}</span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">{{ bedrijf.materialen or "—" }}</span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Type</span><span class="drawer-row-value">
+                <input type="text" value="{{ bedrijf.brontype or '' }}" data-veld="brontype" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
+            </span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">
+                <input type="text" value="{{ bedrijf.klanttype or '' }}" data-veld="klanttype" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
+            </span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">
+                <input type="text" value="{{ bedrijf.materialen or '' }}" data-veld="materialen" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
+            </span></div>
+            <div class="drawer-row"><span class="drawer-row-label">Contactpersoon</span><span class="drawer-row-value">
+                <input type="text" value="{{ bedrijf.contactpersoon or '' }}" data-veld="contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="Naam invullen..." style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
+            </span></div>
         </div>
 
         <div class="info-kaart" style="margin-bottom:16px;">
@@ -5226,6 +5299,22 @@ def bedrijf_profiel(naam):
                 <div style="font-size:0.82rem;color:var(--gray-400);margin-bottom:10px;">Nog geen orders voor dit bedrijf.</div>
             {% endif %}
             <a href="/orders?bedrijf={{ bedrijf.naam|urlencode }}" style="display:block;margin-top:8px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">+ Order toevoegen voor {{ bedrijf.naam }} →</a>
+        </div>
+
+        <div class="info-kaart" style="margin-bottom:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Foto's</div>
+            <div id="fotoCategorieTabs" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;"></div>
+            <div id="fotoBreadcrumb" style="font-size:0.78rem;color:var(--gray-400);margin-bottom:10px;"></div>
+            <div id="fotoMappenGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+            <div id="fotoGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                <input type="text" id="nieuweMapNaam" placeholder="Nieuwe map (bv. kwaliteit A)..." style="flex:1;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;font-family:inherit;">
+                <button onclick="maakFotoSubmapProfiel()" style="padding:6px 12px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">+ Map</button>
+            </div>
+            <label style="display:inline-block;padding:6px 12px;background:var(--brand-600);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">
+                📷 Foto uploaden
+                <input type="file" id="fotoInputProfiel" accept="image/*" onchange="uploadFotoProfiel()" style="display:none;">
+            </label>
         </div>
 
         <div class="info-kaart">
@@ -5306,6 +5395,18 @@ async function wijzigAccountmanagerProfiel() {
     const select = document.getElementById("accountmanagerSelect");
     await fetch("/api/accountmanager", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, accountmanager: select.value})});
 }
+async function wijzigBedrijfVeld(input) {
+    const veld = input.dataset.veld;
+    const origineel = input.dataset.origineel !== undefined ? input.dataset.origineel : input.defaultValue;
+    if (input.value === origineel) return;
+    input.style.opacity = "0.5";
+    try {
+        await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: veld, waarde: input.value})});
+        input.dataset.origineel = input.value;
+    } finally {
+        input.style.opacity = "1";
+    }
+}
 async function toggleOpslaanProfiel(el) {
     const res = await fetch("/api/opgeslagen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({naam: BEDRIJF_NAAM})});
     const data = await res.json();
@@ -5313,6 +5414,87 @@ async function toggleOpslaanProfiel(el) {
     el.classList.toggle("opgeslagen", data.opgeslagen);
 }
 laadNotities();
+
+const FOTO_STAAT = {categorie: "Algemeen", submap: ""};
+const FOTO_CATEGORIEEN_LIJST = ["Algemeen", "Paper", "Karton", "Plastic"];
+
+function initFotoBrowser() {
+    const tabsDiv = document.getElementById("fotoCategorieTabs");
+    if (!tabsDiv) return;
+    tabsDiv.innerHTML = FOTO_CATEGORIEEN_LIJST.map(c =>
+        `<button onclick="wisselFotoCategorieProfiel('${c}')" data-cat="${c}" style="padding:5px 12px;border-radius:6px;border:1px solid #e2e8f0;background:${c === FOTO_STAAT.categorie ? 'var(--brand-600)' : '#fff'};color:${c === FOTO_STAAT.categorie ? '#fff' : 'var(--gray-600)'};cursor:pointer;font-size:12px;font-weight:600;">${c}</button>`
+    ).join("");
+    laadFotoBrowser();
+}
+
+function wisselFotoCategorieProfiel(cat) {
+    FOTO_STAAT.categorie = cat;
+    FOTO_STAAT.submap = "";
+    initFotoBrowser();
+}
+
+function openFotoSubmapProfiel(naam) {
+    FOTO_STAAT.submap = naam;
+    laadFotoBrowser();
+}
+
+function gaNaarFotoRootProfiel() {
+    FOTO_STAAT.submap = "";
+    laadFotoBrowser();
+}
+
+async function laadFotoBrowser() {
+    const breadcrumb = document.getElementById("fotoBreadcrumb");
+    const mappenGrid = document.getElementById("fotoMappenGrid");
+    const fotoGrid = document.getElementById("fotoGrid");
+    if (!breadcrumb) return;
+
+    breadcrumb.innerHTML = FOTO_STAAT.submap
+        ? `<a href="#" onclick="gaNaarFotoRootProfiel();return false;" style="color:var(--brand-600);text-decoration:none;">${FOTO_STAAT.categorie}</a> / ${FOTO_STAAT.submap}`
+        : FOTO_STAAT.categorie;
+
+    if (!FOTO_STAAT.submap) {
+        const res = await fetch("/api/fotomappen?bedrijf=" + encodeURIComponent(BEDRIJF_NAAM) + "&categorie=" + encodeURIComponent(FOTO_STAAT.categorie));
+        const mappen = await res.json();
+        mappenGrid.innerHTML = mappen.map(m =>
+            `<div onclick="openFotoSubmapProfiel('${m.replace(/'/g,"&#39;")}')" style="padding:8px 12px;background:var(--gray-50);border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;color:var(--gray-700);">📁 ${m}</div>`
+        ).join("");
+    } else {
+        mappenGrid.innerHTML = "";
+    }
+
+    const res2 = await fetch("/api/fotos?bedrijf=" + encodeURIComponent(BEDRIJF_NAAM) + "&categorie=" + encodeURIComponent(FOTO_STAAT.categorie) + "&submap=" + encodeURIComponent(FOTO_STAAT.submap));
+    const fotos = await res2.json();
+    fotoGrid.innerHTML = fotos.map(f =>
+        `<img src="/fotos_uploads/${f.bestandsnaam}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;cursor:pointer;" onclick="window.open('/fotos_uploads/${f.bestandsnaam}','_blank')" title="Door ${f.geupload_door} op ${f.timestamp}">`
+    ).join("") || `<div style="font-size:0.78rem;color:var(--gray-300);">Nog geen foto's hier.</div>`;
+}
+
+async function maakFotoSubmapProfiel() {
+    const input = document.getElementById("nieuweMapNaam");
+    const naam = input.value.trim();
+    if (!naam) return;
+    await fetch("/api/fotomappen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, categorie: FOTO_STAAT.categorie, submap: naam})});
+    input.value = "";
+    laadFotoBrowser();
+}
+
+async function uploadFotoProfiel() {
+    const input = document.getElementById("fotoInputProfiel");
+    const bestand = input.files[0];
+    if (!bestand) return;
+    const formData = new FormData();
+    formData.append("bedrijf", BEDRIJF_NAAM);
+    formData.append("categorie", FOTO_STAAT.categorie);
+    formData.append("submap", FOTO_STAAT.submap);
+    formData.append("foto", bestand);
+    const res = await fetch("/api/fotos", {method:"POST", body: formData});
+    const data = await res.json();
+    if (data.error) { alert(data.error); } else { laadFotoBrowser(); }
+    input.value = "";
+}
+
+initFotoBrowser();
 </script>
     """
     pagina = render_simple_page(bedrijf["naam"], "zoeken", inhoud)
