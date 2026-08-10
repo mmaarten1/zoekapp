@@ -3181,6 +3181,17 @@ function toggleMobielMenu() {
                 </select>
             </div>
 
+            <div class="filter-group">
+                <label class="filter-label">Accountmanager</label>
+                <select class="filter-select" name="accountmanager">
+                    <option value="">Alle bedrijven</option>
+                    <option value="__mij__" {% if accountmanager == "__mij__" %}selected{% endif %}>🙋 Alleen mijn bedrijven</option>
+                    {% for gebruikersnaam in alle_gebruikersnamen %}
+                    <option value="{{ gebruikersnaam }}" {% if accountmanager == gebruikersnaam %}selected{% endif %}>{{ gebruikersnaam }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
             <hr class="filter-divider">
             <button type="submit" class="btn-apply">Filters toepassen</button>
         </aside>
@@ -3968,6 +3979,7 @@ def export_csv():
     klanttype = request.args.get("klanttype", "")
     materiaal = request.args.get("materiaal", "")
     brontype  = request.args.get("brontype", "")
+    accountmanager = request.args.get("accountmanager", "")
 
     bedrijven = ENF_BEDRIJVEN
     if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
@@ -3976,6 +3988,10 @@ def export_csv():
     if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
     if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
     if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
+    if accountmanager:
+        accountmanagers_alle = laad_accountmanagers()
+        gezocht_am = session.get("gebruikersnaam", "") if accountmanager == "__mij__" else accountmanager
+        bedrijven = [b for b in bedrijven if accountmanagers_alle.get(b["naam"], "") == gezocht_am]
 
     output = io.StringIO()
     schrijver = csv.writer(output)
@@ -4299,7 +4315,7 @@ PAGINA_GROOTTE = 200
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    zoekterm = land = regio = klanttype = materiaal = brontype = ""
+    zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = ""
     pagina = 1
 
     if request.method == "POST":
@@ -4309,6 +4325,7 @@ def index():
         klanttype = request.form.get("klanttype", "")
         materiaal = request.form.get("materiaal", "")
         brontype  = request.form.get("brontype", "")
+        accountmanager = request.form.get("accountmanager", "")
         pagina    = request.form.get("pagina", "1")
     else:
         zoekterm = request.args.get("zoekterm", "").lower()
@@ -4317,6 +4334,7 @@ def index():
         klanttype = request.args.get("klanttype", "")
         materiaal = request.args.get("materiaal", "")
         brontype  = request.args.get("brontype", "")
+        accountmanager = request.args.get("accountmanager", "")
         pagina    = request.args.get("pagina", "1")
 
     try:
@@ -4331,9 +4349,13 @@ def index():
     if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
     if materiaal: bedrijven = [b for b in bedrijven if materiaal.strip().lower() in b.get("materialen","").lower()]
     if brontype:  bedrijven = [b for b in bedrijven if b.get("brontype","").strip().lower() == brontype.strip().lower()]
+    if accountmanager:
+        accountmanagers_alle = laad_accountmanagers()
+        gezocht_am = session.get("gebruikersnaam", "") if accountmanager == "__mij__" else accountmanager
+        bedrijven = [b for b in bedrijven if accountmanagers_alle.get(b["naam"], "") == gezocht_am]
 
     totaal_gevonden = len(bedrijven)
-    er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype)
+    er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype or accountmanager)
     totaal_paginas = max(1, (totaal_gevonden + PAGINA_GROOTTE - 1) // PAGINA_GROOTTE)
     pagina = min(pagina, totaal_paginas)
     start = (pagina - 1) * PAGINA_GROOTTE
@@ -4342,23 +4364,24 @@ def index():
 
     def maak_pagina_url(p):
         params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
-                   "materiaal": materiaal, "brontype": brontype, "pagina": p}
+                   "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager, "pagina": p}
         params = {k: v for k, v in params.items() if v}
         return "/?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
 
     export_params = {"zoekterm": zoekterm, "land": land, "regio": regio, "klanttype": klanttype,
-                      "materiaal": materiaal, "brontype": brontype}
+                      "materiaal": materiaal, "brontype": brontype, "accountmanager": accountmanager}
     export_params = {k: v for k, v in export_params.items() if v}
     export_query = "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in export_params.items())
 
     return render_template_string(HTML,
         bedrijven=bedrijven, zoekterm=zoekterm, land=land, regio=regio,
-        klanttype=klanttype, materiaal=materiaal, brontype=brontype,
+        klanttype=klanttype, materiaal=materiaal, brontype=brontype, accountmanager=accountmanager,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
         er_is_gefilterd=er_is_gefilterd, pagina=pagina, totaal_paginas=totaal_paginas,
-        maak_pagina_url=maak_pagina_url, export_query=export_query)
+        maak_pagina_url=maak_pagina_url, export_query=export_query,
+        alle_gebruikersnamen=sorted(laad_users().keys()))
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
