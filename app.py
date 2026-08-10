@@ -3186,7 +3186,7 @@ function toggleMobielMenu() {
         <form method="POST" id="searchForm">
             <div class="search-container">
                 <div class="search-row">
-                    <input class="search-input" name="zoekterm" placeholder="🔍  Search company name..." value="{{ zoekterm }}">
+                    <input class="search-input" name="zoekterm" placeholder="🔍  Bedrijf, contactpersoon of stad..." value="{{ zoekterm }}">
                     <select class="search-select" name="land" id="landSelect" onchange="updateRegio()">
                         <option value="">All Countries</option>
                         {% for l in landen %}
@@ -4124,7 +4124,7 @@ def export_csv():
     materiaal_min_volume = request.args.get("materiaal_min_volume", "")
 
     bedrijven = ENF_BEDRIJVEN
-    if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
+    if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower() or zoekterm in b.get("contactpersoon","").lower() or zoekterm in b.get("regio","").lower()]
     if land:      bedrijven = [b for b in bedrijven if b.get("land","").strip().lower() == land.strip().lower()]
     if regio:     bedrijven = [b for b in bedrijven if b.get("regio","").strip().lower() == regio.strip().lower()]
     if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
@@ -4612,7 +4612,7 @@ def index():
         pagina = 1
 
     bedrijven = ENF_BEDRIJVEN
-    if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower()]
+    if zoekterm:  bedrijven = [b for b in bedrijven if zoekterm in b["naam"].lower() or zoekterm in b.get("contactpersoon","").lower() or zoekterm in b.get("regio","").lower()]
     if land:      bedrijven = [b for b in bedrijven if b.get("land","").strip().lower() == land.strip().lower()]
     if regio:     bedrijven = [b for b in bedrijven if b.get("regio","").strip().lower() == regio.strip().lower()]
     if klanttype: bedrijven = [b for b in bedrijven if klanttype.strip().lower() in b.get("klanttype","").lower()]
