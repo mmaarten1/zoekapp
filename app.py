@@ -2266,6 +2266,9 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             .dg-grid { grid-template-columns: repeat(2, 1fr) !important; }
             .dg-rij-2 { flex-direction: column; }
             .profiel-grid { grid-template-columns: 1fr !important; }
+            .drawer-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+            .drawer-row-value { text-align: left; width: 100%; }
+            .drawer-row-value input[type="text"] { width: 100% !important; text-align: left !important; box-sizing: border-box; }
         }
 
 
@@ -2983,6 +2986,9 @@ HTML = '''
             .dg-grid { grid-template-columns: repeat(2, 1fr) !important; }
             .dg-rij-2 { flex-direction: column; }
             .profiel-grid { grid-template-columns: 1fr !important; }
+            .drawer-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+            .drawer-row-value { text-align: left; width: 100%; }
+            .drawer-row-value input[type="text"] { width: 100% !important; text-align: left !important; box-sizing: border-box; }
         }
 
 
