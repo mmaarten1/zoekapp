@@ -5582,25 +5582,35 @@ def certificeringen_pagina():
 
 @app.route("/materialen")
 def materialen():
-    per_materiaal = {}
-    per_materiaal_landen = {}
-    for b in ENF_BEDRIJVEN:
-        for m in [x.strip() for x in b.get("materialen", "").split(",") if x.strip()]:
-            per_materiaal[m] = per_materiaal.get(m, 0) + 1
-            per_materiaal_landen.setdefault(m, set()).add(b.get("land",""))
+    taxonomie = laad_materiaal_taxonomie()
 
-    materialen_lijst = sorted(per_materiaal.items(), key=lambda x: -x[1])
-    max_aantal = max([a for _, a in materialen_lijst], default=1)
-    materialen_data = [
-        {"naam": naam, "aantal": aantal, "landen": len(per_materiaal_landen.get(naam, [])), "pct": round(aantal/max_aantal*100,1)}
-        for naam, aantal in materialen_lijst
-    ]
+    materialen_data = []
+    for categorie, kwaliteiten_lijst in taxonomie.items():
+        bedrijven_in_categorie = [b for b in ENF_BEDRIJVEN if categorie.strip().lower() in b.get("materialen","").lower()]
+        landen = {b.get("land","") for b in bedrijven_in_categorie}
 
-    iconen = {"Paper":"📄","Plastic":"🧴","Metal":"🔩","Glass":"🍾","Wood":"🪵","Organic":"🌱","Electronic":"💻"}
+        kwaliteit_tellingen = {}
+        for kw in kwaliteiten_lijst:
+            aantal_kw = sum(1 for b in ENF_BEDRIJVEN if kw.strip().lower() in b.get("kwaliteiten","").lower())
+            if aantal_kw > 0:
+                kwaliteit_tellingen[kw] = aantal_kw
+        top_kwaliteiten = sorted(kwaliteit_tellingen.items(), key=lambda x: -x[1])[:4]
+
+        materialen_data.append({
+            "naam": categorie, "aantal": len(bedrijven_in_categorie), "landen": len(landen),
+            "top_kwaliteiten": top_kwaliteiten,
+        })
+
+    materialen_data.sort(key=lambda x: -x["aantal"])
+    max_aantal = max([m["aantal"] for m in materialen_data], default=1)
+    for m in materialen_data:
+        m["pct"] = round(m["aantal"] / max_aantal * 100, 1) if max_aantal else 0
+
+    iconen = {"Paper":"📄","Plastic":"🧴","Metal":"🔩","Glass":"🍾","Wood":"🪵","Organic":"🌱","Electronic":"💻","Karton":"📦"}
 
     inhoud = """
 <style>
-.mat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; }
+.mat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
 .mat-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:20px; text-decoration:none; display:block; transition:var(--transition); }
 .mat-kaart:hover { border-color:var(--brand-300); box-shadow:var(--shadow-md); transform:translateY(-2px); }
 .mat-icoon { font-size:1.8rem; margin-bottom:10px; }
@@ -5609,10 +5619,11 @@ def materialen():
 .mat-bar-track { background:var(--gray-100); border-radius:6px; height:7px; overflow:hidden; }
 .mat-bar-fill { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); height:100%; }
 .mat-getal { font-weight:800; color:var(--brand-700); font-size:1.3rem; }
+.mat-kwaliteit-tag { display:inline-block; background:var(--gray-50); color:var(--gray-500); font-size:10.5px; padding:2px 7px; border-radius:5px; margin:2px 3px 0 0; }
 </style>
 
 <div class="page-title">Materials</div>
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:24px;font-size:0.88rem;">{{ materialen_data|length }} materiaaltypen gevonden over {{ totaal }} bedrijven. Klik op een materiaal om gefilterd te zoeken.</p>
+<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:24px;font-size:0.88rem;">{{ materialen_data|length }} grondstofgroepen (beheerd via Instellingen → Materialen beheren) over {{ totaal }} bedrijven. Klik op een groep om gefilterd te zoeken.</p>
 
 <div class="mat-grid">
     {% for m in materialen_data %}
@@ -5621,10 +5632,15 @@ def materialen():
         <div class="mat-naam">{{ m.naam }}</div>
         <div class="mat-sub">{{ m.landen }} landen</div>
         <div class="mat-getal">{{ m.aantal }}</div>
-        <div class="mat-bar-track" style="margin-top:8px;"><div class="mat-bar-fill" style="width:{{ m.pct }}%"></div></div>
+        <div class="mat-bar-track" style="margin-top:8px;margin-bottom:10px;"><div class="mat-bar-fill" style="width:{{ m.pct }}%"></div></div>
+        {% if m.top_kwaliteiten %}
+        <div>
+            {% for kw, aantal_kw in m.top_kwaliteiten %}<span class="mat-kwaliteit-tag">{{ kw }} ({{ aantal_kw }})</span>{% endfor %}
+        </div>
+        {% endif %}
     </a>
     {% else %}
-    <div class="lege-staat">Nog geen materiaaldata.</div>
+    <div class="lege-staat">Nog geen grondstofgroepen. Ga naar Instellingen → Materialen beheren.</div>
     {% endfor %}
 </div>
     """
