@@ -5231,6 +5231,7 @@ def orders_pagina():
 </div>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    <a href="/orders?filter_verantwoordelijke={{ gebruikersnaam }}" style="padding:6px 12px;border-radius:6px;font-size:12.5px;font-weight:600;text-decoration:none;{% if filter_verantwoordelijke == gebruikersnaam %}background:var(--brand-600);color:#fff;{% else %}background:var(--brand-50);color:var(--brand-700);{% endif %}">🙋 Mijn orders</a>
     <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
         <option value="">Alle statussen</option>
         {% for s in statussen %}<option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
@@ -5329,7 +5330,8 @@ def orders_pagina():
                                     filter_status=filter_status, filter_materiaal=filter_materiaal, filter_verantwoordelijke=filter_verantwoordelijke,
                                     alle_materialen_in_orders=alle_materialen_in_orders, alle_verantwoordelijken=alle_verantwoordelijken,
                                     vooringevuld_bedrijf=vooringevuld_bedrijf, materiaal_taxonomie=laad_materiaal_taxonomie(),
-                                    alle_bedrijfsnamen=alle_bedrijfsnamen, aantal_verlopen=aantal_verlopen)
+                                    alle_bedrijfsnamen=alle_bedrijfsnamen, aantal_verlopen=aantal_verlopen,
+                                    gebruikersnaam=session.get("gebruikersnaam", ""))
 
 @app.route("/contacten")
 def contacten():
