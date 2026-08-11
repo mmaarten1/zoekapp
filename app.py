@@ -864,9 +864,14 @@ def _gov_uk_bulk_worker(gebruikersnaam, max_nieuw=3000):
                     continue
                 bestaande.add(sleutel)
 
+                # Voorzichtige materiaal-gok: alleen bij duidelijke signalen, anders leeg laten (liever niks dan fout gokken)
+                gegokt_materiaal = ""
+                if any(w in naam_laag for w in ("metal", "scrap")):
+                    gegokt_materiaal = "Metal"
+
                 nieuwe_bedrijven_tmp.append({
                     "naam": naam, "land": "United Kingdom", "regio": stad,
-                    "materialen": "", "klanttype": "", "volume": "", "url": "",
+                    "materialen": gegokt_materiaal, "klanttype": "", "volume": "", "url": "",
                     "lat": None, "lon": None,
                     "adres": adres, "telefoon": "",
                     "bedrijf_id": TENANT_ID, "brontype": "Afvalbeheer",
