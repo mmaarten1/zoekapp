@@ -1357,7 +1357,24 @@ def normaliseer_naam(naam):
     return naam
 
 def volledigheid_score(item):
-    return sum(1 for veld in ("adres", "telefoon", "materialen", "volume", "certificeringen") if item.get(veld))
+    score = sum(1 for veld in ("adres", "telefoon", "materialen", "volume", "certificeringen", "kwaliteiten", "contactpersoon", "brontype") if item.get(veld))
+    if isinstance(item.get("materiaal_volumes"), dict) and item["materiaal_volumes"]:
+        score += len(item["materiaal_volumes"])
+    return score
+
+def voeg_duplicaten_samen(winnaar, verliezer):
+    """Vult lege velden van de winnaar aan met waarden van de verliezer, zodat er nooit data verloren gaat bij het opschonen."""
+    for veld in ("adres", "telefoon", "materialen", "volume", "certificeringen", "kwaliteiten", "contactpersoon", "brontype", "klanttype", "url"):
+        if not winnaar.get(veld) and verliezer.get(veld):
+            winnaar[veld] = verliezer[veld]
+    verliezer_volumes = verliezer.get("materiaal_volumes", {})
+    if isinstance(verliezer_volumes, dict) and verliezer_volumes:
+        winnaar.setdefault("materiaal_volumes", {})
+        if not isinstance(winnaar["materiaal_volumes"], dict):
+            winnaar["materiaal_volumes"] = {}
+        for materiaal_naam, waarde in verliezer_volumes.items():
+            winnaar["materiaal_volumes"].setdefault(materiaal_naam, waarde)
+    return winnaar
 
 def dedupliceer_lijst(lijst, plaatsveld, modus="streng"):
     def sleutel(item):
@@ -1374,7 +1391,9 @@ def dedupliceer_lijst(lijst, plaatsveld, modus="streng"):
             volgorde.append(s)
         else:
             if volledigheid_score(item) > volledigheid_score(groepen[s]):
-                groepen[s] = item
+                groepen[s] = voeg_duplicaten_samen(item, groepen[s])
+            else:
+                groepen[s] = voeg_duplicaten_samen(groepen[s], item)
     return [groepen[s] for s in volgorde], len(lijst) - len(volgorde)
 
 def opschonen_bedrijven_en_fabrieken(modus="streng"):
