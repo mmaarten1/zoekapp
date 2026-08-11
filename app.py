@@ -3563,7 +3563,7 @@ function toggleMobielMenu() {
         <div class="results-list">
             {% for bedrijf in bedrijven %}
             <div class="company-card"
-                onclick="openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}', '{{ bedrijf.certificeringen|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.contactpersoon|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.kwaliteiten|default("", true)|replace("'","&#39;") }}')">
+                onclick="openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}', '{{ bedrijf.certificeringen|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.contactpersoon|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.kwaliteiten|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.brontype|default("", true)|replace("'","&#39;") }}')">
                 <div class="company-card-top">
                     <span class="company-index">{{ loop.index }}</span>
                     <span class="company-name" style="flex:1;">{{ bedrijf.naam }}{% if bedrijf.adres or bedrijf.telefoon %}<span class="verificatie-badge">✓ Geverifieerd</span>{% endif %}</span>
@@ -3667,7 +3667,7 @@ var clusterGroep = L.markerClusterGroup();
 {% for b in bedrijven %}
 L.marker([{{ b.lat }}, {{ b.lon }}])
     .bindPopup("<b>{{ b.naam|replace('"','') }}</b><br><small>{{ b.regio }}, {{ b.land }}</small>")
-    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }},"{{ b.adres|default('', true)|replace("'","&#39;") }}","{{ b.telefoon|default('', true) }}","{{ b.certificeringen|default('', true)|replace("'","&#39;") }}","{{ b.contactpersoon|default('', true)|replace("'","&#39;") }}","{{ b.kwaliteiten|default('', true)|replace("'","&#39;") }}"); })
+    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }},"{{ b.adres|default('', true)|replace("'","&#39;") }}","{{ b.telefoon|default('', true) }}","{{ b.certificeringen|default('', true)|replace("'","&#39;") }}","{{ b.contactpersoon|default('', true)|replace("'","&#39;") }}","{{ b.kwaliteiten|default('', true)|replace("'","&#39;") }}","{{ b.brontype|default('', true)|replace("'","&#39;") }}"); })
     .addTo(clusterGroep);
 {% endfor %}
 kaart.addLayer(clusterGroep);
@@ -3728,6 +3728,7 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
 </span></div>
         <div class="drawer-row"><span class="drawer-row-label">Accountmanager</span><span class="drawer-row-value" id="accountmanagerWaarde">—</span></div>
         <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
+        ${window.currentDrawerData && window.currentDrawerData.brontype ? `<div class="drawer-row"><span class="drawer-row-label">Type</span><span class="drawer-row-value">${window.currentDrawerData.brontype}</span></div>` : ""}
         <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
         ${window.currentDrawerData && window.currentDrawerData.kwaliteiten ? `<div class="drawer-row"><span class="drawer-row-label">Kwaliteiten</span><span class="drawer-row-value">${window.currentDrawerData.kwaliteiten}</span></div>` : ""}
         <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div>
@@ -3791,8 +3792,8 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
     return tabbalk + paneelInfo + paneelLogistiek + paneelCommercieel;
 }
 
-function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon, adres, telefoon, certificeringen, contactpersoon, kwaliteiten) {
-    window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon, adres: adres || "", telefoon: telefoon || "", certificeringen: certificeringen || "", contactpersoon: contactpersoon || "", kwaliteiten: kwaliteiten || ""};
+function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon, adres, telefoon, certificeringen, contactpersoon, kwaliteiten, brontype) {
+    window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon, adres: adres || "", telefoon: telefoon || "", certificeringen: certificeringen || "", contactpersoon: contactpersoon || "", kwaliteiten: kwaliteiten || "", brontype: brontype || ""};
     {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
     document.getElementById("drawerName").textContent = naam;
     document.getElementById("drawerLoc").innerHTML = "📍 " + regio + ", " + land + ' · <a href="/bedrijf/' + encodeURIComponent(naam) + '" style="color:var(--brand-600);font-weight:600;text-decoration:none;">Volledig profiel →</a>';
@@ -7524,9 +7525,8 @@ function vulContact(data) {
     if (data.website) html += `<div class="drawer-row"><span class="drawer-row-label">Website</span><span class="drawer-row-value"><a href="${data.website}" target="_blank" style="color:var(--brand-600);font-weight:600;">${data.website.replace("https://","").replace("http://","").split("/")[0]}</a></span></div>`;
     var tel = data.telefoon || {{ (bedrijf.telefoon or "")|tojson }};
     var adr = data.adres || {{ (bedrijf.adres or "")|tojson }};
-    if (tel) html += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value">${tel}</span></div>`;
-    if (adr) html += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value">${adr}</span></div>`;
-    if (!html) html = '<div style="color:var(--gray-400);font-size:var(--text-sm);">Geen extra contactgegevens gevonden.</div>';
+    html += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value"><input type="text" value="${tel.replace(/"/g,'&quot;')}" data-veld="telefoon" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;"></span></div>`;
+    html += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value"><input type="text" value="${adr.replace(/"/g,'&quot;')}" data-veld="adres" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:200px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;"></span></div>`;
     document.getElementById("profielContact").innerHTML = html;
 }
 
