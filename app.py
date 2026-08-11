@@ -5475,6 +5475,68 @@ def export_orders_csv():
     return Response(output.getvalue(), mimetype="text/csv",
                      headers={"Content-Disposition": "attachment; filename=orders_export.csv"})
 
+@app.route("/export-voorraad-csv")
+def export_voorraad_csv():
+    import csv, io
+    from flask import Response
+    filter_materiaal = request.args.get("filter_materiaal", "")
+    filter_type = request.args.get("filter_type", "")
+    filter_locatie = request.args.get("filter_locatie", "")
+
+    transacties = laad_voorraad()
+    if filter_materiaal:
+        transacties = [t for t in transacties if t.get("materiaal") == filter_materiaal]
+    if filter_type:
+        transacties = [t for t in transacties if t.get("type") == filter_type]
+    if filter_locatie:
+        transacties = [t for t in transacties if t.get("locatie") == filter_locatie or t.get("locatie_van") == filter_locatie or t.get("locatie_naar") == filter_locatie]
+
+    output = io.StringIO()
+    schrijver = csv.writer(output)
+    schrijver.writerow(["Type", "Materiaal", "Hoeveelheid (ton)", "Locatie", "Van locatie", "Naar locatie", "Keuringsstatus",
+                         "Reden (adjustment)", "Bedrijf", "Prijs", "Datum", "Gebruiker", "Notitie", "Aangemaakt"])
+    for t in transacties:
+        schrijver.writerow([t.get("type",""), t.get("materiaal",""), t.get("hoeveelheid",""), t.get("locatie",""),
+                             t.get("locatie_van",""), t.get("locatie_naar",""), t.get("keuringsstatus",""),
+                             t.get("reden",""), t.get("bedrijf",""), t.get("prijs",""), t.get("datum",""),
+                             t.get("gebruiker",""), t.get("notitie",""), t.get("aangemaakt","")])
+
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=voorraad_transacties_export.csv"})
+
+@app.route("/export-shipments-csv")
+def export_shipments_csv():
+    import csv, io
+    from flask import Response
+    filter_flow_type = request.args.get("filter_flow_type", "")
+    filter_shipment_status = request.args.get("filter_shipment_status", "")
+    filter_shipment_materiaal = request.args.get("filter_shipment_materiaal", "")
+
+    shipments = laad_shipments()
+    for s in shipments:
+        s["flow_type"] = bepaal_shipment_flow_type(s)
+    if filter_flow_type:
+        shipments = [s for s in shipments if s.get("flow_type") == filter_flow_type]
+    if filter_shipment_status:
+        shipments = [s for s in shipments if s.get("status") == filter_shipment_status]
+    if filter_shipment_materiaal:
+        shipments = [s for s in shipments if s.get("materiaal") == filter_shipment_materiaal]
+
+    output = io.StringIO()
+    schrijver = csv.writer(output)
+    schrijver.writerow(["Referentie", "Flow type", "Origin land", "Origin leverancier", "Loading locatie",
+                         "Destination land", "Destination naam", "Materiaal", "Gepland (ton)", "Werkelijk (ton)",
+                         "Bruto", "Tara", "Netto", "Weegbon", "Transport", "Status", "Datum", "Gebruiker", "Notitie"])
+    for s in shipments:
+        schrijver.writerow([s.get("referentie",""), s.get("flow_type",""), s.get("origin_land",""), s.get("origin_leverancier",""),
+                             s.get("loading_locatie",""), s.get("destination_land",""), s.get("destination_naam",""),
+                             s.get("materiaal",""), s.get("gepland_hoeveelheid",""), s.get("werkelijk_hoeveelheid",""),
+                             s.get("bruto_gewicht",""), s.get("tara_gewicht",""), s.get("netto_gewicht",""), s.get("weegbon_nummer",""),
+                             s.get("transport",""), s.get("status",""), s.get("datum",""), s.get("gebruiker",""), s.get("notitie","")])
+
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=shipments_export.csv"})
+
 SHIPMENT_STATUSSEN = ["Planned", "Confirmed", "Loading", "Loaded", "In Transit", "Arrived", "Weighed", "Received", "Delivered", "Cancelled"]
 ALBLASSERDAM_NAAM = "Alblasserdam"
 
@@ -6058,6 +6120,7 @@ def voorraad_pagina():
             </select>
             {% if filter_flow_type or filter_shipment_status or filter_shipment_materiaal %}<a href="/voorraad#shipments" style="font-size:11px;color:var(--gray-400);text-decoration:none;">Wis</a>{% endif %}
             <span style="font-size:11px;color:var(--gray-400);">{{ getoonde_shipments|length }} van {{ actieve_shipments|length }}</span>
+            <a href="/export-shipments-csv?filter_flow_type={{ filter_flow_type }}&filter_shipment_status={{ filter_shipment_status|urlencode }}&filter_shipment_materiaal={{ filter_shipment_materiaal|urlencode }}" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:4px 8px;border-radius:5px;">⬇ CSV</a>
         </form>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -6274,6 +6337,7 @@ function toggleTransactieVelden() {
     </select>
     {% if filter_type or filter_materiaal or filter_locatie %}<a href="/voorraad" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
     <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_transacties|length }} van {{ transacties_gesorteerd|length }} transacties</span>
+    <a href="/export-voorraad-csv?filter_type={{ filter_type }}&filter_materiaal={{ filter_materiaal|urlencode }}&filter_locatie={{ filter_locatie|urlencode }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;">⬇ Export CSV</a>
 </form>
 
 <div class="vrd-kaart" style="margin-bottom:24px;">
