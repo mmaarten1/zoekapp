@@ -4398,12 +4398,16 @@ def export_csv():
     output = io.StringIO()
     schrijver = csv.writer(output)
     schrijver.writerow(["Naam", "Land", "Stad/Regio", "Bedrijfstype", "Materialen", "Kwaliteiten", "Klanttype", "Volume (t/jaar)",
-                         "Adres", "Telefoonnummer", "Contactpersoon", "Certificeringen", "Website"])
+                         "Volume per materiaal", "Adres", "Telefoonnummer", "Contactpersoon", "Accountmanager", "Certificeringen", "Website"])
+    accountmanagers_export = laad_accountmanagers()
     for b in bedrijven:
+        volumes_dict = b.get("materiaal_volumes", {})
+        volumes_tekst = ", ".join(f"{k}: {v}" for k, v in volumes_dict.items()) if isinstance(volumes_dict, dict) else ""
         schrijver.writerow([
             b.get("naam",""), b.get("land",""), b.get("regio",""), b.get("brontype",""),
             b.get("materialen",""), b.get("kwaliteiten",""), b.get("klanttype",""), b.get("volume",""),
-            b.get("adres",""), b.get("telefoon",""), b.get("contactpersoon",""), b.get("certificeringen",""), b.get("url",""),
+            volumes_tekst, b.get("adres",""), b.get("telefoon",""), b.get("contactpersoon",""),
+            accountmanagers_export.get(b.get("naam",""), ""), b.get("certificeringen",""), b.get("url",""),
         ])
 
     from flask import Response
