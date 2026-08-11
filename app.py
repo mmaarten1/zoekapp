@@ -5780,11 +5780,22 @@ def voorraad_pagina():
     for s in alle_shipments:
         s["flow_type"] = bepaal_shipment_flow_type(s)
     actieve_shipments = [s for s in alle_shipments if s.get("status") != "Cancelled"]
+    filter_flow_type = request.args.get("filter_flow_type", "")
+    filter_shipment_status = request.args.get("filter_shipment_status", "")
+    filter_shipment_materiaal = request.args.get("filter_shipment_materiaal", "")
+    getoonde_shipments = actieve_shipments
+    if filter_flow_type:
+        getoonde_shipments = [s for s in getoonde_shipments if s.get("flow_type") == filter_flow_type]
+    if filter_shipment_status:
+        getoonde_shipments = [s for s in getoonde_shipments if s.get("status") == filter_shipment_status]
+    if filter_shipment_materiaal:
+        getoonde_shipments = [s for s in getoonde_shipments if s.get("materiaal") == filter_shipment_materiaal]
     alle_shipments_dropdown = actieve_shipments
     kpi_direct_flow_totaal = sum(vs["direct_flow_per_materiaal"].values())
     flow_by_origin_lijst = sorted(vs["flow_by_origin"].items(), key=lambda x: -x[1])
     flow_by_destination_lijst = sorted(vs["flow_by_destination"].items(), key=lambda x: -x[1])
     kpi_totaal_controlled = kpi_fysiek_totaal + kpi_transit_totaal + kpi_direct_flow_totaal
+    shipment_materialen = sorted({s.get("materiaal","") for s in actieve_shipments if s.get("materiaal")})
 
     _alle_bedrijven_landen = sorted({b.get("land","") for b in ENF_BEDRIJVEN if b.get("land")})
 
@@ -6028,14 +6039,34 @@ def voorraad_pagina():
 </div>
 
 <div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
-    <div class="dg-kaart-titel" style="margin-bottom:10px;">Alle actieve shipments</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="dg-kaart-titel" style="margin-bottom:0;">Alle actieve shipments</div>
+        <form method="GET" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            <select name="filter_flow_type" onchange="this.form.submit()" style="padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;">
+                <option value="">Alle types</option>
+                <option value="inbound" {% if filter_flow_type == "inbound" %}selected{% endif %}>Inbound</option>
+                <option value="outbound" {% if filter_flow_type == "outbound" %}selected{% endif %}>Outbound</option>
+                <option value="direct" {% if filter_flow_type == "direct" %}selected{% endif %}>Direct</option>
+            </select>
+            <select name="filter_shipment_status" onchange="this.form.submit()" style="padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;">
+                <option value="">Alle statussen</option>
+                {% for st in shipment_statussen %}<option value="{{ st }}" {% if filter_shipment_status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+            </select>
+            <select name="filter_shipment_materiaal" onchange="this.form.submit()" style="padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;">
+                <option value="">Alle materialen</option>
+                {% for m in shipment_materialen %}<option value="{{ m }}" {% if filter_shipment_materiaal == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+            </select>
+            {% if filter_flow_type or filter_shipment_status or filter_shipment_materiaal %}<a href="/voorraad#shipments" style="font-size:11px;color:var(--gray-400);text-decoration:none;">Wis</a>{% endif %}
+            <span style="font-size:11px;color:var(--gray-400);">{{ getoonde_shipments|length }} van {{ actieve_shipments|length }}</span>
+        </form>
+    </div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr style="text-align:left;color:var(--gray-400);font-size:10px;text-transform:uppercase;">
             <th style="padding:6px 8px;">Datum</th><th style="padding:6px 8px;">Route</th><th style="padding:6px 8px;">Materiaal</th>
             <th style="padding:6px 8px;text-align:right;">Ton (gepl./werk.)</th><th style="padding:6px 8px;">Type</th><th style="padding:6px 8px;">Status</th><th></th>
         </tr></thead>
         <tbody>
-        {% for s in actieve_shipments %}
+        {% for s in getoonde_shipments %}
         <tr style="border-top:1px solid var(--gray-50);">
             <td style="padding:7px 8px;">{{ s.datum }}</td>
             <td style="padding:7px 8px;">{{ s.origin_land }}{% if s.origin_leverancier %} ({{ s.origin_leverancier }}){% endif %} → {{ s.destination_land }}{% if s.destination_naam %} ({{ s.destination_naam }}){% endif %}</td>
@@ -6367,7 +6398,10 @@ function toggleTransactieVelden() {
                                     actieve_shipments=actieve_shipments, alle_shipments_dropdown=alle_shipments_dropdown,
                                     shipment_statussen=SHIPMENT_STATUSSEN, landen=_alle_bedrijven_landen,
                                     alle_contracten=alle_contracten, is_admin=is_huidige_gebruiker_admin(), prefill=prefill,
-                                    fabrieken_overzicht_lijst=fabrieken_overzicht_lijst)
+                                    fabrieken_overzicht_lijst=fabrieken_overzicht_lijst,
+                                    getoonde_shipments=getoonde_shipments, filter_flow_type=filter_flow_type,
+                                    filter_shipment_status=filter_shipment_status, filter_shipment_materiaal=filter_shipment_materiaal,
+                                    shipment_materialen=shipment_materialen)
 
 @app.route("/orders", methods=["GET", "POST"])
 def orders_pagina():
