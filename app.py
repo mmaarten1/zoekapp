@@ -450,7 +450,7 @@ def geocode_adres(adres, stad):
     if query in cache:
         return cache[query]
     try:
-        headers = {"User-Agent": "RecycleFind/1.0"}
+        headers = {"User-Agent": "FTNext/1.0"}
         params = {"q": query, "format": "json", "limit": 1}
         resp = requests.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers, timeout=8)
         resultaten = resp.json()
@@ -685,7 +685,7 @@ def scrapmonster_importeer_land(land_naam, max_paginas=50):
     for pagina in range(1, max_paginas + 1):
         url = f"https://www.scrapmonster.com/scrap-yard/{slug}/" if pagina == 1 else f"https://www.scrapmonster.com/scrap-yard/{slug}/page/{pagina}"
         try:
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (RecycleFind/1.0)"}, timeout=30)
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (FTNext/1.0)"}, timeout=30)
         except Exception:
             break
         if resp.status_code != 200:
@@ -822,7 +822,7 @@ def _gov_uk_bulk_worker(gebruikersnaam, max_nieuw=3000):
     GOV_UK_BULK_STATUS.update({"bezig": True, "klaar": False, "fout": "", "voortgang": "Bestand downloaden...", "totaal_gezien": 0, "totaal_nieuw": 0})
     try:
         resp = requests.get("https://environment.data.gov.uk/public-register/downloads/waste-carriers-brokers",
-                             headers={"User-Agent": "Mozilla/5.0 (RecycleFind/1.0)"}, timeout=180)
+                             headers={"User-Agent": "Mozilla/5.0 (FTNext/1.0)"}, timeout=180)
         zip_bestand = zipfile.ZipFile(io_module.BytesIO(resp.content))
         csv_naam = next(n for n in zip_bestand.namelist() if n.lower().endswith(".csv"))
 
@@ -1090,7 +1090,7 @@ def debug_gov_uk_register():
     url = "https://environment.data.gov.uk/public-register/downloads/waste-carriers-brokers"
     info = f"URL: {url}\n\n"
     try:
-        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (RecycleFind/1.0)"}, timeout=60)
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (FTNext/1.0)"}, timeout=60)
         info += f"Status: {resp.status_code}\nContent-Type: {resp.headers.get('Content-Type')}\nGrootte: {len(resp.content)} bytes\n\n"
 
         if resp.status_code == 200:
@@ -1121,7 +1121,7 @@ def debug_scrapmonster():
     slug = SCRAPMONSTER_LANDEN.get(land_naam, "netherlands")
     url = f"https://www.scrapmonster.com/scrap-yard/{slug}/"
     try:
-        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (RecycleFind/1.0)"}, timeout=30)
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (FTNext/1.0)"}, timeout=30)
         info = f"URL: {url}\nStatus: {resp.status_code}\nContent-Length: {len(resp.text)}\n\n"
         info += f"Aantal keer '/scrap-yard/' in de HTML: {resp.text.count('/scrap-yard/')}\n"
         info += f"Aantal keer 'tel:' in de HTML: {resp.text.count('tel:')}\n\n"
@@ -1533,7 +1533,7 @@ def osm_importeer_land(land_naam):
             resp = requests.get(
                 "https://overpass-api.de/api/interpreter",
                 params={"data": query},
-                headers={"User-Agent": "RecycleFind/1.0"},
+                headers={"User-Agent": "FTNext/1.0"},
                 timeout=150
             )
             if resp.status_code != 200:
@@ -1958,7 +1958,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>__TITEL__ — RecycleFind</title>
+    <title>__TITEL__ — FTNext</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         /* ============================================
@@ -2643,7 +2643,7 @@ def sidebar_html(actief):
     return '''<button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
 <div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
 <aside class="sidebar" id="mobielSidebar">
-    <a href="/" class="sidebar-logo">Recycle<em>Find</em></a>
+    <a href="/" class="sidebar-logo">FT<em>Next</em></a>
     <nav class="sidebar-nav">
         ITEMS_HIER
     </nav>
@@ -2673,7 +2673,7 @@ HTML = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RecycleFind — Global Recycling Intelligence</title>
+    <title>FTNext — Global Recycling Intelligence</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
@@ -3341,7 +3341,7 @@ HTML = '''
 <button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
 <div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
 <aside class="sidebar" id="mobielSidebar">
-    <a href="/" class="sidebar-logo">Recycle<em>Find</em></a>
+    <a href="/" class="sidebar-logo">FT<em>Next</em></a>
     <nav class="sidebar-nav">
         <a href="/" class="sidebar-link active"><span class="icoon">🔍</span> Zoeken</a>
         <a href="/wereldkaart" class="sidebar-link"><span class="icoon">🌍</span> World Map</a>
@@ -3409,7 +3409,7 @@ function toggleMobielMenu() {
 
 <!-- NAVBAR -->
 <nav class="navbar">
-    <a href="/" class="navbar-logo">Recycle<em>Find</em></a>
+    <a href="/" class="navbar-logo">FT<em>Next</em></a>
     <div class="navbar-divider"></div>
     <span class="navbar-stat"><strong>{{ totaal }}</strong> companies · <strong>{{ landen|length }}</strong> countries</span>
     <div class="navbar-right">
@@ -4284,7 +4284,7 @@ LOGIN_HTML = '''
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Inloggen — RecycleFind</title>
+    <title>Inloggen — FTNext</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
@@ -4321,7 +4321,7 @@ LOGIN_HTML = '''
 </head>
 <body>
     <div class="box">
-        <div class="logo">Recycle<em>Find</em></div>
+        <div class="logo">FT<em>Next</em></div>
         <div class="sub">Global Recycling Intelligence Platform</div>
         {% if fout %}<div class="fout">{{ fout }}</div>{% endif %}
         <form method="POST">
@@ -6916,7 +6916,7 @@ def materialen_beheer():
     inhoud = """
     <div class="page-title">Materialen beheren</div>
     <p style="color:var(--gray-400);font-size:0.85rem;margin-top:-16px;margin-bottom:20px;max-width:600px;">
-        Deze grondstofgroepen en kwaliteiten gelden voor <b>alle</b> bedrijven in RecycleFind — pas je hier iets aan, dan zie je dat overal terug (zoekfilter, bedrijfsprofielen, fotomappen).
+        Deze grondstofgroepen en kwaliteiten gelden voor <b>alle</b> bedrijven in FTNext — pas je hier iets aan, dan zie je dat overal terug (zoekfilter, bedrijfsprofielen, fotomappen).
     </p>
     {% if bericht %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;max-width:600px;">{{ bericht }}</div>{% endif %}
 
@@ -7766,7 +7766,7 @@ FOUTPAGINA_HTML = '''
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>{{ titel }} — RecycleFind</title>
+    <title>{{ titel }} — FTNext</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -7790,7 +7790,7 @@ FOUTPAGINA_HTML = '''
         <div class="code">{{ code }}</div>
         <h1>{{ titel }}</h1>
         <p>{{ boodschap }}</p>
-        <a href="/">← Terug naar RecycleFind</a>
+        <a href="/">← Terug naar FTNext</a>
     </div>
 </body>
 </html>
