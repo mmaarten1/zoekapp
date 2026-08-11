@@ -4734,7 +4734,7 @@ def set_accountmanager():
 
     return jsonify({"accountmanager": nieuwe_am})
 
-BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten"}
+BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten", "certificeringen"}
 
 @app.route("/api/bedrijf-veld", methods=["POST"])
 def set_bedrijf_veld():
@@ -7424,14 +7424,15 @@ def bedrijf_profiel(naam):
             <div id="volumeRijenContainer"></div>
         </div>
 
-        {% if bedrijf.certificeringen %}
         <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Certifications</div>
-            <div class="company-tags" style="padding-left:0;">
+            {% if bedrijf.certificeringen %}
+            <div class="company-tags" style="padding-left:0;margin-bottom:10px;">
                 {% for c in bedrijf.certificeringen.split(",") %}<span class="tag tag-purple">🏅 {{ c.strip() }}</span>{% endfor %}
             </div>
+            {% endif %}
+            <input type="text" value="{{ bedrijf.certificeringen or '' }}" data-veld="certificeringen" onblur="wijzigBedrijfVeld(this)" placeholder="bv. ISO 9001, FSC, PEFC..." style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
-        {% endif %}
 
         <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Orders</div>
