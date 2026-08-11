@@ -6794,6 +6794,9 @@ def contacten():
 def opslagen():
     opgeslagen_namen = set(laad_opgeslagen())
     lijst = [b for b in ENF_BEDRIJVEN if b["naam"] in opgeslagen_namen]
+    _accountmanagers_opslagen = laad_accountmanagers()
+    for b in lijst:
+        b["accountmanager"] = _accountmanagers_opslagen.get(b["naam"], "")
 
     inhoud = """
     <div class="page-title">Opgeslagen bedrijven</div>
@@ -6802,7 +6805,7 @@ def opslagen():
         {% for b in lijst %}
         <a href="/bedrijf/{{ b.naam|urlencode }}" class="mat-kaart" style="padding:16px 20px;">
             <div class="mat-naam" style="margin-bottom:2px;">⭐ {{ b.naam }}</div>
-            <div class="mat-sub" style="margin-bottom:8px;">📍 {{ b.regio }}, {{ b.land }}</div>
+            <div class="mat-sub" style="margin-bottom:8px;">📍 {{ b.regio }}, {{ b.land }}{% if b.accountmanager %} · 👤 {{ b.accountmanager }}{% endif %}</div>
             <div class="company-tags" style="padding-left:0;">
                 {% if b.materialen %}{% for m in b.materialen.split(",")[:3] %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
             </div>
