@@ -5884,6 +5884,20 @@ def voorraad_pagina():
                     "referentie": f"Order-{order['id'][:8]}", "transport": order.get("transportmiddel",""),
                 }
 
+    # Prefill voor een vervolg-leg vanuit een al ontvangen inbound-shipment (bv. UK->Alblasserdam gevolgd door Alblasserdam->Azie)
+    prefill_leg_id = request.args.get("prefill_leg", "")
+    if prefill_leg_id and not prefill:
+        bron_shipment = next((s for s in laad_shipments() if s["id"] == prefill_leg_id), None)
+        if bron_shipment:
+            prefill = {
+                "origin_land": ALBLASSERDAM_NAAM, "origin_leverancier": "",
+                "loading_locatie": ALBLASSERDAM_NAAM, "destination_land": "", "destination_naam": "",
+                "materiaal": bron_shipment.get("materiaal",""),
+                "gepland_hoeveelheid": bron_shipment.get("werkelijk_hoeveelheid") or bron_shipment.get("gepland_hoeveelheid",""),
+                "referentie": f"Vervolg-{bron_shipment.get('referentie','') or bron_shipment['id'][:8]}",
+                "transport": "", "gekoppelde_shipment_id": prefill_leg_id,
+            }
+
     # Contracten met voortgang
     alle_contracten = laad_contracten()
     for c in alle_contracten:
@@ -6088,7 +6102,7 @@ def voorraad_pagina():
             <input type="text" name="transport" placeholder="Transport (Truck/Container/MSC)" value="{{ prefill.transport if prefill else '' }}">
             <select name="gekoppelde_shipment_id">
                 <option value="">Geen gekoppelde leg</option>
-                {% for s in alle_shipments_dropdown %}<option value="{{ s.id }}">{{ s.referentie or s.id[:8] }} ({{ s.origin_land }} → {{ s.destination_land }})</option>{% endfor %}
+                {% for s in alle_shipments_dropdown %}<option value="{{ s.id }}" {% if prefill and prefill.get("gekoppelde_shipment_id") == s.id %}selected{% endif %}>{{ s.referentie or s.id[:8] }} ({{ s.origin_land }} → {{ s.destination_land }})</option>{% endfor %}
             </select>
         </div>
         <select name="contract_id" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
@@ -6154,7 +6168,10 @@ def voorraad_pagina():
                 </form>
             </td>
             <td style="padding:7px 8px;">
-                <form method="POST" action="/voorraad/shipments" onsubmit="return confirm(\'Verwijderen?\');" style="margin:0;">
+                {% if s.flow_type == "inbound" and s.status in ("Weighed", "Received") %}
+                <a href="/voorraad?prefill_leg={{ s.id }}#shipments" style="font-size:10px;font-weight:700;color:#fff;background:#0891b2;padding:4px 7px;border-radius:5px;text-decoration:none;white-space:nowrap;">+ Vervolg-leg</a>
+                {% endif %}
+                <form method="POST" action="/voorraad/shipments" onsubmit="return confirm('Verwijderen?');" style="margin:0;display:inline-block;">
                     <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="shipment_id" value="{{ s.id }}">
                     <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button>
                 </form>
