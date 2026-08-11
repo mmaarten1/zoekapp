@@ -7440,6 +7440,22 @@ def bedrijf_profiel(naam):
         </div>
 
         <div class="info-kaart" style="margin-bottom:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Shipments</div>
+            {% if bedrijf_shipments %}
+                {% for s in bedrijf_shipments %}
+                <div class="dg-activiteit-item">
+                    {{ s.referentie or s.id[:8] }} · {{ s.materiaal }} · {{ s.origin_land }} → {{ s.destination_land }}
+                    <span style="color:{{ '#16a34a' if s.status in ('Delivered','Received') else 'var(--gray-500)' }};font-weight:700;"> · {{ s.status }}</span>
+                    <small>{{ s.datum }}{% if s.werkelijk_hoeveelheid %} · {{ s.werkelijk_hoeveelheid }} ton (gewogen){% elif s.gepland_hoeveelheid %} · {{ s.gepland_hoeveelheid }} ton (gepland){% endif %}</small>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="font-size:0.82rem;color:var(--gray-400);">Nog geen shipments voor dit bedrijf.</div>
+            {% endif %}
+            <a href="/voorraad" style="display:block;margin-top:8px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">Naar Voorraad →</a>
+        </div>
+
+        <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Foto's</div>
             <div id="fotoCategorieTabs" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;"></div>
             <div id="fotoBreadcrumb" style="font-size:0.78rem;color:var(--gray-400);margin-bottom:10px;"></div>
@@ -7713,12 +7729,18 @@ herbouwVolumeRijen();
 </script>
     """
     pagina = render_simple_page(bedrijf["naam"], "zoeken", inhoud)
+    _bedrijf_naam_laag = bedrijf["naam"].strip().lower()
+    _bedrijf_shipments = sorted(
+        [s for s in laad_shipments() if _bedrijf_naam_laag in (s.get("origin_leverancier","").strip().lower(), s.get("destination_naam","").strip().lower())],
+        key=lambda s: s.get("datum",""), reverse=True
+    )
     return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd,
                                     bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
                                     orderkleuren=ORDER_KLEUREN,
                                     accountmanager=laad_accountmanagers().get(bedrijf["naam"], ""),
                                     alle_gebruikersnamen=sorted(laad_users().keys()),
                                     gebruikersnaam=session.get("gebruikersnaam", ""),
+                                    bedrijf_shipments=_bedrijf_shipments,
                                     materiaal_categorieen_lijst=sorted(laad_materiaal_taxonomie().keys()),
                                     materiaal_taxonomie=laad_materiaal_taxonomie())
 
