@@ -7073,8 +7073,9 @@ def instellingen():
         <hr class="drawer-divider">
         <a href="/logout" class="btn-nav btn-nav-primary" style="display:inline-block;">Uitloggen</a>
     </div>
+    {% if is_admin %}
     <div class="info-kaart" style="max-width:400px;">
-        <div class="dg-kaart-titel">Beheer</div>
+        <div class="dg-kaart-titel">Beheer <span style="font-size:10px;font-weight:700;color:var(--gray-400);background:var(--gray-100);padding:2px 6px;border-radius:4px;">ADMIN</span></div>
         <a href="/importeer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Excel-import</a>
         <a href="/importeer-osm" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ OpenStreetMap-import</a>
         <a href="/opschonen-dubbelen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Dubbele bedrijven opschonen</a>
@@ -7086,9 +7087,10 @@ def instellingen():
         <a href="/gebruikers-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
         <a href="/materialen-beheer" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Materialen beheren</a>
     </div>
+    {% endif %}
     """
     pagina = render_simple_page("Instellingen", "instellingen", inhoud)
-    return render_template_string(pagina, gebruikersnaam=session.get("gebruikersnaam",""), team=session.get("team",""))
+    return render_template_string(pagina, gebruikersnaam=session.get("gebruikersnaam",""), team=session.get("team",""), is_admin=is_huidige_gebruiker_admin())
 
 @app.route("/certificeringen")
 def certificeringen_pagina():
