@@ -1567,15 +1567,18 @@ def osm_importeer_land(land_naam):
         raise laatste_fout
 
     def _bepaal_materialen(tags):
-        if tags.get("craft") == "paper":
-            return "Paper"
-        if tags.get("shop") == "scrap_yard":
-            return "Metal"
-        if tags.get("recycling:glass") == "yes":
-            return "Glass"
+        gevonden = []
+        if tags.get("craft") == "paper" or tags.get("recycling:paper") == "yes":
+            gevonden.append("Paper")
+        if tags.get("recycling:cardboard") == "yes" or tags.get("recycling:paper_packaging") == "yes":
+            gevonden.append("Karton")
+        if tags.get("shop") == "scrap_yard" or tags.get("recycling:scrap_metal") == "yes" or tags.get("recycling:metal") == "yes":
+            gevonden.append("Metal")
+        if tags.get("recycling:glass") == "yes" or tags.get("recycling:glass_bottles") == "yes":
+            gevonden.append("Glass")
         if tags.get("recycling:plastic") == "yes" or tags.get("recycling:plastic_packaging") == "yes":
-            return "Plastic"
-        return ""
+            gevonden.append("Plastic")
+        return ", ".join(gevonden)
 
     def _bepaal_brontype(tags):
         if tags.get("craft") == "paper":
