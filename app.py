@@ -5604,6 +5604,12 @@ def voorraad_contracten_actie():
 def voorraad_pagina():
     if request.method == "POST":
         actie = request.form.get("actie", "")
+        # Handmatige voorraadmutaties (los van shipments/orders) zijn alleen voor admins.
+        # Gewone gebruikers passen voorraad alleen aan via inkooporders (inbound) en het uitboeken van verkooporders (outbound).
+        # Keuring (goed-/afkeuren van al aangekomen materiaal) blijft een normale werf-taak, geen 'aanpassen'.
+        if actie == "toevoegen":
+            _guard = vereist_admin_of_403()
+            if _guard: return _guard
         transacties = laad_voorraad()
 
         if actie == "toevoegen":
@@ -5763,6 +5769,29 @@ def voorraad_pagina():
 
     _alle_bedrijven_landen = sorted({b.get("land","") for b in ENF_BEDRIJVEN if b.get("land")})
 
+    # Prefill van het shipment-formulier vanuit een order ("Uitboeken"/"Inboeken"-knop op /orders)
+    prefill = None
+    prefill_order_id = request.args.get("prefill_order", "")
+    if prefill_order_id:
+        order = next((o for o in laad_orders() if o["id"] == prefill_order_id), None)
+        if order:
+            bedrijf_land = next((b.get("land","") for b in ENF_BEDRIJVEN if b["naam"] == order.get("bedrijf","")), "")
+            if order.get("ordertype") == "inkoop":
+                prefill = {
+                    "origin_land": bedrijf_land, "origin_leverancier": order.get("bedrijf",""),
+                    "loading_locatie": "", "destination_land": ALBLASSERDAM_NAAM, "destination_naam": "",
+                    "materiaal": order.get("materiaal",""), "gepland_hoeveelheid": str(parse_hoeveelheid_getal(order.get("hoeveelheid",""))),
+                    "referentie": f"Order-{order['id'][:8]}", "transport": order.get("transportmiddel",""),
+                }
+            else:
+                prefill = {
+                    "origin_land": ALBLASSERDAM_NAAM, "origin_leverancier": "",
+                    "loading_locatie": ALBLASSERDAM_NAAM, "destination_land": order.get("bestemming","") or bedrijf_land,
+                    "destination_naam": order.get("bedrijf",""),
+                    "materiaal": order.get("materiaal",""), "gepland_hoeveelheid": str(parse_hoeveelheid_getal(order.get("hoeveelheid",""))),
+                    "referentie": f"Order-{order['id'][:8]}", "transport": order.get("transportmiddel",""),
+                }
+
     # Contracten met voortgang
     alle_contracten = laad_contracten()
     for c in alle_contracten:
@@ -5903,24 +5932,27 @@ def voorraad_pagina():
 </div>
 
 <div class="dg-kaart-titel" style="margin-bottom:12px;">🚢 Shipment plannen (systeem bepaalt zelf inbound/outbound/direct)</div>
+{% if prefill %}
+<div style="background:#eff6ff;color:#1d4ed8;padding:8px 14px;border-radius:8px;margin-bottom:10px;font-size:0.82rem;font-weight:600;max-width:680px;">Formulier vooringevuld vanuit de order — controleer en bevestig hieronder.</div>
+{% endif %}
 <div class="vrd-kaart" style="max-width:680px;margin-bottom:16px;">
     <p style="color:var(--gray-400);font-size:0.78rem;margin-top:0;margin-bottom:12px;">Vul origin en destination in. Is destination = Alblasserdam → inbound. Is origin = Alblasserdam → outbound. Anders → direct flow (raakt onze voorraad niet, blijft wel zichtbaar in de flow-tabellen).</p>
     <form method="POST" action="/voorraad/shipments" class="form-voorraad">
         <input type="hidden" name="actie" value="toevoegen">
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="referentie" placeholder="Referentie">
+            <input type="text" name="referentie" placeholder="Referentie" value="{{ prefill.referentie if prefill else '' }}">
             <input type="date" name="datum" placeholder="Datum (ETA/ETD)">
         </div>
         <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;margin:8px 0 4px;">Origin</div>
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-            <input type="text" name="origin_land" placeholder="Land (bv. UK, Alblasserdam)" list="landenLijstVoorraad" required>
-            <input type="text" name="origin_leverancier" placeholder="Leverancier" list="bedrijvenLijstVoorraad">
-            <input type="text" name="loading_locatie" placeholder="Loading locatie">
+            <input type="text" name="origin_land" placeholder="Land (bv. UK, Alblasserdam)" value="{{ prefill.origin_land if prefill else '' }}" list="landenLijstVoorraad" required>
+            <input type="text" name="origin_leverancier" placeholder="Leverancier" value="{{ prefill.origin_leverancier if prefill else '' }}" list="bedrijvenLijstVoorraad">
+            <input type="text" name="loading_locatie" placeholder="Loading locatie" value="{{ prefill.loading_locatie if prefill else '' }}">
         </div>
         <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;margin:8px 0 4px;">Destination</div>
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="destination_land" placeholder="Land (bv. Alblasserdam, Asia)" list="landenLijstVoorraad" required>
-            <input type="text" name="destination_naam" placeholder="Fabriek/klant" list="bedrijvenLijstVoorraad">
+            <input type="text" name="destination_land" placeholder="Land (bv. Alblasserdam, Asia)" value="{{ prefill.destination_land if prefill else '' }}" list="landenLijstVoorraad" required>
+            <input type="text" name="destination_naam" placeholder="Fabriek/klant" value="{{ prefill.destination_naam if prefill else '' }}" list="bedrijvenLijstVoorraad">
         </div>
         <datalist id="landenLijstVoorraad">
             <option value="Alblasserdam">
@@ -5935,15 +5967,15 @@ def voorraad_pagina():
                 <option value="">Materiaal...</option>
                 {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
                 <optgroup label="{{ categorie }}">
-                    <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
-                    {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}">{{ kw }}</option>{% endfor %}
+                    <option value="{{ categorie }}" {% if prefill and prefill.materiaal == categorie %}selected{% endif %}>{{ categorie }} (algemeen)</option>
+                    {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}" {% if prefill and prefill.materiaal == kw %}selected{% endif %}>{{ kw }}</option>{% endfor %}
                 </optgroup>
                 {% endfor %}
             </select>
-            <input type="text" name="gepland_hoeveelheid" placeholder="Gepland gewicht (ton)" required>
+            <input type="text" name="gepland_hoeveelheid" placeholder="Gepland gewicht (ton)" value="{{ prefill.gepland_hoeveelheid if prefill else '' }}" required>
         </div>
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="transport" placeholder="Transport (Truck/Container/MSC)">
+            <input type="text" name="transport" placeholder="Transport (Truck/Container/MSC)" value="{{ prefill.transport if prefill else '' }}">
             <select name="gekoppelde_shipment_id">
                 <option value="">Geen gekoppelde leg</option>
                 {% for s in alle_shipments_dropdown %}<option value="{{ s.id }}">{{ s.referentie or s.id[:8] }} ({{ s.origin_land }} → {{ s.destination_land }})</option>{% endfor %}
@@ -6060,8 +6092,10 @@ function voorraadStatusSubmit(form, isInbound) {
     {% endfor %}
 </div>
 
+{% if is_admin %}
 <div class="vrd-kaart" style="max-width:520px;margin-bottom:20px;">
-    <div class="dg-kaart-titel">Transactie toevoegen</div>
+    <div class="dg-kaart-titel">Transactie toevoegen <span style="font-size:10px;font-weight:700;color:var(--gray-400);background:var(--gray-100);padding:2px 6px;border-radius:4px;">ADMIN</span></div>
+    <p style="color:var(--gray-400);font-size:0.75rem;margin-top:-4px;margin-bottom:10px;">Handmatige correctie. Normale voorraadmutaties lopen via inkooporders (inbound) en het uitboeken van verkooporders (outbound) hieronder.</p>
     <form method="POST" class="form-voorraad">
         <input type="hidden" name="actie" value="toevoegen">
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -6118,6 +6152,7 @@ function voorraadStatusSubmit(form, isInbound) {
         <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Transactie toevoegen</button>
     </form>
 </div>
+{% endif %}
 <script>
 function toggleTransactieVelden() {
     const type = document.getElementById("voorraadTypeSelect").value;
@@ -6267,7 +6302,7 @@ function toggleTransactieVelden() {
                                     flow_by_origin_lijst=flow_by_origin_lijst, flow_by_destination_lijst=flow_by_destination_lijst,
                                     actieve_shipments=actieve_shipments, alle_shipments_dropdown=alle_shipments_dropdown,
                                     shipment_statussen=SHIPMENT_STATUSSEN, landen=_alle_bedrijven_landen,
-                                    alle_contracten=alle_contracten)
+                                    alle_contracten=alle_contracten, is_admin=is_huidige_gebruiker_admin(), prefill=prefill)
 
 @app.route("/orders", methods=["GET", "POST"])
 def orders_pagina():
@@ -6486,6 +6521,9 @@ def orders_pagina():
             <div class="order-details" style="margin-top:6px;color:var(--gray-300);">{{ o.verantwoordelijke }} · {{ o.aangemaakt }}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
+            {% if o.status == "Gewonnen" %}
+            <a href="/voorraad?prefill_order={{ o.id }}" style="font-size:11px;font-weight:700;color:#fff;background:{{ '#0891b2' if o.get('ordertype') == 'inkoop' else '#dc2626' }};padding:5px 9px;border-radius:5px;text-decoration:none;white-space:nowrap;">{{ '📥 Inboeken' if o.get('ordertype') == 'inkoop' else '📤 Uitboeken' }}</a>
+            {% endif %}
             <form method="POST" style="margin:0;">
                 <input type="hidden" name="actie" value="status_wijzigen">
                 <input type="hidden" name="order_id" value="{{ o.id }}">
