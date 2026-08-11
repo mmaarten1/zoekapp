@@ -196,6 +196,38 @@ def bewaar_geocode_cache(data):
 
 import math
 
+def parse_hoeveelheid_getal(tekst):
+    """Haalt het eerste getal uit een vrije-tekst hoeveelheid zoals '500 ton', '1.250,5' of '1,250.5' -> float."""
+    if not tekst:
+        return 0.0
+    match = re.search(r"[\d.,]+", str(tekst))
+    if not match:
+        return 0.0
+    ruw = match.group(0).strip(".,")
+    if not ruw:
+        return 0.0
+
+    if "," in ruw and "." in ruw:
+        # Laatste teken bepaalt het decimaalteken (bv. "1.250,5" = EU, "1,250.5" = US)
+        if ruw.rfind(",") > ruw.rfind("."):
+            ruw = ruw.replace(".", "").replace(",", ".")
+        else:
+            ruw = ruw.replace(",", "")
+    elif "," in ruw:
+        # Alleen komma: duizendtal (3 cijfers erna) of decimaal
+        deel_na = ruw.split(",")[-1]
+        ruw = ruw.replace(",", "") if len(deel_na) == 3 else ruw.replace(",", ".")
+    elif "." in ruw:
+        # Alleen punt: duizendtal (3 cijfers erna) of decimaal
+        deel_na = ruw.split(".")[-1]
+        if len(deel_na) == 3:
+            ruw = ruw.replace(".", "")
+
+    try:
+        return float(ruw)
+    except ValueError:
+        return 0.0
+
 def voldoet_aan_materiaal_min_volume(bedrijf, materiaal_naam, min_volume_str):
     """Check of een bedrijf voor het gegeven materiaal (of de kwaliteiten daaronder samen) minstens min_volume_str t/jaar heeft opgegeven."""
     if not min_volume_str:
@@ -5365,6 +5397,39 @@ def voorraad_pagina():
         except (ValueError, TypeError):
             m["verschil"] = 0
 
+    # --- Koppeling met Orders: verkocht/gealloceerd en lopende inkooporders per materiaal ---
+    alle_orders_voorraad = laad_orders()
+    actieve_order_statussen = ("Open", "Onderhandeling", "Gewonnen")
+    verkocht_per_materiaal = {}
+    inkooporders_per_materiaal = {}
+    for o in alle_orders_voorraad:
+        if o.get("status") not in actieve_order_statussen or not o.get("materiaal"):
+            continue
+        aantal = parse_hoeveelheid_getal(o.get("hoeveelheid", ""))
+        if o.get("ordertype", "verkoop") == "inkoop":
+            inkooporders_per_materiaal[o["materiaal"]] = inkooporders_per_materiaal.get(o["materiaal"], 0) + aantal
+        else:
+            verkocht_per_materiaal[o["materiaal"]] = verkocht_per_materiaal.get(o["materiaal"], 0) + aantal
+
+    alle_materiaalnamen = sorted(set(voorraad_per_materiaal) | set(te_keuren_per_materiaal) | set(verkocht_per_materiaal) | set(inkooporders_per_materiaal))
+    per_commodity = []
+    for naam in alle_materiaalnamen:
+        fysiek = voorraad_per_materiaal.get(naam, 0)
+        binnenkort = te_keuren_per_materiaal.get(naam, 0)
+        verkocht = verkocht_per_materiaal.get(naam, 0)
+        per_commodity.append({
+            "naam": naam, "fysiek": fysiek, "binnenkort_binnen": binnenkort,
+            "verkocht": verkocht, "vrij": fysiek - verkocht,
+            "gepland_inkoop": inkooporders_per_materiaal.get(naam, 0),
+        })
+    per_commodity.sort(key=lambda x: -x["fysiek"])
+
+    kpi_fysiek_totaal = sum(voorraad_per_materiaal.values())
+    kpi_binnenkort_totaal = sum(te_keuren_per_materiaal.values())
+    kpi_verkocht_totaal = sum(verkocht_per_materiaal.values())
+    kpi_inkoop_totaal = sum(inkooporders_per_materiaal.values())
+    kpi_vrij_totaal = kpi_fysiek_totaal - kpi_verkocht_totaal
+
     inhoud = """
 <style>
 .vrd-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:14px 16px; }
@@ -5383,7 +5448,43 @@ def voorraad_pagina():
 .vrd-tab.actief { background:var(--brand-600); color:#fff; border-color:var(--brand-600); }
 </style>
 <div class="page-title">Voorraad</div>
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.85rem;">Handelsvoorraad op de werf, alles in <b>ton</b>. Binnenkomend materiaal telt pas mee zodra het is goedgekeurd.</p>
+<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.85rem;">Handelsvoorraad op de werf, alles in <b>ton</b>. Binnenkomend materiaal telt pas mee zodra het is goedgekeurd. Verkocht/vrij wordt live berekend uit je Orders.</p>
+
+<div class="vrd-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:16px;">
+    <div class="vrd-kaart"><div class="vrd-getal">{{ "{:,.1f}".format(kpi_fysiek_totaal) }}</div><div class="vrd-label">📦 Fysieke voorraad (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#d97706;">{{ "{:,.1f}".format(kpi_binnenkort_totaal) }}</div><div class="vrd-label">⏳ Binnenkort binnen (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(kpi_verkocht_totaal) }}</div><div class="vrd-label">📤 Verkocht/gealloceerd (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--brand-600);">{{ "{:,.1f}".format(kpi_vrij_totaal) }}</div><div class="vrd-label">✅ Vrije voorraad (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#0369a1;">{{ "{:,.1f}".format(kpi_inkoop_totaal) }}</div><div class="vrd-label">🛒 Open inkooporders (ton)</div></div>
+</div>
+
+<div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
+    <div class="dg-kaart-titel" style="margin-bottom:10px;">Voorraad per commodity</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead>
+            <tr style="text-align:left;color:var(--gray-400);font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px;">
+                <th style="padding:6px 8px;">Commodity</th>
+                <th style="padding:6px 8px;text-align:right;">Fysiek</th>
+                <th style="padding:6px 8px;text-align:right;">Binnenkort binnen</th>
+                <th style="padding:6px 8px;text-align:right;">Verkocht</th>
+                <th style="padding:6px 8px;text-align:right;">Vrij beschikbaar</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in per_commodity %}
+            <tr style="border-top:1px solid var(--gray-50);">
+                <td style="padding:7px 8px;font-weight:700;color:var(--gray-800);">{{ c.naam }}</td>
+                <td style="padding:7px 8px;text-align:right;">{{ "{:,.1f}".format(c.fysiek) }}</td>
+                <td style="padding:7px 8px;text-align:right;color:#d97706;">{{ "{:,.1f}".format(c.binnenkort_binnen) if c.binnenkort_binnen else "—" }}</td>
+                <td style="padding:7px 8px;text-align:right;color:#dc2626;">{{ "{:,.1f}".format(c.verkocht) if c.verkocht else "—" }}</td>
+                <td style="padding:7px 8px;text-align:right;font-weight:700;color:{{ 'var(--brand-600)' if c.vrij >= 0 else '#dc2626' }};">{{ "{:,.1f}".format(c.vrij) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="padding:16px 8px;color:var(--gray-300);">Nog geen data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 <div class="vrd-grid">
     {% for naam, aantal in voorraad_lijst %}
@@ -5572,7 +5673,10 @@ function toggleKeuringVeld() {
                                     materiaal_taxonomie=laad_materiaal_taxonomie(), alle_bedrijfsnamen_voorraad=alle_bedrijfsnamen_voorraad,
                                     vandaag=datetime.date.today().isoformat(),
                                     te_keuren_per_materiaal=te_keuren_per_materiaal, alle_locaties=alle_locaties, filter_locatie=filter_locatie,
-                                    voorraadmomenten=voorraadmomenten)
+                                    voorraadmomenten=voorraadmomenten,
+                                    per_commodity=per_commodity, kpi_fysiek_totaal=kpi_fysiek_totaal,
+                                    kpi_binnenkort_totaal=kpi_binnenkort_totaal, kpi_verkocht_totaal=kpi_verkocht_totaal,
+                                    kpi_inkoop_totaal=kpi_inkoop_totaal, kpi_vrij_totaal=kpi_vrij_totaal)
 
 @app.route("/orders", methods=["GET", "POST"])
 def orders_pagina():
@@ -5584,12 +5688,15 @@ def orders_pagina():
             nieuwe_order = {
                 "id": str(uuid.uuid4()),
                 "bedrijf": request.form.get("bedrijf", "").strip(),
+                "ordertype": request.form.get("ordertype", "verkoop"),
                 "materiaal": request.form.get("materiaal", "").strip(),
                 "hoeveelheid": request.form.get("hoeveelheid", "").strip(),
                 "prijs": request.form.get("prijs", "").strip(),
                 "status": request.form.get("status", "Open"),
                 "verantwoordelijke": session.get("gebruikersnaam", ""),
                 "verwachte_datum": request.form.get("verwachte_datum", "").strip(),
+                "bestemming": request.form.get("bestemming", "").strip(),
+                "transportmiddel": request.form.get("transportmiddel", "").strip(),
                 "notitie": request.form.get("notitie", "").strip(),
                 "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
             }
@@ -5731,10 +5838,16 @@ def orders_pagina():
     <form method="POST">
         <input type="hidden" name="actie" value="toevoegen">
         <div class="form-rij-2">
+            <select name="ordertype">
+                <option value="verkoop">📤 Verkoop (uitgaand)</option>
+                <option value="inkoop">📥 Inkoop (inkomend)</option>
+            </select>
             <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" list="bedrijvenLijst" required>
             <datalist id="bedrijvenLijst">
                 {% for naam in alle_bedrijfsnamen %}<option value="{{ naam }}">{% endfor %}
             </datalist>
+        </div>
+        <div class="form-rij-2">
             <select name="materiaal">
                 <option value="">Materiaal kiezen...</option>
                 {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
@@ -5746,17 +5859,19 @@ def orders_pagina():
                 </optgroup>
                 {% endfor %}
             </select>
-        </div>
-        <div class="form-rij-2">
             <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (bv. 500 ton)">
-            <input type="text" name="prijs" placeholder="Waarde in € (bv. 15000)">
         </div>
         <div class="form-rij-2">
+            <input type="text" name="prijs" placeholder="Waarde in € (bv. 15000)">
             <select name="status">
                 {% for s in statussen %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
             </select>
-            <input type="date" name="verwachte_datum">
         </div>
+        <div class="form-rij-2">
+            <input type="date" name="verwachte_datum">
+            <input type="text" name="bestemming" placeholder="Bestemming (bv. Thailand, Duitsland)">
+        </div>
+        <input type="text" name="transportmiddel" placeholder="Transport (bv. Container, Truck, MSC)" style="margin-bottom:10px;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
         <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
         <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">+ Order toevoegen</button>
     </form>
@@ -5767,12 +5882,14 @@ def orders_pagina():
 <div class="order-kaart">
     <div class="order-top">
         <div>
-            <div class="order-bedrijf">{{ o.bedrijf }}{% if o.is_verlopen %} <span style="background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;vertical-align:middle;">⚠ Verlopen</span>{% endif %}</div>
+            <div class="order-bedrijf">{{ '📥' if o.get('ordertype') == 'inkoop' else '📤' }} {{ o.bedrijf }}{% if o.is_verlopen %} <span style="background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;vertical-align:middle;">⚠ Verlopen</span>{% endif %}</div>
             <div class="order-details">
                 {% if o.materiaal %}{{ o.materiaal }} · {% endif %}
                 {% if o.hoeveelheid %}{{ o.hoeveelheid }} · {% endif %}
                 {% if o.prijs %}€{{ o.prijs }}{% endif %}
                 {% if o.verwachte_datum %} · verwacht: {{ o.verwachte_datum }}{% endif %}
+                {% if o.bestemming %} · 🌍{{ o.bestemming }}{% endif %}
+                {% if o.transportmiddel %} · 🚚{{ o.transportmiddel }}{% endif %}
             </div>
             {% if o.notitie %}<div class="order-details" style="margin-top:6px;font-style:italic;">{{ o.notitie }}</div>{% endif %}
             <div class="order-details" style="margin-top:6px;color:var(--gray-300);">{{ o.verantwoordelijke }} · {{ o.aangemaakt }}</div>
