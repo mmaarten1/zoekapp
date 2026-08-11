@@ -23,7 +23,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "notities.json", "meldingen.json", "fotos.json", "transport_prijzen.json",
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
         "orders.json", "accountmanagers.json", "fotomappen.json", "materiaal_taxonomie.json", "voorraad_transacties.json",
-        "voorraadmomenten.json",
+        "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -84,6 +84,33 @@ def laad_voorraadmomenten():
 def bewaar_voorraadmomenten(data):
     with open(VOORRAADMOMENTEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+SHIPMENTS_FILE = datapad("voorraad_shipments.json")
+
+def laad_shipments():
+    try:
+        with open(SHIPMENTS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_shipments(data):
+    with open(SHIPMENTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+CONTRACTEN_FILE = datapad("contracten.json")
+
+def laad_contracten():
+    try:
+        with open(CONTRACTEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_contracten(data):
+    with open(CONTRACTEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 
 
 def laad_voorraad():
@@ -227,6 +254,131 @@ def parse_hoeveelheid_getal(tekst):
         return float(ruw)
     except ValueError:
         return 0.0
+
+def bereken_voorraad_status():
+    """
+    Berekent de complete voorraadstatus (fysiek, te keuren, per locatie, transit, gereserveerd, aging)
+    uit voorraad_transacties.json + voorraad_shipments.json + orders.json.
+    Één centrale plek zodat dashboard, per-commodity-tabel en KPI's altijd consistent zijn.
+    """
+    transacties = laad_voorraad()
+    shipments = laad_shipments()
+    orders = laad_orders()
+
+    def hoeveelheid(t):
+        try:
+            return float(str(t.get("hoeveelheid", "0")).replace(",", ""))
+        except (ValueError, TypeError):
+            return 0.0
+
+    fysiek_per_materiaal = {}
+    te_keuren_per_materiaal = {}
+    per_locatie_materiaal = {}  # {(locatie, materiaal): hoeveelheid}
+    aging_batches = []  # lijst van {materiaal, hoeveelheid, datum} voor goedgekeurde inbound
+
+    for t in transacties:
+        naam = t.get("materiaal", "")
+        if not naam:
+            continue
+        aantal = hoeveelheid(t)
+        type_ = t.get("type", "in")
+        locatie = t.get("locatie", "") or "Alblasserdam"
+
+        if type_ in ("in", "inbound"):
+            keuring = t.get("keuringsstatus", "goedgekeurd")
+            if keuring == "goedgekeurd":
+                fysiek_per_materiaal[naam] = fysiek_per_materiaal.get(naam, 0) + aantal
+                per_locatie_materiaal[(locatie, naam)] = per_locatie_materiaal.get((locatie, naam), 0) + aantal
+                aging_batches.append({"materiaal": naam, "hoeveelheid": aantal, "datum": t.get("datum", "")})
+            elif keuring == "te_keuren":
+                te_keuren_per_materiaal[naam] = te_keuren_per_materiaal.get(naam, 0) + aantal
+            # afgekeurd telt nergens mee
+
+        elif type_ in ("uit", "outbound"):
+            fysiek_per_materiaal[naam] = fysiek_per_materiaal.get(naam, 0) - aantal
+            per_locatie_materiaal[(locatie, naam)] = per_locatie_materiaal.get((locatie, naam), 0) - aantal
+
+        elif type_ == "transfer":
+            # Totale voorraad blijft gelijk; alleen locatieverdeling verandert
+            locatie_van = t.get("locatie_van", "")
+            locatie_naar = t.get("locatie_naar", "")
+            if locatie_van:
+                per_locatie_materiaal[(locatie_van, naam)] = per_locatie_materiaal.get((locatie_van, naam), 0) - aantal
+            if locatie_naar:
+                per_locatie_materiaal[(locatie_naar, naam)] = per_locatie_materiaal.get((locatie_naar, naam), 0) + aantal
+
+        elif type_ == "adjustment":
+            teken = 1 if t.get("richting", "plus") == "plus" else -1
+            fysiek_per_materiaal[naam] = fysiek_per_materiaal.get(naam, 0) + teken * aantal
+            per_locatie_materiaal[(locatie, naam)] = per_locatie_materiaal.get((locatie, naam), 0) + teken * aantal
+
+    # Transit: inbound shipments die "In Transit" staan (nog niet ontvangen)
+    transit_per_materiaal = {}
+    for s in shipments:
+        if s.get("richting") == "inbound" and s.get("status") == "In Transit":
+            transit_per_materiaal[s["materiaal"]] = transit_per_materiaal.get(s["materiaal"], 0) + parse_hoeveelheid_getal(s.get("hoeveelheid", ""))
+
+    # Gereserveerd: actieve verkooporders (nog niet verzonden/afgehandeld)
+    gereserveerd_per_materiaal = {}
+    inkooporders_per_materiaal = {}
+    for o in orders:
+        if o.get("status") not in ("Open", "Onderhandeling", "Gewonnen") or not o.get("materiaal"):
+            continue
+        aantal = parse_hoeveelheid_getal(o.get("hoeveelheid", ""))
+        if o.get("ordertype", "verkoop") == "inkoop":
+            inkooporders_per_materiaal[o["materiaal"]] = inkooporders_per_materiaal.get(o["materiaal"], 0) + aantal
+        else:
+            gereserveerd_per_materiaal[o["materiaal"]] = gereserveerd_per_materiaal.get(o["materiaal"], 0) + aantal
+
+    # Aging: op basis van goedgekeurde inbound-batches (vereenvoudigd: netto verkoop wordt niet per-batch afgeboekt)
+    vandaag = datetime.date.today()
+    aging_buckets = {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "90+": 0.0}
+    for batch in aging_batches:
+        if not batch["datum"]:
+            continue
+        try:
+            batch_datum = datetime.datetime.strptime(batch["datum"], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+        dagen = (vandaag - batch_datum).days
+        if dagen <= 30:
+            aging_buckets["0-30"] += batch["hoeveelheid"]
+        elif dagen <= 60:
+            aging_buckets["31-60"] += batch["hoeveelheid"]
+        elif dagen <= 90:
+            aging_buckets["61-90"] += batch["hoeveelheid"]
+        else:
+            aging_buckets["90+"] += batch["hoeveelheid"]
+
+    # Aankomende shipments (komende 7 dagen), voor forecast + KPI's
+    over_7_dagen = vandaag + datetime.timedelta(days=7)
+    inkomend_7d = 0.0
+    uitgaand_7d = 0.0
+    for s in shipments:
+        if s.get("status") in ("Cancelled", "Received", "Delivered", "Shipped"):
+            continue
+        try:
+            eta = datetime.datetime.strptime(s.get("datum", ""), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+        if vandaag <= eta <= over_7_dagen:
+            aantal = parse_hoeveelheid_getal(s.get("hoeveelheid", ""))
+            if s.get("richting") == "inbound":
+                inkomend_7d += aantal
+            else:
+                uitgaand_7d += aantal
+
+    return {
+        "fysiek_per_materiaal": fysiek_per_materiaal,
+        "te_keuren_per_materiaal": te_keuren_per_materiaal,
+        "per_locatie_materiaal": per_locatie_materiaal,
+        "transit_per_materiaal": transit_per_materiaal,
+        "gereserveerd_per_materiaal": gereserveerd_per_materiaal,
+        "inkooporders_per_materiaal": inkooporders_per_materiaal,
+        "aging_buckets": aging_buckets,
+        "inkomend_7d": inkomend_7d,
+        "uitgaand_7d": uitgaand_7d,
+    }
 
 def voldoet_aan_materiaal_min_volume(bedrijf, materiaal_naam, min_volume_str):
     """Check of een bedrijf voor het gegeven materiaal (of de kwaliteiten daaronder samen) minstens min_volume_str t/jaar heeft opgegeven."""
@@ -5278,6 +5430,106 @@ def export_orders_csv():
     return Response(output.getvalue(), mimetype="text/csv",
                      headers={"Content-Disposition": "attachment; filename=orders_export.csv"})
 
+SHIPMENT_INBOUND_STATUSSEN = ["Planned", "Confirmed", "In Transit", "Received", "Cancelled"]
+SHIPMENT_OUTBOUND_STATUSSEN = ["Planned", "Confirmed", "Loading", "Shipped", "Delivered", "Cancelled"]
+
+@app.route("/voorraad/shipments", methods=["POST"])
+def voorraad_shipments_actie():
+    actie = request.form.get("actie", "")
+    shipments = laad_shipments()
+
+    if actie == "toevoegen":
+        richting = request.form.get("richting", "inbound")
+        nieuw = {
+            "id": str(uuid.uuid4()),
+            "richting": richting,
+            "materiaal": request.form.get("materiaal", "").strip(),
+            "hoeveelheid": request.form.get("hoeveelheid", "").strip(),
+            "locatie": request.form.get("locatie", "").strip() or "Alblasserdam",
+            "bedrijf": request.form.get("bedrijf", "").strip(),
+            "transport": request.form.get("transport", "").strip(),
+            "referentie": request.form.get("referentie", "").strip(),
+            "contract_id": request.form.get("contract_id", "").strip(),
+            "datum": request.form.get("datum", "").strip(),
+            "status": "Planned",
+            "notitie": request.form.get("notitie", "").strip(),
+            "gebruiker": session.get("gebruikersnaam", ""),
+            "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+        }
+        if nieuw["materiaal"] and nieuw["hoeveelheid"]:
+            shipments.append(nieuw)
+            bewaar_shipments(shipments)
+
+    elif actie == "status_wijzigen":
+        shipment_id = request.form.get("shipment_id", "")
+        nieuwe_status = request.form.get("nieuwe_status", "")
+        doel = next((s for s in shipments if s["id"] == shipment_id), None)
+        if doel:
+            doel["status"] = nieuwe_status
+            bewaar_shipments(shipments)
+
+            # Automatisch effect op de voorraad bij ontvangst/verzending
+            if doel["richting"] == "inbound" and nieuwe_status == "Received":
+                transacties = laad_voorraad()
+                transacties.append({
+                    "id": str(uuid.uuid4()), "type": "in", "materiaal": doel["materiaal"],
+                    "hoeveelheid": doel["hoeveelheid"], "locatie": doel["locatie"],
+                    "bedrijf": doel.get("bedrijf",""), "prijs": "", "notitie": f"Automatisch aangemaakt bij ontvangst shipment {doel.get('referentie','')}",
+                    "gebruiker": session.get("gebruikersnaam",""), "datum": datetime.date.today().isoformat(),
+                    "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+                    "keuringsstatus": "te_keuren",
+                })
+                bewaar_voorraad(transacties)
+            elif doel["richting"] == "outbound" and nieuwe_status == "Shipped":
+                transacties = laad_voorraad()
+                transacties.append({
+                    "id": str(uuid.uuid4()), "type": "uit", "materiaal": doel["materiaal"],
+                    "hoeveelheid": doel["hoeveelheid"], "locatie": doel["locatie"],
+                    "bedrijf": doel.get("bedrijf",""), "prijs": "", "notitie": f"Automatisch aangemaakt bij verzending shipment {doel.get('referentie','')}",
+                    "gebruiker": session.get("gebruikersnaam",""), "datum": datetime.date.today().isoformat(),
+                    "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+                })
+                bewaar_voorraad(transacties)
+
+    elif actie == "verwijderen":
+        shipment_id = request.form.get("shipment_id", "")
+        doel = next((s for s in shipments if s["id"] == shipment_id), None)
+        if doel and (doel.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()):
+            shipments = [s for s in shipments if s["id"] != shipment_id]
+            bewaar_shipments(shipments)
+
+    return redirect(url_for("voorraad_pagina"))
+
+@app.route("/voorraad/contracten", methods=["POST"])
+def voorraad_contracten_actie():
+    actie = request.form.get("actie", "")
+    contracten = laad_contracten()
+
+    if actie == "toevoegen":
+        nieuw = {
+            "id": str(uuid.uuid4()),
+            "referentie": request.form.get("referentie", "").strip(),
+            "tegenpartij": request.form.get("tegenpartij", "").strip(),
+            "richting": request.form.get("richting", "inkoop"),
+            "materiaal": request.form.get("materiaal", "").strip(),
+            "contract_volume": request.form.get("contract_volume", "").strip(),
+            "notitie": request.form.get("notitie", "").strip(),
+            "gebruiker": session.get("gebruikersnaam", ""),
+            "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+        }
+        if nieuw["referentie"] and nieuw["materiaal"] and nieuw["contract_volume"]:
+            contracten.append(nieuw)
+            bewaar_contracten(contracten)
+
+    elif actie == "verwijderen":
+        contract_id = request.form.get("contract_id", "")
+        doel = next((c for c in contracten if c["id"] == contract_id), None)
+        if doel and (doel.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()):
+            contracten = [c for c in contracten if c["id"] != contract_id]
+            bewaar_contracten(contracten)
+
+    return redirect(url_for("voorraad_pagina"))
+
 @app.route("/voorraad", methods=["GET", "POST"])
 def voorraad_pagina():
     if request.method == "POST":
@@ -5285,9 +5537,10 @@ def voorraad_pagina():
         transacties = laad_voorraad()
 
         if actie == "toevoegen":
+            type_ = request.form.get("type", "in")
             nieuwe_transactie = {
                 "id": str(uuid.uuid4()),
-                "type": request.form.get("type", "in"),
+                "type": type_,
                 "materiaal": request.form.get("materiaal", "").strip(),
                 "hoeveelheid": request.form.get("hoeveelheid", "").strip(),
                 "locatie": request.form.get("locatie", "").strip() or "Alblasserdam",
@@ -5298,9 +5551,22 @@ def voorraad_pagina():
                 "datum": request.form.get("datum", "") or datetime.date.today().isoformat(),
                 "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
                 # Keuring is alleen relevant bij binnenkomende materialen; uitgaande zijn per definitie al goedgekeurd
-                "keuringsstatus": (request.form.get("keuringsstatus", "te_keuren") if request.form.get("type", "in") == "in" else "goedgekeurd"),
+                "keuringsstatus": (request.form.get("keuringsstatus", "te_keuren") if type_ == "in" else "goedgekeurd"),
             }
-            if nieuwe_transactie["materiaal"] and nieuwe_transactie["hoeveelheid"]:
+            if type_ == "transfer":
+                nieuwe_transactie["locatie_van"] = request.form.get("locatie_van", "").strip()
+                nieuwe_transactie["locatie_naar"] = request.form.get("locatie_naar", "").strip()
+            if type_ == "adjustment":
+                nieuwe_transactie["richting"] = request.form.get("richting", "plus")
+                nieuwe_transactie["reden"] = request.form.get("reden", "").strip()
+
+            geldig = nieuwe_transactie["materiaal"] and nieuwe_transactie["hoeveelheid"]
+            if type_ == "transfer":
+                geldig = geldig and nieuwe_transactie["locatie_van"] and nieuwe_transactie["locatie_naar"]
+            if type_ == "adjustment":
+                geldig = geldig and nieuwe_transactie["reden"]
+
+            if geldig:
                 transacties.append(nieuwe_transactie)
                 bewaar_voorraad(transacties)
 
@@ -5348,27 +5614,16 @@ def voorraad_pagina():
     transacties = laad_voorraad()
     transacties_gesorteerd = sorted(transacties, key=lambda t: t.get("aangemaakt",""), reverse=True)
 
-    def _hoeveelheid_float(t):
-        try:
-            return float(str(t.get("hoeveelheid","0")).replace(",",""))
-        except (ValueError, TypeError):
-            return 0.0
-
-    voorraad_per_materiaal = {}
-    te_keuren_per_materiaal = {}
-    for t in transacties:
-        naam = t.get("materiaal","")
-        if not naam:
-            continue
-        hoeveelheid = _hoeveelheid_float(t)
-        if t.get("type") == "in":
-            if t.get("keuringsstatus", "goedgekeurd") == "goedgekeurd":
-                voorraad_per_materiaal[naam] = voorraad_per_materiaal.get(naam, 0) + hoeveelheid
-            elif t.get("keuringsstatus") == "te_keuren":
-                te_keuren_per_materiaal[naam] = te_keuren_per_materiaal.get(naam, 0) + hoeveelheid
-            # afgekeurd materiaal telt nergens in mee
-        else:
-            voorraad_per_materiaal[naam] = voorraad_per_materiaal.get(naam, 0) - hoeveelheid
+    vs = bereken_voorraad_status()
+    voorraad_per_materiaal = vs["fysiek_per_materiaal"]
+    te_keuren_per_materiaal = vs["te_keuren_per_materiaal"]
+    per_locatie_materiaal = vs["per_locatie_materiaal"]
+    transit_per_materiaal = vs["transit_per_materiaal"]
+    verkocht_per_materiaal = vs["gereserveerd_per_materiaal"]
+    inkooporders_per_materiaal = vs["inkooporders_per_materiaal"]
+    aging_buckets = vs["aging_buckets"]
+    inkomend_7d = vs["inkomend_7d"]
+    uitgaand_7d = vs["uitgaand_7d"]
 
     voorraad_lijst = sorted(voorraad_per_materiaal.items(), key=lambda x: -x[1])
 
@@ -5381,9 +5636,15 @@ def voorraad_pagina():
     if filter_type:
         getoonde_transacties = [t for t in getoonde_transacties if t.get("type") == filter_type]
     if filter_locatie:
-        getoonde_transacties = [t for t in getoonde_transacties if t.get("locatie") == filter_locatie]
+        getoonde_transacties = [t for t in getoonde_transacties if t.get("locatie") == filter_locatie or t.get("locatie_van") == filter_locatie or t.get("locatie_naar") == filter_locatie]
 
-    alle_locaties = sorted({t.get("locatie","") for t in transacties if t.get("locatie")}) or ["Alblasserdam"]
+    alle_locaties = sorted({loc for (loc, _naam) in per_locatie_materiaal.keys()} | {t.get("locatie","") for t in transacties if t.get("locatie")}) or ["Alblasserdam"]
+
+    stock_per_locatie = {}
+    for (loc, naam), aantal in per_locatie_materiaal.items():
+        stock_per_locatie.setdefault(loc, 0)
+        stock_per_locatie[loc] += aantal
+    stock_per_locatie_lijst = sorted(stock_per_locatie.items(), key=lambda x: -x[1])
 
     _status_alle = laad_status()
     _accountmanagers_alle = laad_accountmanagers()
@@ -5397,21 +5658,7 @@ def voorraad_pagina():
         except (ValueError, TypeError):
             m["verschil"] = 0
 
-    # --- Koppeling met Orders: verkocht/gealloceerd en lopende inkooporders per materiaal ---
-    alle_orders_voorraad = laad_orders()
-    actieve_order_statussen = ("Open", "Onderhandeling", "Gewonnen")
-    verkocht_per_materiaal = {}
-    inkooporders_per_materiaal = {}
-    for o in alle_orders_voorraad:
-        if o.get("status") not in actieve_order_statussen or not o.get("materiaal"):
-            continue
-        aantal = parse_hoeveelheid_getal(o.get("hoeveelheid", ""))
-        if o.get("ordertype", "verkoop") == "inkoop":
-            inkooporders_per_materiaal[o["materiaal"]] = inkooporders_per_materiaal.get(o["materiaal"], 0) + aantal
-        else:
-            verkocht_per_materiaal[o["materiaal"]] = verkocht_per_materiaal.get(o["materiaal"], 0) + aantal
-
-    alle_materiaalnamen = sorted(set(voorraad_per_materiaal) | set(te_keuren_per_materiaal) | set(verkocht_per_materiaal) | set(inkooporders_per_materiaal))
+    alle_materiaalnamen = sorted(set(voorraad_per_materiaal) | set(te_keuren_per_materiaal) | set(verkocht_per_materiaal) | set(inkooporders_per_materiaal) | set(transit_per_materiaal))
     per_commodity = []
     for naam in alle_materiaalnamen:
         fysiek = voorraad_per_materiaal.get(naam, 0)
@@ -5421,6 +5668,7 @@ def voorraad_pagina():
             "naam": naam, "fysiek": fysiek, "binnenkort_binnen": binnenkort,
             "verkocht": verkocht, "vrij": fysiek - verkocht,
             "gepland_inkoop": inkooporders_per_materiaal.get(naam, 0),
+            "transit": transit_per_materiaal.get(naam, 0),
         })
     per_commodity.sort(key=lambda x: -x["fysiek"])
 
@@ -5429,6 +5677,30 @@ def voorraad_pagina():
     kpi_verkocht_totaal = sum(verkocht_per_materiaal.values())
     kpi_inkoop_totaal = sum(inkooporders_per_materiaal.values())
     kpi_vrij_totaal = kpi_fysiek_totaal - kpi_verkocht_totaal
+    kpi_transit_totaal = sum(transit_per_materiaal.values())
+    kpi_forecast_totaal = kpi_fysiek_totaal + inkomend_7d - uitgaand_7d
+
+    # Shipments (in-/uitgaande planning)
+    alle_shipments = sorted(laad_shipments(), key=lambda s: s.get("datum",""))
+    inbound_shipments = [s for s in alle_shipments if s.get("richting") == "inbound" and s.get("status") not in ("Cancelled",)]
+    outbound_shipments = [s for s in alle_shipments if s.get("richting") == "outbound" and s.get("status") not in ("Cancelled",)]
+
+    # Contracten met voortgang
+    alle_contracten = laad_contracten()
+    for c in alle_contracten:
+        try:
+            volume = float(str(c.get("contract_volume","0")).replace(",",""))
+        except (ValueError, TypeError):
+            volume = 0.0
+        ontvangen = sum(parse_hoeveelheid_getal(t.get("hoeveelheid","")) for t in transacties
+                         if t.get("type") in ("in","inbound") and t.get("keuringsstatus","goedgekeurd") == "goedgekeurd"
+                         and t.get("materiaal") == c.get("materiaal") and t.get("contract_id") == c["id"])
+        gepland = sum(parse_hoeveelheid_getal(s.get("hoeveelheid","")) for s in alle_shipments
+                       if s.get("contract_id") == c["id"] and s.get("status") not in ("Received","Delivered","Cancelled"))
+        c["ontvangen"] = ontvangen
+        c["gepland"] = gepland
+        c["resterend"] = max(0, volume - ontvangen - gepland)
+        c["percentage"] = round((ontvangen / volume * 100), 1) if volume else 0
 
     inhoud = """
 <style>
@@ -5448,14 +5720,16 @@ def voorraad_pagina():
 .vrd-tab.actief { background:var(--brand-600); color:#fff; border-color:var(--brand-600); }
 </style>
 <div class="page-title">Voorraad</div>
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.85rem;">Handelsvoorraad op de werf, alles in <b>ton</b>. Binnenkomend materiaal telt pas mee zodra het is goedgekeurd. Verkocht/vrij wordt live berekend uit je Orders.</p>
+<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.85rem;">Handelsvoorraad op de werf, alles in <b>ton</b>. Binnenkomend materiaal telt pas mee zodra het is goedgekeurd. Verkocht/vrij wordt live berekend uit je Orders en shipments.</p>
 
 <div class="vrd-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:16px;">
-    <div class="vrd-kaart"><div class="vrd-getal">{{ "{:,.1f}".format(kpi_fysiek_totaal) }}</div><div class="vrd-label">📦 Fysieke voorraad (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:#d97706;">{{ "{:,.1f}".format(kpi_binnenkort_totaal) }}</div><div class="vrd-label">⏳ Binnenkort binnen (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(kpi_verkocht_totaal) }}</div><div class="vrd-label">📤 Verkocht/gealloceerd (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--brand-600);">{{ "{:,.1f}".format(kpi_vrij_totaal) }}</div><div class="vrd-label">✅ Vrije voorraad (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:#0369a1;">{{ "{:,.1f}".format(kpi_inkoop_totaal) }}</div><div class="vrd-label">🛒 Open inkooporders (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal">{{ "{:,.1f}".format(kpi_fysiek_totaal) }}</div><div class="vrd-label">📦 TOTAL STOCK (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--brand-600);">{{ "{:,.1f}".format(kpi_vrij_totaal) }}</div><div class="vrd-label">✅ AVAILABLE (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(kpi_verkocht_totaal) }}</div><div class="vrd-label">🔒 RESERVED (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#7c3aed;">{{ "{:,.1f}".format(kpi_transit_totaal) }}</div><div class="vrd-label">🚚 IN TRANSIT (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#16a34a;">{{ "{:,.1f}".format(inkomend_7d) }}</div><div class="vrd-label">📥 INCOMING 7 DAYS (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(uitgaand_7d) }}</div><div class="vrd-label">📤 OUTGOING 7 DAYS (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--gray-600);">{{ "{:,.1f}".format(kpi_forecast_totaal) }}</div><div class="vrd-label">🔮 FORECAST STOCK (ton)</div></div>
 </div>
 
 <div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
@@ -5465,6 +5739,7 @@ def voorraad_pagina():
             <tr style="text-align:left;color:var(--gray-400);font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px;">
                 <th style="padding:6px 8px;">Commodity</th>
                 <th style="padding:6px 8px;text-align:right;">Fysiek</th>
+                <th style="padding:6px 8px;text-align:right;">In transit</th>
                 <th style="padding:6px 8px;text-align:right;">Binnenkort binnen</th>
                 <th style="padding:6px 8px;text-align:right;">Verkocht</th>
                 <th style="padding:6px 8px;text-align:right;">Vrij beschikbaar</th>
@@ -5475,15 +5750,45 @@ def voorraad_pagina():
             <tr style="border-top:1px solid var(--gray-50);">
                 <td style="padding:7px 8px;font-weight:700;color:var(--gray-800);">{{ c.naam }}</td>
                 <td style="padding:7px 8px;text-align:right;">{{ "{:,.1f}".format(c.fysiek) }}</td>
+                <td style="padding:7px 8px;text-align:right;color:#7c3aed;">{{ "{:,.1f}".format(c.transit) if c.transit else "—" }}</td>
                 <td style="padding:7px 8px;text-align:right;color:#d97706;">{{ "{:,.1f}".format(c.binnenkort_binnen) if c.binnenkort_binnen else "—" }}</td>
                 <td style="padding:7px 8px;text-align:right;color:#dc2626;">{{ "{:,.1f}".format(c.verkocht) if c.verkocht else "—" }}</td>
                 <td style="padding:7px 8px;text-align:right;font-weight:700;color:{{ 'var(--brand-600)' if c.vrij >= 0 else '#dc2626' }};">{{ "{:,.1f}".format(c.vrij) }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="5" style="padding:16px 8px;color:var(--gray-300);">Nog geen data.</td></tr>
+            <tr><td colspan="6" style="padding:16px 8px;color:var(--gray-300);">Nog geen data.</td></tr>
             {% endfor %}
         </tbody>
     </table>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+    <div class="vrd-kaart">
+        <div class="dg-kaart-titel" style="margin-bottom:10px;">Voorraad per locatie</div>
+        {% for loc, aantal in stock_per_locatie_lijst %}
+        <div class="vrd-transactie" style="padding:7px 0;">
+            <span>📍 {{ loc }}</span>
+            <b>{{ "{:,.1f}".format(aantal) }} ton</b>
+        </div>
+        {% else %}
+        <div style="color:var(--gray-300);font-size:12.5px;">Nog geen locatiedata.</div>
+        {% endfor %}
+    </div>
+    <div class="vrd-kaart">
+        <div class="dg-kaart-titel" style="margin-bottom:10px;">Aging (goedgekeurde voorraad)</div>
+        {% set aging_totaal = aging_buckets.values() | sum %}
+        {% for bucket, aantal in aging_buckets.items() %}
+        <div style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                <span style="color:{{ '#dc2626' if bucket == '90+' and aantal > 0 else 'var(--gray-500)' }};font-weight:{{ '700' if bucket == '90+' and aantal > 0 else '500' }};">{{ bucket }} dagen{{ ' ⚠' if bucket == '90+' and aantal > 0 else '' }}</span>
+                <span>{{ "{:,.1f}".format(aantal) }} ton</span>
+            </div>
+            <div style="background:var(--gray-100);border-radius:4px;height:6px;overflow:hidden;">
+                <div style="background:{{ '#dc2626' if bucket == '90+' else ('#d97706' if bucket == '61-90' else 'var(--brand-500)') }};height:100%;width:{{ (aantal / aging_totaal * 100) if aging_totaal else 0 }}%;"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
 </div>
 
 <div class="vrd-grid">
@@ -5498,14 +5803,195 @@ def voorraad_pagina():
     {% endfor %}
 </div>
 
+<div class="dg-kaart-titel" style="margin-bottom:12px;">📥 Inkomende planning</div>
+<div class="vrd-kaart" style="max-width:600px;margin-bottom:16px;">
+    <form method="POST" action="/voorraad/shipments" class="form-voorraad">
+        <input type="hidden" name="actie" value="toevoegen">
+        <input type="hidden" name="richting" value="inbound">
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <select name="materiaal" required>
+                <option value="">Materiaal...</option>
+                {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
+                <optgroup label="{{ categorie }}">
+                    <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
+                    {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}">{{ kw }}</option>{% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+            <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (ton)" required>
+        </div>
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="text" name="bedrijf" placeholder="Leverancier" list="bedrijvenLijstVoorraad">
+            <input type="date" name="datum" placeholder="ETA">
+        </div>
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="text" name="transport" placeholder="Transport (Truck/Container)">
+            <input type="text" name="referentie" placeholder="Referentie (optioneel)">
+        </div>
+        <input type="text" name="locatie" placeholder="Locatie" value="Alblasserdam" list="locatieLijstVoorraad" style="margin-bottom:10px;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
+        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Inkomende shipment plannen</button>
+    </form>
+</div>
+<div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead><tr style="text-align:left;color:var(--gray-400);font-size:10.5px;text-transform:uppercase;">
+            <th style="padding:6px 8px;">ETA</th><th style="padding:6px 8px;">Leverancier</th><th style="padding:6px 8px;">Materiaal</th>
+            <th style="padding:6px 8px;text-align:right;">Ton</th><th style="padding:6px 8px;">Transport</th><th style="padding:6px 8px;">Status</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for s in inbound_shipments %}
+        <tr style="border-top:1px solid var(--gray-50);">
+            <td style="padding:7px 8px;">{{ s.datum }}</td>
+            <td style="padding:7px 8px;">{{ s.bedrijf }}</td>
+            <td style="padding:7px 8px;font-weight:600;">{{ s.materiaal }}</td>
+            <td style="padding:7px 8px;text-align:right;">{{ s.hoeveelheid }}</td>
+            <td style="padding:7px 8px;">{{ s.transport }}</td>
+            <td style="padding:7px 8px;">
+                <form method="POST" action="/voorraad/shipments" style="margin:0;display:inline;">
+                    <input type="hidden" name="actie" value="status_wijzigen">
+                    <input type="hidden" name="shipment_id" value="{{ s.id }}">
+                    <select name="nieuwe_status" onchange="this.form.submit()" style="font-size:11px;font-weight:700;padding:3px 6px;border-radius:5px;border:1px solid var(--gray-200);">
+                        {% for st in shipment_inbound_statussen %}<option value="{{ st }}" {% if s.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    </select>
+                </form>
+            </td>
+            <td style="padding:7px 8px;">
+                <form method="POST" action="/voorraad/shipments" onsubmit="return confirm('Verwijderen?');" style="margin:0;">
+                    <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="shipment_id" value="{{ s.id }}">
+                    <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="padding:16px 8px;color:var(--gray-300);">Nog geen inkomende planning.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="dg-kaart-titel" style="margin-bottom:12px;">📤 Uitgaande planning</div>
+<div class="vrd-kaart" style="max-width:600px;margin-bottom:16px;">
+    <form method="POST" action="/voorraad/shipments" class="form-voorraad">
+        <input type="hidden" name="actie" value="toevoegen">
+        <input type="hidden" name="richting" value="outbound">
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <select name="materiaal" required>
+                <option value="">Materiaal...</option>
+                {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
+                <optgroup label="{{ categorie }}">
+                    <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
+                    {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}">{{ kw }}</option>{% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+            <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (ton)" required>
+        </div>
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="text" name="bedrijf" placeholder="Klant/Mill" list="bedrijvenLijstVoorraad">
+            <input type="date" name="datum" placeholder="ETD">
+        </div>
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="text" name="transport" placeholder="Transport (Container/Truck)">
+            <input type="text" name="referentie" placeholder="Referentie (optioneel)">
+        </div>
+        <input type="text" name="locatie" placeholder="Locatie" value="Alblasserdam" list="locatieLijstVoorraad" style="margin-bottom:10px;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
+        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Uitgaande shipment plannen</button>
+    </form>
+</div>
+<div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead><tr style="text-align:left;color:var(--gray-400);font-size:10.5px;text-transform:uppercase;">
+            <th style="padding:6px 8px;">ETD</th><th style="padding:6px 8px;">Klant</th><th style="padding:6px 8px;">Materiaal</th>
+            <th style="padding:6px 8px;text-align:right;">Ton</th><th style="padding:6px 8px;">Transport</th><th style="padding:6px 8px;">Status</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for s in outbound_shipments %}
+        <tr style="border-top:1px solid var(--gray-50);">
+            <td style="padding:7px 8px;">{{ s.datum }}</td>
+            <td style="padding:7px 8px;">{{ s.bedrijf }}</td>
+            <td style="padding:7px 8px;font-weight:600;">{{ s.materiaal }}</td>
+            <td style="padding:7px 8px;text-align:right;">{{ s.hoeveelheid }}</td>
+            <td style="padding:7px 8px;">{{ s.transport }}</td>
+            <td style="padding:7px 8px;">
+                <form method="POST" action="/voorraad/shipments" style="margin:0;display:inline;">
+                    <input type="hidden" name="actie" value="status_wijzigen">
+                    <input type="hidden" name="shipment_id" value="{{ s.id }}">
+                    <select name="nieuwe_status" onchange="this.form.submit()" style="font-size:11px;font-weight:700;padding:3px 6px;border-radius:5px;border:1px solid var(--gray-200);">
+                        {% for st in shipment_outbound_statussen %}<option value="{{ st }}" {% if s.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    </select>
+                </form>
+            </td>
+            <td style="padding:7px 8px;">
+                <form method="POST" action="/voorraad/shipments" onsubmit="return confirm('Verwijderen?');" style="margin:0;">
+                    <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="shipment_id" value="{{ s.id }}">
+                    <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="padding:16px 8px;color:var(--gray-300);">Nog geen uitgaande planning.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="dg-kaart-titel" style="margin-bottom:12px;">📜 Contracten</div>
+<div class="vrd-kaart" style="max-width:520px;margin-bottom:16px;">
+    <form method="POST" action="/voorraad/contracten" class="form-voorraad">
+        <input type="hidden" name="actie" value="toevoegen">
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="text" name="referentie" placeholder="Referentie (bv. ABC-2026-001)" required>
+            <select name="richting"><option value="inkoop">Inkoop</option><option value="verkoop">Verkoop</option></select>
+        </div>
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="text" name="tegenpartij" placeholder="Tegenpartij" list="bedrijvenLijstVoorraad">
+            <input type="text" name="contract_volume" placeholder="Contractvolume (ton)" required>
+        </div>
+        <select name="materiaal" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+            <option value="">Materiaal...</option>
+            {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
+            <optgroup label="{{ categorie }}">
+                <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
+                {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}">{{ kw }}</option>{% endfor %}
+            </optgroup>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Contract toevoegen</button>
+    </form>
+</div>
+<div class="vrd-kaart" style="margin-bottom:24px;">
+    {% for c in alle_contracten %}
+    <div style="padding:10px 0;border-bottom:1px solid var(--gray-50);">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div><b>{{ c.referentie }}</b> · {{ c.tegenpartij }} · {{ c.materiaal }} <span style="color:var(--gray-400);font-size:11px;">({{ c.richting }})</span></div>
+            <form method="POST" action="/voorraad/contracten" onsubmit="return confirm('Contract verwijderen?');" style="margin:0;">
+                <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="contract_id" value="{{ c.id }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button>
+            </form>
+        </div>
+        <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">
+            Volume: {{ c.contract_volume }} t · Ontvangen: {{ "{:,.1f}".format(c.ontvangen) }} t · Gepland: {{ "{:,.1f}".format(c.gepland) }} t · Resterend: {{ "{:,.1f}".format(c.resterend) }} t
+        </div>
+        <div style="background:var(--gray-100);border-radius:4px;height:6px;overflow:hidden;margin-top:6px;">
+            <div style="background:var(--brand-500);height:100%;width:{{ c.percentage }}%;"></div>
+        </div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">{{ c.percentage }}% vervuld</div>
+    </div>
+    {% else %}
+    <div class="lege-staat">Nog geen contracten.</div>
+    {% endfor %}
+</div>
+
 <div class="vrd-kaart" style="max-width:520px;margin-bottom:20px;">
     <div class="dg-kaart-titel">Transactie toevoegen</div>
     <form method="POST" class="form-voorraad">
         <input type="hidden" name="actie" value="toevoegen">
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <select name="type" id="voorraadTypeSelect" onchange="toggleKeuringVeld()">
-                <option value="in">📥 Binnenkomend materiaal</option>
-                <option value="uit">📤 Verkoop/afvoer (voorraad eraf)</option>
+            <select name="type" id="voorraadTypeSelect" onchange="toggleTransactieVelden()">
+                <option value="in">📥 Inbound (binnenkomend materiaal)</option>
+                <option value="uit">📤 Outbound (verkoop/afvoer)</option>
+                <option value="transfer">🔄 Transfer (tussen locaties)</option>
+                <option value="adjustment">⚖️ Adjustment (correctie)</option>
             </select>
             <input type="date" name="datum" value="{{ vandaag }}">
         </div>
@@ -5520,11 +6006,23 @@ def voorraad_pagina():
         </select>
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (ton)" required>
-            <input type="text" name="locatie" placeholder="Locatie" value="Alblasserdam" list="locatieLijstVoorraad">
+            <div id="locatieVeldWrap"><input type="text" name="locatie" placeholder="Locatie" value="Alblasserdam" list="locatieLijstVoorraad"></div>
         </div>
         <datalist id="locatieLijstVoorraad">
             {% for loc in alle_locaties %}<option value="{{ loc }}">{% endfor %}
         </datalist>
+        <div id="transferVeldWrap" style="display:none;">
+            <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <input type="text" name="locatie_van" placeholder="Van locatie" list="locatieLijstVoorraad">
+                <input type="text" name="locatie_naar" placeholder="Naar locatie" list="locatieLijstVoorraad">
+            </div>
+        </div>
+        <div id="adjustmentVeldWrap" style="display:none;">
+            <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <select name="richting"><option value="plus">➕ Voorraad erbij</option><option value="min">➖ Voorraad eraf</option></select>
+                <input type="text" name="reden" placeholder="Reden (verplicht)">
+            </div>
+        </div>
         <div id="keuringVeldWrap">
             <select name="keuringsstatus">
                 <option value="te_keuren">⏳ Te keuren (nog niet in handelsvoorraad)</option>
@@ -5543,9 +6041,12 @@ def voorraad_pagina():
     </form>
 </div>
 <script>
-function toggleKeuringVeld() {
+function toggleTransactieVelden() {
     const type = document.getElementById("voorraadTypeSelect").value;
     document.getElementById("keuringVeldWrap").style.display = (type === "in") ? "block" : "none";
+    document.getElementById("transferVeldWrap").style.display = (type === "transfer") ? "block" : "none";
+    document.getElementById("adjustmentVeldWrap").style.display = (type === "adjustment") ? "block" : "none";
+    document.getElementById("locatieVeldWrap").style.display = (type === "transfer") ? "none" : "block";
 }
 </script>
 
@@ -5572,14 +6073,18 @@ function toggleKeuringVeld() {
         {% for t in getoonde_transacties %}
         <div class="vrd-transactie">
             <div>
-                <span class="{{ 'vrd-badge-in' if t.type == 'in' else 'vrd-badge-uit' }}">{{ '📥 IN' if t.type == 'in' else '📤 UIT' }}</span>
+                {% if t.type == "transfer" %}<span style="background:#eef2ff;color:#4f46e5;font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;">🔄 TRANSFER</span>
+                {% elif t.type == "adjustment" %}<span style="background:{{ '#f0fdf4' if t.get('richting') == 'plus' else '#fef2f2' }};color:{{ '#16a34a' if t.get('richting') == 'plus' else '#dc2626' }};font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;">⚖️ {{ 'CORRECTIE +' if t.get('richting') == 'plus' else 'CORRECTIE -' }}</span>
+                {% else %}<span class="{{ 'vrd-badge-in' if t.type == 'in' else 'vrd-badge-uit' }}">{{ '📥 IN' if t.type == 'in' else '📤 UIT' }}</span>{% endif %}
                 {% if t.type == "in" %}
                     {% if t.get("keuringsstatus","goedgekeurd") == "te_keuren" %}<span class="vrd-badge-te-keuren">⏳ Te keuren</span>
                     {% elif t.get("keuringsstatus") == "afgekeurd" %}<span class="vrd-badge-afgekeurd">✕ Afgekeurd</span>
                     {% else %}<span style="color:#16a34a;font-size:11px;">✓ Goedgekeurd</span>{% endif %}
                 {% endif %}
                 <b>{{ t.materiaal }}</b> · {{ t.hoeveelheid }} ton
-                {% if t.locatie %} · 📍{{ t.locatie }}{% endif %}
+                {% if t.type == "transfer" %} · 📍{{ t.locatie_van }} → {{ t.locatie_naar }}
+                {% elif t.locatie %} · 📍{{ t.locatie }}{% endif %}
+                {% if t.type == "adjustment" and t.reden %} · reden: {{ t.reden }}{% endif %}
                 {% if t.bedrijf %} · {{ t.bedrijf }}{% endif %}
                 {% if t.prijs %} · €{{ t.prijs }}{% endif %}
                 <br><small style="color:var(--gray-400);">{{ t.datum }} · {{ t.gebruiker }}{% if t.notitie %} · {{ t.notitie }}{% endif %}</small>
@@ -5676,7 +6181,13 @@ function toggleKeuringVeld() {
                                     voorraadmomenten=voorraadmomenten,
                                     per_commodity=per_commodity, kpi_fysiek_totaal=kpi_fysiek_totaal,
                                     kpi_binnenkort_totaal=kpi_binnenkort_totaal, kpi_verkocht_totaal=kpi_verkocht_totaal,
-                                    kpi_inkoop_totaal=kpi_inkoop_totaal, kpi_vrij_totaal=kpi_vrij_totaal)
+                                    kpi_inkoop_totaal=kpi_inkoop_totaal, kpi_vrij_totaal=kpi_vrij_totaal,
+                                    kpi_transit_totaal=kpi_transit_totaal, kpi_forecast_totaal=kpi_forecast_totaal,
+                                    inkomend_7d=inkomend_7d, uitgaand_7d=uitgaand_7d,
+                                    stock_per_locatie_lijst=stock_per_locatie_lijst, aging_buckets=aging_buckets,
+                                    inbound_shipments=inbound_shipments, outbound_shipments=outbound_shipments,
+                                    shipment_inbound_statussen=SHIPMENT_INBOUND_STATUSSEN, shipment_outbound_statussen=SHIPMENT_OUTBOUND_STATUSSEN,
+                                    alle_contracten=alle_contracten)
 
 @app.route("/orders", methods=["GET", "POST"])
 def orders_pagina():
