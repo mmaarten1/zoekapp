@@ -5801,15 +5801,33 @@ def voorraad_pagina():
             volume = float(str(c.get("contract_volume","0")).replace(",",""))
         except (ValueError, TypeError):
             volume = 0.0
-        ontvangen = sum(parse_hoeveelheid_getal(t.get("hoeveelheid","")) for t in transacties
-                         if t.get("type") in ("in","inbound") and t.get("keuringsstatus","goedgekeurd") == "goedgekeurd"
-                         and t.get("materiaal") == c.get("materiaal") and t.get("contract_id") == c["id"])
-        gepland = sum(parse_hoeveelheid_getal(s.get("hoeveelheid","")) for s in alle_shipments
+
+        if c.get("richting") == "verkoop":
+            # Verkoop naar een fabriek/klant: "geleverd" = shipments die daadwerkelijk afgeleverd zijn
+            voortgang = sum(shipment_hoeveelheid(s) for s in alle_shipments
+                             if s.get("contract_id") == c["id"] and s.get("status") == "Delivered")
+        else:
+            # Inkoop: "ontvangen" = goedgekeurde inbound-transacties op de fysieke voorraad
+            voortgang = sum(parse_hoeveelheid_getal(t.get("hoeveelheid","")) for t in transacties
+                             if t.get("type") in ("in","inbound") and t.get("keuringsstatus","goedgekeurd") == "goedgekeurd"
+                             and t.get("materiaal") == c.get("materiaal") and t.get("contract_id") == c["id"])
+
+        gepland = sum(shipment_hoeveelheid(s) for s in alle_shipments
                        if s.get("contract_id") == c["id"] and s.get("status") not in ("Received","Delivered","Cancelled"))
-        c["ontvangen"] = ontvangen
+        c["ontvangen"] = voortgang
+        c["voortgang_label"] = "Geleverd" if c.get("richting") == "verkoop" else "Ontvangen"
         c["gepland"] = gepland
-        c["resterend"] = max(0, volume - ontvangen - gepland)
-        c["percentage"] = round((ontvangen / volume * 100), 1) if volume else 0
+        c["resterend"] = max(0, volume - voortgang - gepland)
+        c["percentage"] = round((voortgang / volume * 100), 1) if volume else 0
+
+    # Fabrieken-overzicht: verkoop-contracten gegroepeerd per tegenpartij (fabriek/klant)
+    fabrieken_overzicht = {}
+    for c in alle_contracten:
+        if c.get("richting") != "verkoop":
+            continue
+        naam = c.get("tegenpartij") or "Onbekend"
+        fabrieken_overzicht.setdefault(naam, []).append(c)
+    fabrieken_overzicht_lijst = sorted(fabrieken_overzicht.items())
 
     inhoud = """
 <style>
@@ -6047,6 +6065,29 @@ function voorraadStatusSubmit(form, isInbound) {
 }
 </script>
 
+<div class="dg-kaart-titel" style="margin-bottom:12px;">🏭 Fabrieken — openstaande leveringen</div>
+<p style="color:var(--gray-400);font-size:0.82rem;margin-top:-8px;margin-bottom:16px;">Wat kan er nog geleverd worden per fabriek/klant, gebaseerd op je verkoopcontracten hieronder.</p>
+<div class="vrd-kaart" style="margin-bottom:24px;">
+    {% for fabriek_naam, contracten_lijst in fabrieken_overzicht_lijst %}
+    <div style="padding:10px 0;border-bottom:1px solid var(--gray-50);">
+        <div style="font-weight:700;color:var(--gray-800);margin-bottom:6px;">🏭 {{ fabriek_naam }}</div>
+        {% for c in contracten_lijst %}
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:4px 0;">
+            <span>{{ c.materiaal }} <span style="color:var(--gray-400);">({{ c.referentie }})</span></span>
+            <span>
+                totaal <b>{{ c.contract_volume }}t</b> ·
+                geleverd <b style="color:#16a34a;">{{ "{:,.0f}".format(c.ontvangen) }}t</b> ·
+                gepland <b style="color:#d97706;">{{ "{:,.0f}".format(c.gepland) }}t</b> ·
+                <span style="color:{{ '#dc2626' if c.resterend > 0 else 'var(--gray-400)' }};font-weight:700;">nog open {{ "{:,.0f}".format(c.resterend) }}t</span>
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="lege-staat">Nog geen verkoopcontracten met een fabriek/klant.</div>
+    {% endfor %}
+</div>
+
 <div class="dg-kaart-titel" style="margin-bottom:12px;">📜 Contracten</div>
 <div class="vrd-kaart" style="max-width:520px;margin-bottom:16px;">
     <form method="POST" action="/voorraad/contracten" class="form-voorraad">
@@ -6082,7 +6123,7 @@ function voorraadStatusSubmit(form, isInbound) {
             </form>
         </div>
         <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">
-            Volume: {{ c.contract_volume }} t · Ontvangen: {{ "{:,.1f}".format(c.ontvangen) }} t · Gepland: {{ "{:,.1f}".format(c.gepland) }} t · Resterend: {{ "{:,.1f}".format(c.resterend) }} t
+            Volume: {{ c.contract_volume }} t · {{ c.voortgang_label }}: {{ "{:,.1f}".format(c.ontvangen) }} t · Gepland: {{ "{:,.1f}".format(c.gepland) }} t · Resterend: {{ "{:,.1f}".format(c.resterend) }} t
         </div>
         <div style="background:var(--gray-100);border-radius:4px;height:6px;overflow:hidden;margin-top:6px;">
             <div style="background:var(--brand-500);height:100%;width:{{ c.percentage }}%;"></div>
@@ -6304,7 +6345,8 @@ function toggleTransactieVelden() {
                                     flow_by_origin_lijst=flow_by_origin_lijst, flow_by_destination_lijst=flow_by_destination_lijst,
                                     actieve_shipments=actieve_shipments, alle_shipments_dropdown=alle_shipments_dropdown,
                                     shipment_statussen=SHIPMENT_STATUSSEN, landen=_alle_bedrijven_landen,
-                                    alle_contracten=alle_contracten, is_admin=is_huidige_gebruiker_admin(), prefill=prefill)
+                                    alle_contracten=alle_contracten, is_admin=is_huidige_gebruiker_admin(), prefill=prefill,
+                                    fabrieken_overzicht_lijst=fabrieken_overzicht_lijst)
 
 @app.route("/orders", methods=["GET", "POST"])
 def orders_pagina():
