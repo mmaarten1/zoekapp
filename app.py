@@ -2557,6 +2557,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             .drawer-row { flex-direction: column; align-items: flex-start; gap: 4px; }
             .drawer-row-value { text-align: left; width: 100%; }
             .drawer-row-value input[type="text"] { width: 100% !important; text-align: left !important; box-sizing: border-box; }
+            .vrd-2koloms { grid-template-columns: 1fr !important; }
         }
 
 
@@ -3286,6 +3287,7 @@ HTML = '''
             .drawer-row { flex-direction: column; align-items: flex-start; gap: 4px; }
             .drawer-row-value { text-align: left; width: 100%; }
             .drawer-row-value input[type="text"] { width: 100% !important; text-align: left !important; box-sizing: border-box; }
+            .vrd-2koloms { grid-template-columns: 1fr !important; }
         }
 
 
@@ -5871,7 +5873,7 @@ def voorraad_pagina():
     </table>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+<div class="vrd-2koloms" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
     <div class="vrd-kaart">
         <div class="dg-kaart-titel" style="margin-bottom:10px;">Voorraad per locatie</div>
         {% for loc, aantal in stock_per_locatie_lijst %}
@@ -5900,7 +5902,7 @@ def voorraad_pagina():
     </div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+<div class="vrd-2koloms" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
     <div class="vrd-kaart">
         <div class="dg-kaart-titel" style="margin-bottom:10px;">Flow by origin</div>
         {% for land, aantal in flow_by_origin_lijst %}
