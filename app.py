@@ -5330,6 +5330,22 @@ def dashboard():
     {% endif %}
 </div>
 
+<div class="dg-kaart">
+    <div class="dg-kaart-titel">📦 Voorraad Alblasserdam</div>
+    {% set vrd_fysiek = vrd.fysiek_per_materiaal.values() | sum %}
+    {% set vrd_transit = vrd.transit_per_materiaal.values() | sum %}
+    {% set vrd_verkocht = vrd.gereserveerd_per_materiaal.values() | sum %}
+    {% set vrd_direct = vrd.direct_flow_per_materiaal.values() | sum %}
+    {% if vrd_fysiek or vrd_transit or vrd_direct %}
+        <div class="dg-activiteit-item"><b>{{ "{:,.1f}".format(vrd_fysiek) }} ton</b><small>Fysieke voorraad</small></div>
+        <div class="dg-activiteit-item"><b>{{ "{:,.1f}".format(vrd_fysiek - vrd_verkocht) }} ton</b><small>Vrij beschikbaar</small></div>
+        <div class="dg-activiteit-item"><b>{{ "{:,.1f}".format(vrd_transit) }} ton</b><small>Onderweg (in transit)</small></div>
+        <a href="/voorraad" style="display:block;margin-top:10px;font-size:0.8rem;color:var(--brand-600);text-decoration:none;font-weight:600;">Volledig voorraadoverzicht →</a>
+    {% else %}
+    <div class="dg-lege">Nog geen voorraaddata. <a href="/voorraad" style="color:var(--brand-600);">Ga naar Voorraad →</a></div>
+    {% endif %}
+</div>
+
 </div>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -5379,7 +5395,8 @@ dKaart.addLayer(dCluster);
         donut_segmenten=donut_segmenten, regio_kaarten=regio_kaarten,
         groei_pct=groei_pct, groei_periode=groei_periode,
         openstaande_orders=sorted([o for o in laad_orders() if o["status"] in ("Open", "Onderhandeling")], key=lambda o: o.get("aangemaakt",""), reverse=True)[:5],
-        team_prestaties=team_prestaties)
+        team_prestaties=team_prestaties,
+        vrd=bereken_voorraad_status())
 
 @app.route("/inzichten")
 def inzichten():
