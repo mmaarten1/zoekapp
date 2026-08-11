@@ -6556,6 +6556,14 @@ def orders_pagina():
 
     alle_orders = laad_orders()
     alle_orders.sort(key=lambda o: o.get("aangemaakt", ""), reverse=True)
+
+    # Koppel elke order aan een reeds aangemaakte shipment (via "Uitboeken"/"Inboeken"), zodat je niet per ongeluk dubbel boekt
+    _alle_shipments_lookup = laad_shipments()
+    for o in alle_orders:
+        gekoppelde_ref = f"Order-{o['id'][:8]}"
+        gekoppelde_shipment = next((s for s in _alle_shipments_lookup if s.get("referentie") == gekoppelde_ref), None)
+        o["gekoppelde_shipment"] = gekoppelde_shipment
+
     open_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] in ("Open", "Onderhandeling") and o.get("prijs", "").replace(".","",1).isdigit())
     gewonnen_waarde = sum(float(o["prijs"]) for o in alle_orders if o["status"] == "Gewonnen" and o.get("prijs", "").replace(".","",1).isdigit())
     _vandaag_kpi = datetime.date.today()
@@ -6701,7 +6709,9 @@ def orders_pagina():
             <div class="order-details" style="margin-top:6px;color:var(--gray-300);">{{ o.verantwoordelijke }} · {{ o.aangemaakt }}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-            {% if o.status == "Gewonnen" %}
+            {% if o.gekoppelde_shipment %}
+            <span style="font-size:11px;font-weight:700;color:var(--gray-500);background:var(--gray-50);padding:5px 9px;border-radius:5px;white-space:nowrap;">🚢 {{ o.gekoppelde_shipment.status }}</span>
+            {% elif o.status == "Gewonnen" %}
             <a href="/voorraad?prefill_order={{ o.id }}" style="font-size:11px;font-weight:700;color:#fff;background:{{ '#0891b2' if o.get('ordertype') == 'inkoop' else '#dc2626' }};padding:5px 9px;border-radius:5px;text-decoration:none;white-space:nowrap;">{{ '📥 Inboeken' if o.get('ordertype') == 'inkoop' else '📤 Uitboeken' }}</a>
             {% endif %}
             <form method="POST" style="margin:0;">
