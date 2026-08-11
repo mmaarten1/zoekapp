@@ -6001,6 +6001,10 @@ def voorraad_pagina():
                 {% for s in alle_shipments_dropdown %}<option value="{{ s.id }}">{{ s.referentie or s.id[:8] }} ({{ s.origin_land }} → {{ s.destination_land }})</option>{% endfor %}
             </select>
         </div>
+        <select name="contract_id" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+            <option value="">Geen contract koppelen</option>
+            {% for c in alle_contracten %}<option value="{{ c.id }}">{{ c.referentie }} — {{ c.tegenpartij }} ({{ c.materiaal }}, {{ c.richting }})</option>{% endfor %}
+        </select>
         <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
         <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Shipment plannen</button>
     </form>
