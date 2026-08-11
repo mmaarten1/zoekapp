@@ -312,11 +312,33 @@ def bereken_voorraad_status():
             fysiek_per_materiaal[naam] = fysiek_per_materiaal.get(naam, 0) + teken * aantal
             per_locatie_materiaal[(locatie, naam)] = per_locatie_materiaal.get((locatie, naam), 0) + teken * aantal
 
-    # Transit: inbound shipments die "In Transit" staan (nog niet ontvangen)
+    # Drielaags model: elke actieve shipment valt in precies één bucket (geen dubbeltelling)
+    # - inbound, nog niet Weighed/Received -> In Transit
+    # - outbound, al Loaded (dus al van de fysieke voorraad af) maar nog niet Delivered -> In Transit
+    # - direct (raakt Alblasserdam nooit) -> Direct Flow
     transit_per_materiaal = {}
+    direct_flow_per_materiaal = {}
+    flow_by_origin = {}
+    flow_by_destination = {}
+    inactieve_statussen = ("Cancelled",)
     for s in shipments:
-        if s.get("richting") == "inbound" and s.get("status") == "In Transit":
-            transit_per_materiaal[s["materiaal"]] = transit_per_materiaal.get(s["materiaal"], 0) + parse_hoeveelheid_getal(s.get("hoeveelheid", ""))
+        if s.get("status") in inactieve_statussen or not s.get("materiaal"):
+            continue
+        flow_type = bepaal_shipment_flow_type(s)
+        aantal = shipment_hoeveelheid(s)
+
+        if flow_type == "direct" and s.get("status") != "Delivered":
+            direct_flow_per_materiaal[s["materiaal"]] = direct_flow_per_materiaal.get(s["materiaal"], 0) + aantal
+        elif flow_type == "inbound" and s.get("status") not in ("Weighed", "Received"):
+            transit_per_materiaal[s["materiaal"]] = transit_per_materiaal.get(s["materiaal"], 0) + aantal
+        elif flow_type == "outbound" and s.get("status") in ("Loaded", "In Transit", "Arrived") :
+            transit_per_materiaal[s["materiaal"]] = transit_per_materiaal.get(s["materiaal"], 0) + aantal
+
+        if s.get("status") != "Delivered":
+            if s.get("origin_land"):
+                flow_by_origin[s["origin_land"]] = flow_by_origin.get(s["origin_land"], 0) + aantal
+            if s.get("destination_land"):
+                flow_by_destination[s["destination_land"]] = flow_by_destination.get(s["destination_land"], 0) + aantal
 
     # Gereserveerd: actieve verkooporders (nog niet verzonden/afgehandeld)
     gereserveerd_per_materiaal = {}
@@ -355,17 +377,18 @@ def bereken_voorraad_status():
     inkomend_7d = 0.0
     uitgaand_7d = 0.0
     for s in shipments:
-        if s.get("status") in ("Cancelled", "Received", "Delivered", "Shipped"):
+        if s.get("status") in ("Cancelled", "Received", "Delivered"):
             continue
         try:
             eta = datetime.datetime.strptime(s.get("datum", ""), "%Y-%m-%d").date()
         except (ValueError, TypeError):
             continue
         if vandaag <= eta <= over_7_dagen:
-            aantal = parse_hoeveelheid_getal(s.get("hoeveelheid", ""))
-            if s.get("richting") == "inbound":
+            aantal = shipment_hoeveelheid(s)
+            flow_type = bepaal_shipment_flow_type(s)
+            if flow_type == "inbound":
                 inkomend_7d += aantal
-            else:
+            elif flow_type == "outbound":
                 uitgaand_7d += aantal
 
     return {
@@ -373,6 +396,9 @@ def bereken_voorraad_status():
         "te_keuren_per_materiaal": te_keuren_per_materiaal,
         "per_locatie_materiaal": per_locatie_materiaal,
         "transit_per_materiaal": transit_per_materiaal,
+        "direct_flow_per_materiaal": direct_flow_per_materiaal,
+        "flow_by_origin": flow_by_origin,
+        "flow_by_destination": flow_by_destination,
         "gereserveerd_per_materiaal": gereserveerd_per_materiaal,
         "inkooporders_per_materiaal": inkooporders_per_materiaal,
         "aging_buckets": aging_buckets,
@@ -5430,8 +5456,26 @@ def export_orders_csv():
     return Response(output.getvalue(), mimetype="text/csv",
                      headers={"Content-Disposition": "attachment; filename=orders_export.csv"})
 
-SHIPMENT_INBOUND_STATUSSEN = ["Planned", "Confirmed", "In Transit", "Received", "Cancelled"]
-SHIPMENT_OUTBOUND_STATUSSEN = ["Planned", "Confirmed", "Loading", "Shipped", "Delivered", "Cancelled"]
+SHIPMENT_STATUSSEN = ["Planned", "Confirmed", "Loading", "Loaded", "In Transit", "Arrived", "Weighed", "Received", "Delivered", "Cancelled"]
+ALBLASSERDAM_NAAM = "Alblasserdam"
+
+def bepaal_shipment_flow_type(shipment):
+    """Bepaalt puur op basis van origin/destination of dit inbound/outbound (Alblasserdam) of direct flow is."""
+    origin = (shipment.get("origin_land","") or "").strip().lower()
+    dest = (shipment.get("destination_land","") or "").strip().lower()
+    alb = ALBLASSERDAM_NAAM.lower()
+    if dest == alb:
+        return "inbound"
+    if origin == alb:
+        return "outbound"
+    return "direct"
+
+def shipment_hoeveelheid(shipment):
+    """Werkelijk gewogen gewicht heeft voorrang boven gepland gewicht."""
+    werkelijk = shipment.get("werkelijk_hoeveelheid", "")
+    if werkelijk:
+        return parse_hoeveelheid_getal(werkelijk)
+    return parse_hoeveelheid_getal(shipment.get("gepland_hoeveelheid", ""))
 
 @app.route("/voorraad/shipments", methods=["POST"])
 def voorraad_shipments_actie():
@@ -5439,24 +5483,29 @@ def voorraad_shipments_actie():
     shipments = laad_shipments()
 
     if actie == "toevoegen":
-        richting = request.form.get("richting", "inbound")
         nieuw = {
             "id": str(uuid.uuid4()),
-            "richting": richting,
-            "materiaal": request.form.get("materiaal", "").strip(),
-            "hoeveelheid": request.form.get("hoeveelheid", "").strip(),
-            "locatie": request.form.get("locatie", "").strip() or "Alblasserdam",
-            "bedrijf": request.form.get("bedrijf", "").strip(),
-            "transport": request.form.get("transport", "").strip(),
             "referentie": request.form.get("referentie", "").strip(),
+            "origin_land": request.form.get("origin_land", "").strip(),
+            "origin_leverancier": request.form.get("origin_leverancier", "").strip(),
+            "loading_locatie": request.form.get("loading_locatie", "").strip(),
+            "destination_land": request.form.get("destination_land", "").strip(),
+            "destination_naam": request.form.get("destination_naam", "").strip(),
+            "transport": request.form.get("transport", "").strip(),
+            "materiaal": request.form.get("materiaal", "").strip(),
             "contract_id": request.form.get("contract_id", "").strip(),
+            "gepland_hoeveelheid": request.form.get("gepland_hoeveelheid", "").strip(),
+            "werkelijk_hoeveelheid": "",
+            "bruto_gewicht": "", "tara_gewicht": "", "netto_gewicht": "", "weegbon_nummer": "",
+            "gekoppelde_shipment_id": request.form.get("gekoppelde_shipment_id", "").strip(),
             "datum": request.form.get("datum", "").strip(),
             "status": "Planned",
+            "voorraad_verwerkt": False,
             "notitie": request.form.get("notitie", "").strip(),
             "gebruiker": session.get("gebruikersnaam", ""),
             "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
         }
-        if nieuw["materiaal"] and nieuw["hoeveelheid"]:
+        if nieuw["materiaal"] and nieuw["gepland_hoeveelheid"] and nieuw["origin_land"] and nieuw["destination_land"]:
             shipments.append(nieuw)
             bewaar_shipments(shipments)
 
@@ -5465,31 +5514,52 @@ def voorraad_shipments_actie():
         nieuwe_status = request.form.get("nieuwe_status", "")
         doel = next((s for s in shipments if s["id"] == shipment_id), None)
         if doel:
+            flow_type = bepaal_shipment_flow_type(doel)
+
+            # Bij 'Weighed' het weegbrug-gewicht vastleggen (bruto - tara = netto)
+            if nieuwe_status == "Weighed":
+                bruto = request.form.get("bruto_gewicht", "").strip()
+                tara = request.form.get("tara_gewicht", "").strip()
+                if bruto and tara:
+                    netto = parse_hoeveelheid_getal(bruto) - parse_hoeveelheid_getal(tara)
+                    doel["bruto_gewicht"] = bruto
+                    doel["tara_gewicht"] = tara
+                    doel["netto_gewicht"] = str(round(netto, 2))
+                    doel["werkelijk_hoeveelheid"] = str(round(netto, 2))
+                doel["weegbon_nummer"] = request.form.get("weegbon_nummer", "").strip()
+
             doel["status"] = nieuwe_status
             bewaar_shipments(shipments)
 
-            # Automatisch effect op de voorraad bij ontvangst/verzending
-            if doel["richting"] == "inbound" and nieuwe_status == "Received":
+            # Automatisch effect op de fysieke voorraad: alleen bij Alblasserdam-gerelateerde legs
+            aantal = shipment_hoeveelheid(doel)
+            if flow_type == "inbound" and nieuwe_status in ("Weighed", "Received") and not doel.get("voorraad_verwerkt"):
                 transacties = laad_voorraad()
                 transacties.append({
                     "id": str(uuid.uuid4()), "type": "in", "materiaal": doel["materiaal"],
-                    "hoeveelheid": doel["hoeveelheid"], "locatie": doel["locatie"],
-                    "bedrijf": doel.get("bedrijf",""), "prijs": "", "notitie": f"Automatisch aangemaakt bij ontvangst shipment {doel.get('referentie','')}",
+                    "hoeveelheid": str(aantal), "locatie": ALBLASSERDAM_NAAM,
+                    "bedrijf": doel.get("origin_leverancier",""), "prijs": "",
+                    "notitie": f"Automatisch aangemaakt bij {nieuwe_status.lower()} van shipment {doel.get('referentie','')}",
                     "gebruiker": session.get("gebruikersnaam",""), "datum": datetime.date.today().isoformat(),
                     "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
                     "keuringsstatus": "te_keuren",
                 })
                 bewaar_voorraad(transacties)
-            elif doel["richting"] == "outbound" and nieuwe_status == "Shipped":
+                doel["voorraad_verwerkt"] = True
+                bewaar_shipments(shipments)
+            elif flow_type == "outbound" and nieuwe_status == "Loaded" and not doel.get("voorraad_verwerkt"):
                 transacties = laad_voorraad()
                 transacties.append({
                     "id": str(uuid.uuid4()), "type": "uit", "materiaal": doel["materiaal"],
-                    "hoeveelheid": doel["hoeveelheid"], "locatie": doel["locatie"],
-                    "bedrijf": doel.get("bedrijf",""), "prijs": "", "notitie": f"Automatisch aangemaakt bij verzending shipment {doel.get('referentie','')}",
+                    "hoeveelheid": str(aantal), "locatie": ALBLASSERDAM_NAAM,
+                    "bedrijf": doel.get("destination_naam",""), "prijs": "",
+                    "notitie": f"Automatisch aangemaakt bij verlading shipment {doel.get('referentie','')}",
                     "gebruiker": session.get("gebruikersnaam",""), "datum": datetime.date.today().isoformat(),
                     "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
                 })
                 bewaar_voorraad(transacties)
+                doel["voorraad_verwerkt"] = True
+                bewaar_shipments(shipments)
 
     elif actie == "verwijderen":
         shipment_id = request.form.get("shipment_id", "")
@@ -5680,10 +5750,18 @@ def voorraad_pagina():
     kpi_transit_totaal = sum(transit_per_materiaal.values())
     kpi_forecast_totaal = kpi_fysiek_totaal + inkomend_7d - uitgaand_7d
 
-    # Shipments (in-/uitgaande planning)
+    # Shipments (unified model: systeem classificeert zelf inbound/outbound/direct)
     alle_shipments = sorted(laad_shipments(), key=lambda s: s.get("datum",""))
-    inbound_shipments = [s for s in alle_shipments if s.get("richting") == "inbound" and s.get("status") not in ("Cancelled",)]
-    outbound_shipments = [s for s in alle_shipments if s.get("richting") == "outbound" and s.get("status") not in ("Cancelled",)]
+    for s in alle_shipments:
+        s["flow_type"] = bepaal_shipment_flow_type(s)
+    actieve_shipments = [s for s in alle_shipments if s.get("status") != "Cancelled"]
+    alle_shipments_dropdown = actieve_shipments
+    kpi_direct_flow_totaal = sum(vs["direct_flow_per_materiaal"].values())
+    flow_by_origin_lijst = sorted(vs["flow_by_origin"].items(), key=lambda x: -x[1])
+    flow_by_destination_lijst = sorted(vs["flow_by_destination"].items(), key=lambda x: -x[1])
+    kpi_totaal_controlled = kpi_fysiek_totaal + kpi_transit_totaal + kpi_direct_flow_totaal
+
+    _alle_bedrijven_landen = sorted({b.get("land","") for b in ENF_BEDRIJVEN if b.get("land")})
 
     # Contracten met voortgang
     alle_contracten = laad_contracten()
@@ -5727,6 +5805,8 @@ def voorraad_pagina():
     <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--brand-600);">{{ "{:,.1f}".format(kpi_vrij_totaal) }}</div><div class="vrd-label">✅ AVAILABLE (ton)</div></div>
     <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(kpi_verkocht_totaal) }}</div><div class="vrd-label">🔒 RESERVED (ton)</div></div>
     <div class="vrd-kaart"><div class="vrd-getal" style="color:#7c3aed;">{{ "{:,.1f}".format(kpi_transit_totaal) }}</div><div class="vrd-label">🚚 IN TRANSIT (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#0891b2;">{{ "{:,.1f}".format(kpi_direct_flow_totaal) }}</div><div class="vrd-label">🌍 DIRECT FLOW (ton)</div></div>
+    <div class="vrd-kaart" style="background:var(--gray-800);"><div class="vrd-getal" style="color:#fff;">{{ "{:,.1f}".format(kpi_totaal_controlled) }}</div><div class="vrd-label" style="color:var(--gray-300);">📊 TOTAL CONTROLLED VOLUME</div></div>
     <div class="vrd-kaart"><div class="vrd-getal" style="color:#16a34a;">{{ "{:,.1f}".format(inkomend_7d) }}</div><div class="vrd-label">📥 INCOMING 7 DAYS (ton)</div></div>
     <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(uitgaand_7d) }}</div><div class="vrd-label">📤 OUTGOING 7 DAYS (ton)</div></div>
     <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--gray-600);">{{ "{:,.1f}".format(kpi_forecast_totaal) }}</div><div class="vrd-label">🔮 FORECAST STOCK (ton)</div></div>
@@ -5791,6 +5871,25 @@ def voorraad_pagina():
     </div>
 </div>
 
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+    <div class="vrd-kaart">
+        <div class="dg-kaart-titel" style="margin-bottom:10px;">Flow by origin</div>
+        {% for land, aantal in flow_by_origin_lijst %}
+        <div class="vrd-transactie" style="padding:6px 0;"><span>🌍 {{ land }}</span><b>{{ "{:,.1f}".format(aantal) }} ton</b></div>
+        {% else %}
+        <div style="color:var(--gray-300);font-size:12.5px;">Nog geen flow-data.</div>
+        {% endfor %}
+    </div>
+    <div class="vrd-kaart">
+        <div class="dg-kaart-titel" style="margin-bottom:10px;">Flow by destination</div>
+        {% for land, aantal in flow_by_destination_lijst %}
+        <div class="vrd-transactie" style="padding:6px 0;"><span>🎯 {{ land }}</span><b>{{ "{:,.1f}".format(aantal) }} ton</b></div>
+        {% else %}
+        <div style="color:var(--gray-300);font-size:12.5px;">Nog geen flow-data.</div>
+        {% endfor %}
+    </div>
+</div>
+
 <div class="vrd-grid">
     {% for naam, aantal in voorraad_lijst %}
     <div class="vrd-kaart">
@@ -5803,11 +5902,34 @@ def voorraad_pagina():
     {% endfor %}
 </div>
 
-<div class="dg-kaart-titel" style="margin-bottom:12px;">📥 Inkomende planning</div>
-<div class="vrd-kaart" style="max-width:600px;margin-bottom:16px;">
+<div class="dg-kaart-titel" style="margin-bottom:12px;">🚢 Shipment plannen (systeem bepaalt zelf inbound/outbound/direct)</div>
+<div class="vrd-kaart" style="max-width:680px;margin-bottom:16px;">
+    <p style="color:var(--gray-400);font-size:0.78rem;margin-top:0;margin-bottom:12px;">Vul origin en destination in. Is destination = Alblasserdam → inbound. Is origin = Alblasserdam → outbound. Anders → direct flow (raakt onze voorraad niet, blijft wel zichtbaar in de flow-tabellen).</p>
     <form method="POST" action="/voorraad/shipments" class="form-voorraad">
         <input type="hidden" name="actie" value="toevoegen">
-        <input type="hidden" name="richting" value="inbound">
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="text" name="referentie" placeholder="Referentie">
+            <input type="date" name="datum" placeholder="Datum (ETA/ETD)">
+        </div>
+        <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;margin:8px 0 4px;">Origin</div>
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+            <input type="text" name="origin_land" placeholder="Land (bv. UK, Alblasserdam)" list="landenLijstVoorraad" required>
+            <input type="text" name="origin_leverancier" placeholder="Leverancier" list="bedrijvenLijstVoorraad">
+            <input type="text" name="loading_locatie" placeholder="Loading locatie">
+        </div>
+        <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;margin:8px 0 4px;">Destination</div>
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="text" name="destination_land" placeholder="Land (bv. Alblasserdam, Asia)" list="landenLijstVoorraad" required>
+            <input type="text" name="destination_naam" placeholder="Fabriek/klant" list="bedrijvenLijstVoorraad">
+        </div>
+        <datalist id="landenLijstVoorraad">
+            <option value="Alblasserdam">
+            {% for land in landen %}<option value="{{ land }}">{% endfor %}
+        </datalist>
+        <datalist id="bedrijvenLijstVoorraad">
+            {% for naam in alle_bedrijfsnamen_voorraad %}<option value="{{ naam }}">{% endfor %}
+        </datalist>
+        <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;margin:8px 0 4px;">Materiaal &amp; transport</div>
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <select name="materiaal" required>
                 <option value="">Materiaal...</option>
@@ -5818,122 +5940,78 @@ def voorraad_pagina():
                 </optgroup>
                 {% endfor %}
             </select>
-            <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (ton)" required>
+            <input type="text" name="gepland_hoeveelheid" placeholder="Gepland gewicht (ton)" required>
         </div>
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="bedrijf" placeholder="Leverancier" list="bedrijvenLijstVoorraad">
-            <input type="date" name="datum" placeholder="ETA">
+            <input type="text" name="transport" placeholder="Transport (Truck/Container/MSC)">
+            <select name="gekoppelde_shipment_id">
+                <option value="">Geen gekoppelde leg</option>
+                {% for s in alle_shipments_dropdown %}<option value="{{ s.id }}">{{ s.referentie or s.id[:8] }} ({{ s.origin_land }} → {{ s.destination_land }})</option>{% endfor %}
+            </select>
         </div>
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="transport" placeholder="Transport (Truck/Container)">
-            <input type="text" name="referentie" placeholder="Referentie (optioneel)">
-        </div>
-        <input type="text" name="locatie" placeholder="Locatie" value="Alblasserdam" list="locatieLijstVoorraad" style="margin-bottom:10px;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
-        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Inkomende shipment plannen</button>
+        <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
+        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Shipment plannen</button>
     </form>
-</div>
-<div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-        <thead><tr style="text-align:left;color:var(--gray-400);font-size:10.5px;text-transform:uppercase;">
-            <th style="padding:6px 8px;">ETA</th><th style="padding:6px 8px;">Leverancier</th><th style="padding:6px 8px;">Materiaal</th>
-            <th style="padding:6px 8px;text-align:right;">Ton</th><th style="padding:6px 8px;">Transport</th><th style="padding:6px 8px;">Status</th><th></th>
-        </tr></thead>
-        <tbody>
-        {% for s in inbound_shipments %}
-        <tr style="border-top:1px solid var(--gray-50);">
-            <td style="padding:7px 8px;">{{ s.datum }}</td>
-            <td style="padding:7px 8px;">{{ s.bedrijf }}</td>
-            <td style="padding:7px 8px;font-weight:600;">{{ s.materiaal }}</td>
-            <td style="padding:7px 8px;text-align:right;">{{ s.hoeveelheid }}</td>
-            <td style="padding:7px 8px;">{{ s.transport }}</td>
-            <td style="padding:7px 8px;">
-                <form method="POST" action="/voorraad/shipments" style="margin:0;display:inline;">
-                    <input type="hidden" name="actie" value="status_wijzigen">
-                    <input type="hidden" name="shipment_id" value="{{ s.id }}">
-                    <select name="nieuwe_status" onchange="this.form.submit()" style="font-size:11px;font-weight:700;padding:3px 6px;border-radius:5px;border:1px solid var(--gray-200);">
-                        {% for st in shipment_inbound_statussen %}<option value="{{ st }}" {% if s.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
-                    </select>
-                </form>
-            </td>
-            <td style="padding:7px 8px;">
-                <form method="POST" action="/voorraad/shipments" onsubmit="return confirm('Verwijderen?');" style="margin:0;">
-                    <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="shipment_id" value="{{ s.id }}">
-                    <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button>
-                </form>
-            </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" style="padding:16px 8px;color:var(--gray-300);">Nog geen inkomende planning.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
 </div>
 
-<div class="dg-kaart-titel" style="margin-bottom:12px;">📤 Uitgaande planning</div>
-<div class="vrd-kaart" style="max-width:600px;margin-bottom:16px;">
-    <form method="POST" action="/voorraad/shipments" class="form-voorraad">
-        <input type="hidden" name="actie" value="toevoegen">
-        <input type="hidden" name="richting" value="outbound">
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <select name="materiaal" required>
-                <option value="">Materiaal...</option>
-                {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
-                <optgroup label="{{ categorie }}">
-                    <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
-                    {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}">{{ kw }}</option>{% endfor %}
-                </optgroup>
-                {% endfor %}
-            </select>
-            <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (ton)" required>
-        </div>
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="bedrijf" placeholder="Klant/Mill" list="bedrijvenLijstVoorraad">
-            <input type="date" name="datum" placeholder="ETD">
-        </div>
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="transport" placeholder="Transport (Container/Truck)">
-            <input type="text" name="referentie" placeholder="Referentie (optioneel)">
-        </div>
-        <input type="text" name="locatie" placeholder="Locatie" value="Alblasserdam" list="locatieLijstVoorraad" style="margin-bottom:10px;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
-        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Uitgaande shipment plannen</button>
-    </form>
-</div>
 <div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-        <thead><tr style="text-align:left;color:var(--gray-400);font-size:10.5px;text-transform:uppercase;">
-            <th style="padding:6px 8px;">ETD</th><th style="padding:6px 8px;">Klant</th><th style="padding:6px 8px;">Materiaal</th>
-            <th style="padding:6px 8px;text-align:right;">Ton</th><th style="padding:6px 8px;">Transport</th><th style="padding:6px 8px;">Status</th><th></th>
+    <div class="dg-kaart-titel" style="margin-bottom:10px;">Alle actieve shipments</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="text-align:left;color:var(--gray-400);font-size:10px;text-transform:uppercase;">
+            <th style="padding:6px 8px;">Datum</th><th style="padding:6px 8px;">Route</th><th style="padding:6px 8px;">Materiaal</th>
+            <th style="padding:6px 8px;text-align:right;">Ton (gepl./werk.)</th><th style="padding:6px 8px;">Type</th><th style="padding:6px 8px;">Status</th><th></th>
         </tr></thead>
         <tbody>
-        {% for s in outbound_shipments %}
+        {% for s in actieve_shipments %}
         <tr style="border-top:1px solid var(--gray-50);">
             <td style="padding:7px 8px;">{{ s.datum }}</td>
-            <td style="padding:7px 8px;">{{ s.bedrijf }}</td>
+            <td style="padding:7px 8px;">{{ s.origin_land }}{% if s.origin_leverancier %} ({{ s.origin_leverancier }}){% endif %} → {{ s.destination_land }}{% if s.destination_naam %} ({{ s.destination_naam }}){% endif %}</td>
             <td style="padding:7px 8px;font-weight:600;">{{ s.materiaal }}</td>
-            <td style="padding:7px 8px;text-align:right;">{{ s.hoeveelheid }}</td>
-            <td style="padding:7px 8px;">{{ s.transport }}</td>
+            <td style="padding:7px 8px;text-align:right;">{{ s.gepland_hoeveelheid }}{% if s.werkelijk_hoeveelheid %} / <b>{{ s.werkelijk_hoeveelheid }}</b>{% endif %}</td>
             <td style="padding:7px 8px;">
-                <form method="POST" action="/voorraad/shipments" style="margin:0;display:inline;">
+                <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:{{ '#eff6ff' if s.flow_type=='inbound' else ('#fef2f2' if s.flow_type=='outbound' else '#f5f3ff') }};color:{{ '#1d4ed8' if s.flow_type=='inbound' else ('#dc2626' if s.flow_type=='outbound' else '#7c3aed') }};">{{ s.flow_type|upper }}</span>
+            </td>
+            <td style="padding:7px 8px;">
+                <form method="POST" action="/voorraad/shipments" style="margin:0;" onsubmit="return voorraadStatusSubmit(this, {{ (s.flow_type == 'inbound')|tojson }});">
                     <input type="hidden" name="actie" value="status_wijzigen">
                     <input type="hidden" name="shipment_id" value="{{ s.id }}">
-                    <select name="nieuwe_status" onchange="this.form.submit()" style="font-size:11px;font-weight:700;padding:3px 6px;border-radius:5px;border:1px solid var(--gray-200);">
-                        {% for st in shipment_outbound_statussen %}<option value="{{ st }}" {% if s.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    <select name="nieuwe_status" onchange="this.form.requestSubmit()" style="font-size:11px;font-weight:700;padding:3px 6px;border-radius:5px;border:1px solid var(--gray-200);">
+                        {% for st in shipment_statussen %}<option value="{{ st }}" {% if s.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
                     </select>
+                    <span class="weegveldjes" style="display:none;">
+                        <input type="text" name="bruto_gewicht" placeholder="Bruto" style="width:55px;font-size:11px;padding:2px 4px;">
+                        <input type="text" name="tara_gewicht" placeholder="Tara" style="width:55px;font-size:11px;padding:2px 4px;">
+                        <input type="text" name="weegbon_nummer" placeholder="Weegbon" style="width:65px;font-size:11px;padding:2px 4px;">
+                        <button type="submit" style="font-size:11px;padding:3px 6px;">OK</button>
+                    </span>
                 </form>
             </td>
             <td style="padding:7px 8px;">
-                <form method="POST" action="/voorraad/shipments" onsubmit="return confirm('Verwijderen?');" style="margin:0;">
+                <form method="POST" action="/voorraad/shipments" onsubmit="return confirm(\'Verwijderen?\');" style="margin:0;">
                     <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="shipment_id" value="{{ s.id }}">
                     <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button>
                 </form>
             </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" style="padding:16px 8px;color:var(--gray-300);">Nog geen uitgaande planning.</td></tr>
+        <tr><td colspan="7" style="padding:16px 8px;color:var(--gray-300);">Nog geen shipments.</td></tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
+<script>
+function voorraadStatusSubmit(form, isInbound) {
+    const status = form.nieuwe_status.value;
+    if (status === "Weighed") {
+        const weegveld = form.querySelector(".weegveldjes");
+        if (weegveld.style.display !== "inline") {
+            weegveld.style.display = "inline";
+            return false; // eerst bruto/tara laten invullen, submit uitstellen
+        }
+    }
+    return true;
+}
+</script>
 
 <div class="dg-kaart-titel" style="margin-bottom:12px;">📜 Contracten</div>
 <div class="vrd-kaart" style="max-width:520px;margin-bottom:16px;">
@@ -6183,10 +6261,12 @@ function toggleTransactieVelden() {
                                     kpi_binnenkort_totaal=kpi_binnenkort_totaal, kpi_verkocht_totaal=kpi_verkocht_totaal,
                                     kpi_inkoop_totaal=kpi_inkoop_totaal, kpi_vrij_totaal=kpi_vrij_totaal,
                                     kpi_transit_totaal=kpi_transit_totaal, kpi_forecast_totaal=kpi_forecast_totaal,
+                                    kpi_direct_flow_totaal=kpi_direct_flow_totaal, kpi_totaal_controlled=kpi_totaal_controlled,
                                     inkomend_7d=inkomend_7d, uitgaand_7d=uitgaand_7d,
                                     stock_per_locatie_lijst=stock_per_locatie_lijst, aging_buckets=aging_buckets,
-                                    inbound_shipments=inbound_shipments, outbound_shipments=outbound_shipments,
-                                    shipment_inbound_statussen=SHIPMENT_INBOUND_STATUSSEN, shipment_outbound_statussen=SHIPMENT_OUTBOUND_STATUSSEN,
+                                    flow_by_origin_lijst=flow_by_origin_lijst, flow_by_destination_lijst=flow_by_destination_lijst,
+                                    actieve_shipments=actieve_shipments, alle_shipments_dropdown=alle_shipments_dropdown,
+                                    shipment_statussen=SHIPMENT_STATUSSEN, landen=_alle_bedrijven_landen,
                                     alle_contracten=alle_contracten)
 
 @app.route("/orders", methods=["GET", "POST"])
