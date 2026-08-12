@@ -7448,48 +7448,105 @@ def instellingen():
 
 @app.route("/certificeringen")
 def certificeringen_pagina():
-    per_cert = {}
+    _am_lookup_cert = laad_accountmanagers()
+    cert_rijen = []
     for b in ENF_BEDRIJVEN:
         for c in [x.strip() for x in b.get("certificeringen", "").split(",") if x.strip()]:
-            per_cert.setdefault(c, []).append(b)
+            cert_rijen.append({
+                "bedrijf": b["naam"], "certificaat": c, "land": b.get("land",""),
+                "regio": b.get("regio",""), "accountmanager": _am_lookup_cert.get(b["naam"], ""),
+            })
+    cert_rijen.sort(key=lambda r: r["bedrijf"])
 
-    cert_lijst = sorted(per_cert.items(), key=lambda x: -len(x[1]))
+    per_cert_telling = {}
+    for r in cert_rijen:
+        per_cert_telling[r["certificaat"]] = per_cert_telling.get(r["certificaat"], 0) + 1
+    kpis = [
+        {"label": "Certificeringen totaal", "value": len(cert_rijen), "sub": f"{len(per_cert_telling)} soorten"},
+        {"label": "Bedrijven met certificering", "value": len({r['bedrijf'] for r in cert_rijen}), "sub": f"van {len(ENF_BEDRIJVEN)} totaal"},
+    ]
+    if per_cert_telling:
+        meest_voorkomend = max(per_cert_telling.items(), key=lambda x: x[1])
+        kpis.append({"label": "Meest voorkomend", "value": meest_voorkomend[0], "sub": f"{meest_voorkomend[1]} bedrijven"})
 
     inhoud = """
 <style>
-.cert-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
-.cert-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:20px; }
-.cert-titel { font-size:1.05rem; font-weight:700; color:var(--gray-800); margin-bottom:2px; }
-.cert-aantal { font-size:0.78rem; color:var(--gray-400); margin-bottom:12px; }
-.cert-bedrijf { font-size:0.82rem; padding:6px 0; border-bottom:1px solid var(--gray-100); }
-.cert-bedrijf:last-child { border-bottom:none; }
-.cert-bedrijf a { color:var(--gray-700); text-decoration:none; font-weight:600; }
-.cert-bedrijf a:hover { color:var(--brand-600); }
+.data-thead, .data-row { display: flex; align-items: center; padding: 0 var(--space-4); }
+.data-thead { padding-top: 10px; padding-bottom: 10px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8792; }
+.data-thead span[data-sort] { cursor: pointer; user-select: none; }
+.data-thead span[data-sort]:hover { color: var(--brand-600); }
+.data-row { padding-top: 11px; padding-bottom: 11px; border-bottom: 1px solid var(--gray-100); font-size: 12.5px; text-decoration: none; color: inherit; }
+.data-row:hover { background: #f9fbfc; }
+.data-row .zacht { color: #4b5563; font-size: 12px; }
+.kpi-mini-cert { display:flex; gap:16px; margin-bottom:20px; }
+.kpi-mini-cert div { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:14px 18px; flex:1; }
+.kpi-mini-cert .getal { font-size:1.2rem; font-weight:800; color:var(--brand-600); }
+.kpi-mini-cert .label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.06em; }
+.kpi-mini-cert .sub { font-size:0.72rem; color:var(--gray-400); margin-top:2px; }
 </style>
 
 <div class="page-title">Certifications</div>
 
-{% if cert_lijst %}
-<div class="cert-grid">
-    {% for cert, bedrijven_lijst in cert_lijst %}
-    <div class="cert-kaart">
-        <div class="cert-titel">🏅 {{ cert }}</div>
-        <div class="cert-aantal">{{ bedrijven_lijst|length }} bedrijven</div>
-        {% for b in bedrijven_lijst[:5] %}
-        <div class="cert-bedrijf"><a href="/bedrijf/{{ b.naam|urlencode }}">{{ b.naam }}</a><br><span style="color:var(--gray-400);">{{ b.regio }}, {{ b.land }}</span></div>
-        {% endfor %}
-        {% if bedrijven_lijst|length > 5 %}<div style="font-size:0.76rem;color:var(--gray-400);margin-top:6px;">+ {{ bedrijven_lijst|length - 5 }} meer</div>{% endif %}
-    </div>
+{% if cert_rijen %}
+<div class="kpi-mini-cert">
+    {% for k in kpis %}
+    <div><div class="getal">{{ k.value }}</div><div class="label">{{ k.label }}</div><div class="sub">{{ k.sub }}</div></div>
     {% endfor %}
 </div>
+
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;" id="certLijst">
+    <div class="data-thead">
+        <span style="flex:1.4;" data-sort="bedrijf">Bedrijf</span>
+        <span style="flex:1;" data-sort="certificaat">Certificaat</span>
+        <span style="flex:1;" data-sort="land">Land</span>
+        <span style="width:130px;" data-sort="accountmanager">Accountmgr.</span>
+    </div>
+    {% for r in cert_rijen %}
+    <a class="data-row" href="/bedrijf/{{ r.bedrijf|urlencode }}"
+       data-bedrijf="{{ r.bedrijf|e }}" data-certificaat="{{ r.certificaat|e }}" data-land="{{ r.land|e }}" data-accountmanager="{{ r.accountmanager|default('',true)|e }}">
+        <span style="flex:1.4;font-weight:600;color:var(--gray-800);">{{ r.bedrijf }}</span>
+        <span style="flex:1;" class="zacht">🏅 {{ r.certificaat }}</span>
+        <span style="flex:1;" class="zacht">{{ r.land }}{% if r.regio %}, {{ r.regio }}{% endif %}</span>
+        <span style="width:130px;" class="zacht">{{ r.accountmanager|default('—',true) }}</span>
+    </a>
+    {% endfor %}
+</div>
+<div style="display:flex;justify-content:space-between;padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">
+    <span>{{ cert_rijen|length }} certificeringen</span>
+    <a href="/export-csv" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Export naar CSV</a>
+</div>
+<script>
+(function () {
+    var lijst = document.getElementById("certLijst");
+    if (!lijst) return;
+    var koppen = lijst.querySelectorAll(".data-thead [data-sort]");
+    var richting = "desc", sleutel = null;
+    koppen.forEach(function (kop) {
+        kop.addEventListener("click", function () {
+            var k = kop.dataset.sort;
+            richting = (sleutel === k && richting === "desc") ? "asc" : "desc";
+            sleutel = k;
+            koppen.forEach(function (x) { x.textContent = x.textContent.replace(/ [\u2191\u2193]$/, ""); });
+            kop.textContent += richting === "desc" ? " \u2193" : " \u2191";
+            var rijen = Array.prototype.slice.call(lijst.querySelectorAll(".data-row"));
+            rijen.sort(function (a, b) {
+                var va = a.dataset[k] || "", vb = b.dataset[k] || "";
+                var r = va.localeCompare(vb, "nl");
+                return richting === "asc" ? r : -r;
+            });
+            rijen.forEach(function (r) { lijst.appendChild(r); });
+        });
+    });
+})();
+</script>
 {% else %}
 <div class="lege-staat">
-    Nog geen bedrijven met certificeringen. Voeg de kolom "Certificeringen" toe bij je volgende Excel-import (bv. "ISO 9001, FSC") om deze pagina te vullen.
+    Nog geen bedrijven met certificeringen. Voeg de kolom "Certificeringen" toe bij je volgende Excel-import (bv. "ISO 9001, FSC"), of vul het direct in op een bedrijfsprofiel.
 </div>
 {% endif %}
     """
     pagina = render_simple_page("Certifications", "certificeringen", inhoud)
-    return render_template_string(pagina, cert_lijst=cert_lijst)
+    return render_template_string(pagina, cert_rijen=cert_rijen, kpis=kpis)
 
 @app.route("/materialen")
 def materialen():
