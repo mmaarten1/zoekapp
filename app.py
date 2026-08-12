@@ -2682,7 +2682,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
            SIMPELE PAGINA-KAARTEN (Dashboard/Inzichten/etc.)
            ============================================ */
         .page-content { padding: var(--space-8) var(--space-10); max-width: 1200px; }
-        .page-title { font-size: var(--text-2xl); font-weight: 800; color: var(--gray-900); margin-bottom: var(--space-6); }
+        .page-title { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; color: var(--gray-900); margin: 0 0 5px; }
         .kaartjes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-8); }
         .info-kaart { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: var(--space-5); }
         .info-kaart-getal { font-size: var(--text-3xl); font-weight: 800; color: var(--brand-600); }
@@ -3463,7 +3463,7 @@ HTML = '''
            SIMPELE PAGINA-KAARTEN (Dashboard/Inzichten/etc.)
            ============================================ */
         .page-content { padding: var(--space-8) var(--space-10); max-width: 1200px; }
-        .page-title { font-size: var(--text-2xl); font-weight: 800; color: var(--gray-900); margin-bottom: var(--space-6); }
+        .page-title { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; color: var(--gray-900); margin: 0 0 5px; }
         .kaartjes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-8); }
         .info-kaart { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: var(--space-5); }
         .info-kaart-getal { font-size: var(--text-3xl); font-weight: 800; color: var(--brand-600); }
@@ -3700,6 +3700,18 @@ function toggleMobielMenu() {
 
     <!-- RESULTS -->
     <div class="results-panel">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">
+                    {% if materiaal %}{{ materiaal }}bedrijven{% if land %} in {{ land }}{% endif %}{% elif land %}Bedrijven in {{ land }}{% else %}Alle bedrijven{% endif %}
+                </div>
+            </div>
+            <div style="display:flex;gap:22px;">
+                <div><div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:1.3rem;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ totaal_gevonden }}</div></div>
+                <div><div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:1.3rem;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat }}</div></div>
+                {% if volume_totaal_resultaat %}<div><div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume</div><div style="font-size:1.3rem;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ volume_totaal_resultaat }}</div></div>{% endif %}
+            </div>
+        </div>
         <!-- MAP -->
         <div class="map-panel">
             <div id="kaart"></div>
@@ -4833,7 +4845,7 @@ def meldingen_overzicht():
     inhoud = """
     <div class="page-title">Meldingen</div>
     {% if aantal_ongelezen > 0 %}
-    <button onclick="alleMeldingenGelezen()" style="padding:6px 14px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:12.5px;margin-top:-16px;margin-bottom:16px;">Alles gelezen markeren ({{ aantal_ongelezen }})</button>
+    <button onclick="alleMeldingenGelezen()" style="padding:6px 14px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:12.5px;margin-top:0;margin-bottom:16px;">Alles gelezen markeren ({{ aantal_ongelezen }})</button>
     <script>
     async function alleMeldingenGelezen() {
         await fetch("/api/meldingen/alles-gelezen", {method: "POST"});
@@ -5185,6 +5197,18 @@ def index():
         bedrijven = [b for b in bedrijven if accountmanagers_alle.get(b["naam"], "") == gezocht_am]
 
     totaal_gevonden = len(bedrijven)
+
+    landen_in_resultaat = len({b.get("land","") for b in bedrijven if b.get("land")})
+    _volume_som = sum(parse_hoeveelheid_getal(b.get("volume","")) for b in bedrijven)
+    if _volume_som >= 1_000_000:
+        volume_totaal_resultaat = f"{_volume_som/1_000_000:.1f} Mt"
+    elif _volume_som >= 1000:
+        volume_totaal_resultaat = f"{_volume_som/1000:.0f}k t"
+    elif _volume_som > 0:
+        volume_totaal_resultaat = f"{_volume_som:.0f} t"
+    else:
+        volume_totaal_resultaat = ""
+
     er_is_gefilterd = bool(zoekterm or land or regio or klanttype or materiaal or brontype or accountmanager or kwaliteiten or volume_filter)
     totaal_paginas = max(1, (totaal_gevonden + PAGINA_GROOTTE - 1) // PAGINA_GROOTTE)
     pagina = min(pagina, totaal_paginas)
@@ -5241,6 +5265,7 @@ def index():
         kwaliteiten=kwaliteiten, volume_filter=volume_filter, materiaal_min_volume=materiaal_min_volume,
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
+        landen_in_resultaat=landen_in_resultaat, volume_totaal_resultaat=volume_totaal_resultaat,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
         er_is_gefilterd=er_is_gefilterd, pagina=pagina, totaal_paginas=totaal_paginas,
         maak_pagina_url=maak_pagina_url, export_query=export_query,
@@ -5463,7 +5488,7 @@ def dashboard():
 
 <div class="page-title">Dashboard</div>
 {% if groei_pct is none %}
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.82rem;">📈 Groeitracking is vandaag gestart — kom over een paar dagen terug voor een echt groeicijfer.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.82rem;">📈 Groeitracking is vandaag gestart — kom over een paar dagen terug voor een echt groeicijfer.</p>
 {% endif %}
 
 {% if aandacht_items %}
@@ -6209,7 +6234,7 @@ def voorraad_pagina():
 .vrd-tab.actief { background:var(--brand-600); color:#fff; border-color:var(--brand-600); }
 </style>
 <div class="page-title">Voorraad</div>
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.85rem;">Handelsvoorraad op de werf, alles in <b>ton</b>. Binnenkomend materiaal telt pas mee zodra het is goedgekeurd. Verkocht/vrij wordt live berekend uit je Orders en shipments.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Handelsvoorraad op de werf, alles in <b>ton</b>. Binnenkomend materiaal telt pas mee zodra het is goedgekeurd. Verkocht/vrij wordt live berekend uit je Orders en shipments.</p>
 
 <div class="vrd-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:16px;">
     <div class="vrd-kaart"><div class="vrd-getal">{{ "{:,.1f}".format(kpi_fysiek_totaal) }}</div><div class="vrd-label">📦 TOTAL STOCK (ton)</div></div>
@@ -6825,7 +6850,7 @@ def marktprijzen_pagina():
 .form-voorraad input, .form-voorraad select, .form-voorraad textarea { width:100%; padding:8px 10px; border:1px solid var(--gray-200); border-radius:6px; font-size:13px; margin-bottom:10px; font-family:inherit; box-sizing:border-box; }
 </style>
 <div class="page-title">Marktprijzen</div>
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.85rem;">Prijs per ton, per materiaal/kwaliteit. Wordt automatisch aangevuld zodra je een order op "Gewonnen" zet.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Prijs per ton, per materiaal/kwaliteit. Wordt automatisch aangevuld zodra je een order op "Gewonnen" zet.</p>
 
 <div class="mp-grid">
     {% for m in materiaal_overzicht %}
@@ -7276,7 +7301,7 @@ def contacten():
 </style>
 
 <div class="page-title">Contacten</div>
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:16px;font-size:0.85rem;">Contactpersonen bij bedrijven, met rol en laatste contactmoment</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Contactpersonen bij bedrijven, met rol en laatste contactmoment</p>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
     <input type="text" name="zoekterm" value="{{ zoekterm }}" placeholder="Naam, bedrijf of e-mail" style="flex:1;max-width:280px;padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
@@ -7505,7 +7530,7 @@ def materialen_beheer():
     taxonomie = laad_materiaal_taxonomie()
     inhoud = """
     <div class="page-title">Materialen beheren</div>
-    <p style="color:var(--gray-400);font-size:0.85rem;margin-top:-16px;margin-bottom:20px;max-width:600px;">
+    <p style="color:var(--gray-400);font-size:0.85rem;margin-top:0;margin-bottom:20px;max-width:600px;">
         Deze grondstofgroepen en kwaliteiten gelden voor <b>alle</b> bedrijven in FTNext — pas je hier iets aan, dan zie je dat overal terug (zoekfilter, bedrijfsprofielen, fotomappen).
     </p>
     {% if bericht %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;max-width:600px;">{{ bericht }}</div>{% endif %}
@@ -7846,7 +7871,7 @@ def materialen():
 
     inhoud = """
 <div class="page-title">Materials</div>
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.85rem;">Alle materialen en kwaliteiten in de database, met dekking en volume</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Alle materialen en kwaliteiten in de database, met dekking en volume</p>
 
 <div class="data-thead" style="border-radius:var(--radius-md) var(--radius-md) 0 0;">
     <span style="flex:1.4;" data-sort="naam">Materiaal</span>
