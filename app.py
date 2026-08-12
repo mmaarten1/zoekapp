@@ -656,7 +656,7 @@ IMPORT_HTML = '''
             <tr><td>Voorbeeld BV</td><td>Leverancier</td><td>Netherlands</td><td>Rotterdam</td><td>Kade 12</td><td>+31 10 1234567</td><td>Paper, Plastic</td><td>Commercial</td><td>5000</td><td>ISO 9001, FSC</td></tr>
             <tr><td>Fabriek XYZ</td><td>Fabriek</td><td>Germany</td><td>Hamburg</td><td></td><td></td><td>Paper, OCC</td><td></td><td></td></tr>
         </table>
-        <a href="/importeer-osm" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#ea580c;">→ Of importeer automatisch vanuit OpenStreetMap (gratis, geen bestand nodig)</a>
+        <a href="/importeer-osm" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#0d5c62;">→ Of importeer automatisch vanuit OpenStreetMap (gratis, geen bestand nodig)</a>
     </div>
 </body>
 </html>
@@ -795,7 +795,7 @@ SCRAPMONSTER_IMPORT_HTML = '''
         h1 { font-size: 18px; margin-bottom: 8px; }
         p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
         select, button { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
-        button { background: #ea580c; color: white; border: none; cursor: pointer; font-weight: 600; }
+        button { background: #0d5c62; color: white; border: none; cursor: pointer; font-weight: 600; }
         .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
         .succes { background: #f0fdf4; color: #16a34a; }
         .fout { background: #fef2f2; color: #ef4444; }
@@ -812,7 +812,7 @@ SCRAPMONSTER_IMPORT_HTML = '''
             </select>
             <button type="submit">Importeren vanuit ScrapMonster</button>
         </form>
-        <a href="/importeer-scrapmonster-alle" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#ea580c;">→ Of importeer in één keer álle landen op de achtergrond</a>
+        <a href="/importeer-scrapmonster-alle" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#0d5c62;">→ Of importeer in één keer álle landen op de achtergrond</a>
     </div>
 </body>
 </html>
@@ -1312,7 +1312,7 @@ OSM_IMPORT_HTML = '''
         h1 { font-size: 18px; margin-bottom: 8px; }
         p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
         select, button { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
-        button { background: #ea580c; color: white; border: none; cursor: pointer; font-weight: 600; }
+        button { background: #0d5c62; color: white; border: none; cursor: pointer; font-weight: 600; }
         .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
         .succes { background: #f0fdf4; color: #16a34a; }
         .fout { background: #fef2f2; color: #ef4444; }
@@ -1329,8 +1329,8 @@ OSM_IMPORT_HTML = '''
             </select>
             <button type="submit">Importeren vanuit OpenStreetMap</button>
         </form>
-        <a href="/importeer-osm-alle" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#ea580c;">→ Of importeer in één keer álle landen op de achtergrond</a>
-        <a href="/importeer-scrapmonster" style="display:block;text-align:center;margin-top:8px;font-size:13px;color:#ea580c;">→ Of importeer schroothandels vanuit ScrapMonster.com</a>
+        <a href="/importeer-osm-alle" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:#0d5c62;">→ Of importeer in één keer álle landen op de achtergrond</a>
+        <a href="/importeer-scrapmonster" style="display:block;text-align:center;margin-top:8px;font-size:13px;color:#0d5c62;">→ Of importeer schroothandels vanuit ScrapMonster.com</a>
     </div>
 </body>
 </html>
@@ -1348,7 +1348,7 @@ OPSCHOON_HTML = '''
         h1 { font-size: 18px; margin-bottom: 8px; }
         p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
         label { display:block; font-size:13px; margin-bottom:8px; padding:10px; border:1px solid #e2e8f0; border-radius:6px; cursor:pointer; }
-        button { width: 100%; padding: 10px; background: #ea580c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top:8px; }
+        button { width: 100%; padding: 10px; background: #0d5c62; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top:8px; }
         .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
         .succes { background: #f0fdf4; color: #16a34a; }
     </style>
@@ -1438,8 +1438,8 @@ HERLABEL_HTML = '''
         .box { background: white; padding: 30px; border-radius: 12px; max-width: 480px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         h1 { font-size: 18px; margin-bottom: 8px; }
         p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
-        button { width: 100%; padding: 10px; background: #ea580c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; margin-bottom: 10px; }
-        button.secundair { background: #fff; color: #ea580c; border: 1px solid #ea580c; }
+        button { width: 100%; padding: 10px; background: #0d5c62; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; margin-bottom: 10px; }
+        button.secundair { background: #fff; color: #0d5c62; border: 1px solid #0d5c62; }
         .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
         .succes { background: #f0fdf4; color: #16a34a; }
     </style>
@@ -1463,7 +1463,7 @@ HERLABEL_HTML = '''
         <p style="font-weight:600;color:#334155;margin-bottom:8px;">Huidige verdeling:</p>
         <table style="width:100%;font-size:13px;">
             {% for type_naam, aantal in telling_lijst %}
-            <tr><td style="padding:3px 0;color:#334155;">{{ type_naam }}</td><td style="padding:3px 0;text-align:right;color:#ea580c;font-weight:600;">{{ aantal }}</td></tr>
+            <tr><td style="padding:3px 0;color:#334155;">{{ type_naam }}</td><td style="padding:3px 0;text-align:right;color:#0d5c62;font-weight:600;">{{ aantal }}</td></tr>
             {% endfor %}
         </table>
         {% endif %}
@@ -1999,7 +1999,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>__TITEL__ — FTNext</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         /* ============================================
            DESIGN SYSTEM — RECYCLEFIND
@@ -2008,16 +2008,16 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         /* TOKENS */
         :root {
             /* Colors */
-            --brand-50:  #fff7ed;
-            --brand-100: #ffedd5;
-            --brand-200: #fed7aa;
-            --brand-300: #fdba74;
-            --brand-400: #fb923c;
-            --brand-500: #f97316;
-            --brand-600: #ea580c;
-            --brand-700: #c2410c;
-            --brand-800: #9a3412;
-            --brand-900: #7c2d12;
+            --brand-50:  #eef6f6;
+            --brand-100: #d9ecec;
+            --brand-200: #b3d9da;
+            --brand-300: #7fb9bb;
+            --brand-400: #3f9295;
+            --brand-500: #14767b;
+            --brand-600: #0d5c62;
+            --brand-700: #0a4a4f;
+            --brand-800: #083c40;
+            --brand-900: #062f33;
 
             --gray-50:  #f8fafc;
             --gray-100: #f1f5f9;
@@ -2034,15 +2034,16 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             --green-500: #22c55e;
             --green-600: #16a34a;
 
-            --orange-50:  #fff7ed;
-            --orange-500: #f97316;
-            --orange-600: #ea580c;
+            --orange-50:  #eef6f6;
+            --orange-500: #14767b;
+            --orange-600: #0d5c62;
 
             --red-50:  #fef2f2;
             --red-500: #ef4444;
 
             /* Typography */
-            --font: "Inter", -apple-system, sans-serif;
+            --font: "Libre Franklin", -apple-system, sans-serif;
+            --font-mono: "IBM Plex Mono", monospace;
             --text-xs:   0.7rem;
             --text-sm:   0.8rem;
             --text-base: 0.9rem;
@@ -2359,7 +2360,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         }
         .tag-blue { background: var(--brand-50); color: var(--brand-700); border: 1px solid var(--brand-100); }
         .tag-green { background: var(--green-50); color: var(--green-600); border: 1px solid #bbf7d0; }
-        .tag-orange { background: var(--orange-50); color: var(--orange-600); border: 1px solid #fed7aa; }
+        .tag-orange { background: var(--orange-50); color: var(--orange-600); border: 1px solid #b3d9da; }
         .star-btn { font-size: 1.1em; color: var(--gray-300); cursor: pointer; padding: 0 2px; }
         .star-btn:hover { color: var(--brand-400); }
         .star-btn.opgeslagen { color: var(--brand-500); }
@@ -2517,8 +2518,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             height: 100vh;
             position: sticky;
             top: 0;
-            background: #fff;
-            border-right: 1px solid var(--gray-200);
+            background: #1b1f26;
             display: flex;
             flex-direction: column;
             padding: var(--space-5) 0;
@@ -2526,31 +2526,47 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         }
         .sidebar-logo {
             font-size: var(--text-lg);
-            font-weight: 800;
-            color: var(--gray-900);
+            font-weight: 600;
+            color: #fff;
             letter-spacing: -0.5px;
             text-decoration: none;
             padding: 0 var(--space-5);
-            margin-bottom: var(--space-6);
-            display: block;
+            margin-bottom: var(--space-2);
+            display: flex;
+            align-items: center;
+            gap: 9px;
         }
-        .sidebar-logo em { color: var(--brand-600); font-style: normal; }
-        .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 var(--space-3); }
+        .sidebar-mark {
+            width: 22px; height: 22px; flex: none;
+            background: var(--brand-600); border-radius: 3px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 11px; font-weight: 700; font-family: var(--font-mono);
+            margin-right: 9px; vertical-align: middle;
+        }
+        .sidebar-logo em { color: #fff; font-style: normal; }
+        .sidebar-cap { padding: 0 var(--space-5) 8px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: #626d7a; margin-bottom: var(--space-2); }
+        .sidebar-nav { display: flex; flex-direction: column; gap: 1px; padding: 0 var(--space-3); }
         .sidebar-link {
             display: flex;
             align-items: center;
             gap: var(--space-3);
             padding: 9px var(--space-3);
             border-radius: var(--radius-sm);
-            color: var(--gray-600);
+            color: #aeb7c2;
             text-decoration: none;
             font-size: var(--text-sm);
             font-weight: 500;
             transition: var(--transition);
         }
-        .sidebar-link:hover { background: var(--gray-50); color: var(--gray-900); }
-        .sidebar-link.active { background: var(--brand-50); color: var(--brand-700); font-weight: 700; }
+        .sidebar-link:hover { background: #232830; color: #fff; }
+        .sidebar-link.active { background: #232830; color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 var(--brand-600); }
         .sidebar-link .icoon { font-size: 1.05em; width: 20px; text-align: center; }
+        .sidebar-me { margin-top: auto; padding: var(--space-4) var(--space-5) 0; border-top: 1px solid #2b3138; display: flex; align-items: center; gap: 9px; }
+        .sidebar-avatar { width: 26px; height: 26px; flex: none; border-radius: 50%; background: #2f3641; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #cdd4dc; }
+        .sidebar-me-naam { font-size: 12.5px; color: #e6eaef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar-me-rol { font-size: 10.5px; color: #6d7783; }
+        .sidebar-me-uit { margin-left: auto; font-size: 15px; color: #6d7783; text-decoration: none; }
+        .sidebar-me-uit:hover { color: #fff; }
         .content-wrapper { flex: 1; min-width: 0; }
         .mobiel-menu-knop { display: none; }
         .mobiel-overlay { display: none; }
@@ -2684,17 +2700,28 @@ def sidebar_html(actief):
     return '''<button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
 <div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
 <aside class="sidebar" id="mobielSidebar">
-    <a href="/" class="sidebar-logo">FT<em>Next</em></a>
+    <a href="/" class="sidebar-logo"><span class="sidebar-mark">FT</span><em>Next</em></a>
     <nav class="sidebar-nav">
         ITEMS_HIER
     </nav>
+    <div class="sidebar-me">
+        <span class="sidebar-avatar">GEBRUIKERSNAAM_INITIALEN</span>
+        <div style="min-width:0;">
+            <div class="sidebar-me-naam">GEBRUIKERSNAAM_HIER</div>
+            <div class="sidebar-me-rol">TEAM_HIER</div>
+        </div>
+        <a class="sidebar-me-uit" href="/logout" title="Uitloggen">⏻</a>
+    </div>
 </aside>
 <script>
 function toggleMobielMenu() {
     document.getElementById("mobielSidebar").classList.toggle("open");
     document.getElementById("mobielOverlay").classList.toggle("open");
 }
-</script>'''.replace("ITEMS_HIER", links)
+</script>'''.replace("ITEMS_HIER", links) \
+             .replace("GEBRUIKERSNAAM_HIER", session.get("gebruikersnaam", "Gast")) \
+             .replace("GEBRUIKERSNAAM_INITIALEN", (session.get("gebruikersnaam", "??")[:2]).upper()) \
+             .replace("TEAM_HIER", session.get("team", "") or "Teamlid")
 
 def render_simple_page(titel, actief, inhoud_html):
     kop = PAGINA_HOOFD.replace("__TITEL__", titel)
@@ -2720,7 +2747,7 @@ HTML = '''
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         /* ============================================
            DESIGN SYSTEM — RECYCLEFIND
@@ -2729,16 +2756,16 @@ HTML = '''
         /* TOKENS */
         :root {
             /* Colors */
-            --brand-50:  #fff7ed;
-            --brand-100: #ffedd5;
-            --brand-200: #fed7aa;
-            --brand-300: #fdba74;
-            --brand-400: #fb923c;
-            --brand-500: #f97316;
-            --brand-600: #ea580c;
-            --brand-700: #c2410c;
-            --brand-800: #9a3412;
-            --brand-900: #7c2d12;
+            --brand-50:  #eef6f6;
+            --brand-100: #d9ecec;
+            --brand-200: #b3d9da;
+            --brand-300: #7fb9bb;
+            --brand-400: #3f9295;
+            --brand-500: #14767b;
+            --brand-600: #0d5c62;
+            --brand-700: #0a4a4f;
+            --brand-800: #083c40;
+            --brand-900: #062f33;
 
             --gray-50:  #f8fafc;
             --gray-100: #f1f5f9;
@@ -2755,15 +2782,16 @@ HTML = '''
             --green-500: #22c55e;
             --green-600: #16a34a;
 
-            --orange-50:  #fff7ed;
-            --orange-500: #f97316;
-            --orange-600: #ea580c;
+            --orange-50:  #eef6f6;
+            --orange-500: #14767b;
+            --orange-600: #0d5c62;
 
             --red-50:  #fef2f2;
             --red-500: #ef4444;
 
             /* Typography */
-            --font: "Inter", -apple-system, sans-serif;
+            --font: "Libre Franklin", -apple-system, sans-serif;
+            --font-mono: "IBM Plex Mono", monospace;
             --text-xs:   0.7rem;
             --text-sm:   0.8rem;
             --text-base: 0.9rem;
@@ -3092,7 +3120,7 @@ HTML = '''
         }
         .tag-blue { background: var(--brand-50); color: var(--brand-700); border: 1px solid var(--brand-100); }
         .tag-green { background: var(--green-50); color: var(--green-600); border: 1px solid #bbf7d0; }
-        .tag-orange { background: var(--orange-50); color: var(--orange-600); border: 1px solid #fed7aa; }
+        .tag-orange { background: var(--orange-50); color: var(--orange-600); border: 1px solid #b3d9da; }
         .tag-purple { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
 
         /* ============================================
@@ -3248,8 +3276,7 @@ HTML = '''
             height: 100vh;
             position: sticky;
             top: 0;
-            background: #fff;
-            border-right: 1px solid var(--gray-200);
+            background: #1b1f26;
             display: flex;
             flex-direction: column;
             padding: var(--space-5) 0;
@@ -3257,31 +3284,47 @@ HTML = '''
         }
         .sidebar-logo {
             font-size: var(--text-lg);
-            font-weight: 800;
-            color: var(--gray-900);
+            font-weight: 600;
+            color: #fff;
             letter-spacing: -0.5px;
             text-decoration: none;
             padding: 0 var(--space-5);
-            margin-bottom: var(--space-6);
-            display: block;
+            margin-bottom: var(--space-2);
+            display: flex;
+            align-items: center;
+            gap: 9px;
         }
-        .sidebar-logo em { color: var(--brand-600); font-style: normal; }
-        .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 var(--space-3); }
+        .sidebar-mark {
+            width: 22px; height: 22px; flex: none;
+            background: var(--brand-600); border-radius: 3px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 11px; font-weight: 700; font-family: var(--font-mono);
+            margin-right: 9px; vertical-align: middle;
+        }
+        .sidebar-logo em { color: #fff; font-style: normal; }
+        .sidebar-cap { padding: 0 var(--space-5) 8px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: #626d7a; margin-bottom: var(--space-2); }
+        .sidebar-nav { display: flex; flex-direction: column; gap: 1px; padding: 0 var(--space-3); }
         .sidebar-link {
             display: flex;
             align-items: center;
             gap: var(--space-3);
             padding: 9px var(--space-3);
             border-radius: var(--radius-sm);
-            color: var(--gray-600);
+            color: #aeb7c2;
             text-decoration: none;
             font-size: var(--text-sm);
             font-weight: 500;
             transition: var(--transition);
         }
-        .sidebar-link:hover { background: var(--gray-50); color: var(--gray-900); }
-        .sidebar-link.active { background: var(--brand-50); color: var(--brand-700); font-weight: 700; }
+        .sidebar-link:hover { background: #232830; color: #fff; }
+        .sidebar-link.active { background: #232830; color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 var(--brand-600); }
         .sidebar-link .icoon { font-size: 1.05em; width: 20px; text-align: center; }
+        .sidebar-me { margin-top: auto; padding: var(--space-4) var(--space-5) 0; border-top: 1px solid #2b3138; display: flex; align-items: center; gap: 9px; }
+        .sidebar-avatar { width: 26px; height: 26px; flex: none; border-radius: 50%; background: #2f3641; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #cdd4dc; }
+        .sidebar-me-naam { font-size: 12.5px; color: #e6eaef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar-me-rol { font-size: 10.5px; color: #6d7783; }
+        .sidebar-me-uit { margin-left: auto; font-size: 15px; color: #6d7783; text-decoration: none; }
+        .sidebar-me-uit:hover { color: #fff; }
         .content-wrapper { flex: 1; min-width: 0; }
         .mobiel-menu-knop { display: none; }
         .mobiel-overlay { display: none; }
@@ -3382,7 +3425,7 @@ HTML = '''
 <button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
 <div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
 <aside class="sidebar" id="mobielSidebar">
-    <a href="/" class="sidebar-logo">FT<em>Next</em></a>
+    <a href="/" class="sidebar-logo"><span class="sidebar-mark">FT</span><em>Next</em></a>
     <nav class="sidebar-nav">
         <a href="/" class="sidebar-link active"><span class="icoon">🔍</span> Zoeken</a>
         <a href="/wereldkaart" class="sidebar-link"><span class="icoon">🌍</span> World Map</a>
@@ -3398,6 +3441,14 @@ HTML = '''
         <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">📝</span> Notities</a>
         <a href="/instellingen" class="sidebar-link"><span class="icoon">⚙️</span> Instellingen</a>
     </nav>
+    <div class="sidebar-me">
+        <span class="sidebar-avatar">{{ (session.get('gebruikersnaam','??')[:2])|upper }}</span>
+        <div style="min-width:0;">
+            <div class="sidebar-me-naam">{{ session.get('gebruikersnaam','Gast') }}</div>
+            <div class="sidebar-me-rol">{{ session.get('team','') or 'Teamlid' }}</div>
+        </div>
+        <a class="sidebar-me-uit" href="/logout" title="Uitloggen">⏻</a>
+    </div>
 </aside>
 <script>
 function toggleMobielMenu() {
@@ -3512,7 +3563,7 @@ function toggleMobielMenu() {
             {% if actieve_filters_lijst %}
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid var(--gray-100);">
                 {% for af in actieve_filters_lijst %}
-                <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-50);color:var(--brand-700);border:1px solid #fed7aa;border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;text-decoration:none;">
+                <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-50);color:var(--brand-700);border:1px solid #b3d9da;border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;text-decoration:none;">
                     {{ af.label }}<span style="font-weight:800;">✕</span>
                 </a>
                 {% endfor %}
@@ -3714,7 +3765,7 @@ L.marker([{{ b.lat }}, {{ b.lon }}])
 {% endfor %}
 kaart.addLayer(clusterGroep);
 var fabriekIcon = L.divIcon({
-    html: '<div style="background:#ea580c;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.3);border:2px solid white;">🏭</div>',
+    html: '<div style="background:#0d5c62;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.3);border:2px solid white;">🏭</div>',
     className: '',
     iconSize: [32, 32],
     iconAnchor: [16, 16]
@@ -3722,7 +3773,7 @@ var fabriekIcon = L.divIcon({
 {% for f in papierfabrieken %}{% if f.lat and f.lon %}
 L.marker([{{ f.lat }}, {{ f.lon }}], {icon: fabriekIcon})
     .addTo(kaart)
-.bindPopup('<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small><br><button data-fabriek="{{ f.naam }}" onclick="toonFabriekAnalyse(this.dataset.fabriek)" style="margin-top:6px;padding:4px 10px;background:#ea580c;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Toon leveranciers</button>');
+.bindPopup('<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small><br><button data-fabriek="{{ f.naam }}" onclick="toonFabriekAnalyse(this.dataset.fabriek)" style="margin-top:6px;padding:4px 10px;background:#0d5c62;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Toon leveranciers</button>');
 {% endif %}{% endfor %}
 {% endif %}
 
@@ -4165,7 +4216,7 @@ if (window.actieveRelatieLijnen) {
                     <div style="color:#64748b;font-size:12px;margin-top:2px;">${r.regio}, ${r.land}</div>
                     <div style="display:flex;justify-content:space-between;margin-top:6px;">
                         <span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-size:11px;">${r.gedeelde_materialen}</span>
-                        <span style="font-weight:700;color:#ea580c;">${r.afstand_km} km</span>
+                        <span style="font-weight:700;color:#0d5c62;">${r.afstand_km} km</span>
                     </div>
                     ${r.gedeelde_kwaliteiten ? `<div style="margin-top:4px;"><span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:4px;font-size:11px;">✓ ${r.gedeelde_kwaliteiten}</span></div>` : ""}
                 </div>`;
@@ -4333,7 +4384,7 @@ LOGIN_HTML = '''
         * { box-sizing: border-box; }
         body {
             font-family: "Inter", -apple-system, sans-serif;
-            background: radial-gradient(circle at 20% 10%, #fff7ed 0%, #f8fafc 45%, #f1f5f9 100%);
+            background: radial-gradient(circle at 20% 10%, #eef6f6 0%, #f8fafc 45%, #f1f5f9 100%);
             min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0;
             padding: 20px;
         }
@@ -4343,7 +4394,7 @@ LOGIN_HTML = '''
             border: 1px solid #f1f5f9;
         }
         .logo { font-size: 1.4rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; margin-bottom: 4px; }
-        .logo em { color: #ea580c; font-style: normal; }
+        .logo em { color: #0d5c62; font-style: normal; }
         .sub { font-size: 0.82rem; color: #94a3b8; margin-bottom: 28px; }
         label { display: block; font-size: 0.75rem; font-weight: 600; color: #475569; margin-bottom: 6px; margin-top: 14px; }
         label:first-of-type { margin-top: 0; }
@@ -4351,9 +4402,9 @@ LOGIN_HTML = '''
             width: 100%; padding: 11px 13px; border: 1px solid #e2e8f0; border-radius: 8px;
             font-size: 14px; font-family: inherit; outline: none; transition: all 0.15s ease;
         }
-        input:focus { border-color: #fb923c; box-shadow: 0 0 0 3px rgba(251,146,60,0.15); }
+        input:focus { border-color: #3f9295; box-shadow: 0 0 0 3px rgba(251,146,60,0.15); }
         button {
-            width: 100%; padding: 12px; background: linear-gradient(135deg, #f97316, #ea580c); color: white;
+            width: 100%; padding: 12px; background: linear-gradient(135deg, #14767b, #0d5c62); color: white;
             border: none; border-radius: 8px; font-size: 14px; font-weight: 700; font-family: inherit;
             cursor: pointer; margin-top: 22px; transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
@@ -5195,7 +5246,7 @@ def dashboard():
     donut_top4 = donut_bron[:4]
     donut_overig = sum(a for _, a in donut_bron[4:])
     donut_totaal = max(sum(a for _, a in donut_top4) + donut_overig, 1)
-    donut_kleuren = ["#fbbf24", "#f97316", "#ea580c", "#c2410c", "#5c4326"]
+    donut_kleuren = ["#fbbf24", "#14767b", "#0d5c62", "#0a4a4f", "#5c4326"]
     donut_segmenten = []
     cursor = 0
     for i, (naam, aantal) in enumerate(donut_top4 + ([("Overig", donut_overig)] if donut_overig else [])):
@@ -7498,7 +7549,7 @@ def wereldkaart():
         <div class="wk-legenda"><span class="stip" style="background:#22c55e;"></span> Klant</div>
         <div class="wk-legenda"><span class="stip" style="background:#f59e0b;"></span> Potentie</div>
         <div class="wk-legenda"><span class="stip" style="background:#3b82f6;"></span> In proces</div>
-        <div class="wk-legenda"><span class="stip" style="background:#ea580c;"></span> Geen status</div>
+        <div class="wk-legenda"><span class="stip" style="background:#0d5c62;"></span> Geen status</div>
     </aside>
     <div class="wk-map-wrap">
         <div id="wereldKaart"></div>
@@ -7514,7 +7565,7 @@ def wereldkaart():
 var ALLE_BEDRIJVEN_WK = {{ kaart_data|tojson }};
 var wkKaart = L.map("wereldKaart").setView([30, 10], 2);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(wkKaart);
-var wkKleur = {"klant":"#22c55e","potentie":"#f59e0b","in_proces":"#3b82f6","geen_interesse":"#6b7280","":"#ea580c"};
+var wkKleur = {"klant":"#22c55e","potentie":"#f59e0b","in_proces":"#3b82f6","geen_interesse":"#6b7280","":"#0d5c62"};
 var wkCluster = null;
 
 function wkFilter() {
@@ -7526,7 +7577,7 @@ function wkFilter() {
     wkCluster = L.markerClusterGroup({
         iconCreateFunction: function(cluster) {
             return L.divIcon({
-                html: '<div style="background:#ea580c;color:#fff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);">' + cluster.getChildCount() + '</div>',
+                html: '<div style="background:#0d5c62;color:#fff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);">' + cluster.getChildCount() + '</div>',
                 className: '', iconSize: [34, 34]
             });
         }
@@ -7543,7 +7594,7 @@ function wkFilter() {
         var popup = "<b>" + b.naam + "</b><br><small>" + b.regio + ", " + b.land + "</small>";
         popup += "<br><small>" + (b.materialen || "—") + "</small>";
         if (b.volume) popup += "<br><small>" + b.volume + " t/jaar</small>";
-        popup += '<br><a href="/bedrijf/' + encodeURIComponent(b.naam) + '" style="color:#ea580c;font-weight:600;">Bekijk profiel →</a>';
+        popup += '<br><a href="/bedrijf/' + encodeURIComponent(b.naam) + '" style="color:#0d5c62;font-weight:600;">Bekijk profiel →</a>';
         marker.bindPopup(popup);
         wkCluster.addLayer(marker);
     });
@@ -8008,14 +8059,14 @@ FOUTPAGINA_HTML = '''
         * { box-sizing: border-box; }
         body {
             font-family: "Inter", -apple-system, sans-serif;
-            background: radial-gradient(circle at 20% 10%, #fff7ed 0%, #f8fafc 45%, #f1f5f9 100%);
+            background: radial-gradient(circle at 20% 10%, #eef6f6 0%, #f8fafc 45%, #f1f5f9 100%);
             min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; padding: 20px;
         }
         .box { text-align: center; max-width: 420px; }
-        .code { font-size: 4.5rem; font-weight: 900; color: #ea580c; letter-spacing: -3px; line-height: 1; margin-bottom: 12px; }
+        .code { font-size: 4.5rem; font-weight: 900; color: #0d5c62; letter-spacing: -3px; line-height: 1; margin-bottom: 12px; }
         h1 { font-size: 1.3rem; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
         p { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
-        a { display: inline-block; padding: 11px 22px; background: linear-gradient(135deg, #f97316, #ea580c); color: #fff;
+        a { display: inline-block; padding: 11px 22px; background: linear-gradient(135deg, #14767b, #0d5c62); color: #fff;
             border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.85rem; }
         a:hover { box-shadow: 0 8px 20px rgba(234,88,12,0.3); }
     </style>
