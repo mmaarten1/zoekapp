@@ -3554,24 +3554,10 @@ function toggleMobielMenu() {
   input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearch(); });
 </script>
 
-<!-- NAVBAR -->
-<nav class="navbar">
-    <a href="/" class="navbar-logo">FT<em>Next</em></a>
-    <div class="navbar-divider"></div>
-    <span class="navbar-stat"><strong>{{ totaal }}</strong> companies · <strong>{{ landen|length }}</strong> countries</span>
-    <div class="navbar-right">
-       <button onclick="toonMeldingen()" style="position:relative;background:none;border:none;cursor:pointer;font-size:18px;margin-right:8px;">
-    🔔<span id="meldingBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:white;font-size:10px;font-weight:700;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;"></span>
-</button>
-         <a href="#" class="btn-nav btn-nav-ghost">Sign in</a>
-        <a href="#" class="btn-nav btn-nav-primary">Get started</a>
-    </div>
-</nav>
-
 <!-- ZOEKBALK -->
 <section class="search-bar-section">
-    <div class="hero-content">
-        <form method="POST" id="searchForm">
+    <div class="hero-content" style="display:flex;align-items:center;gap:14px;">
+        <form method="POST" id="searchForm" style="flex:1;">
             <div class="search-container">
                 <div class="search-row">
                     <input class="search-input" name="zoekterm" placeholder="🔍  Bedrijf, contactpersoon of stad..." value="{{ zoekterm }}">
@@ -3593,6 +3579,10 @@ function toggleMobielMenu() {
                 </div>
             </div>
         </form>
+        <button onclick="toonMeldingen()" style="position:relative;background:#fff;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;font-size:16px;padding:10px 14px;flex:none;">
+            🔔<span id="meldingBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:white;font-size:10px;font-weight:700;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;"></span>
+        </button>
+
     </div>
 </section>
 
@@ -3719,8 +3709,9 @@ function toggleMobielMenu() {
 
         <div class="results-header">
             <div class="results-count">
-                <strong>{{ bedrijven|length }}</strong> of <strong>{{ totaal_gevonden }}</strong> results
+                <strong id="inBeeldTeller">{{ bedrijven|length }}</strong> bedrijven in kaartbeeld · <strong>{{ bedrijven|length }}</strong> van <strong>{{ totaal_gevonden }}</strong>
                 {% if totaal_paginas > 1 %}<span style="color:var(--gray-300);"> · pagina {{ pagina }}/{{ totaal_paginas }}</span>{% endif %}
+                <span style="color:var(--gray-300);font-size:11px;"> · zoom of sleep de kaart om te filteren</span>
             </div>
             <a href="/export-csv?{{ export_query }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;">⬇ Export to CSV</a>
         </div>
@@ -3744,6 +3735,7 @@ function toggleMobielMenu() {
                 data-materialen="{{ bedrijf.materialen|default('',true)|e }}" data-kwaliteiten="{{ bedrijf.kwaliteiten|default('',true)|e }}"
                 data-klanttype="{{ bedrijf.klanttype|default('',true)|e }}" data-volume="{{ bedrijf.volume|default('',true)|e }}"
                 data-accountmanager="{{ bedrijf.accountmanager|default('',true)|e }}"
+                data-lat="{{ bedrijf.lat or '' }}" data-lon="{{ bedrijf.lon or '' }}"
                 onclick="event.preventDefault(); openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}', '{{ bedrijf.certificeringen|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.contactpersoon|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.kwaliteiten|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.brontype|default("", true)|replace("'","&#39;") }}')">
                 <span style="width:26px;"><span class="star-btn {% if bedrijf.naam in opgeslagen_namen %}opgeslagen{% endif %}" onclick="event.stopPropagation(); toggleOpslaan(event, '{{ bedrijf.naam|replace("'","\\'") }}', this)">{% if bedrijf.naam in opgeslagen_namen %}★{% else %}☆{% endif %}</span></span>
                 <span style="flex:1.5;font-weight:600;color:var(--gray-800);">{{ bedrijf.naam }}{% if bedrijf.adres or bedrijf.telefoon %} <span class="verificatie-badge" style="font-size:0.6rem;">✓</span>{% endif %}<br><span style="font-weight:400;font-size:11px;color:var(--gray-400);">{{ bedrijf.regio }}, {{ bedrijf.land }}</span></span>
@@ -3856,6 +3848,24 @@ L.marker([{{ f.lat }}, {{ f.lon }}], {icon: fabriekIcon})
     .addTo(kaart)
 .bindPopup('<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small><br><button data-fabriek="{{ f.naam }}" onclick="toonFabriekAnalyse(this.dataset.fabriek)" style="margin-top:6px;padding:4px 10px;background:#0d5c62;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Toon leveranciers</button>');
 {% endif %}{% endfor %}
+
+// Kaart↔tabel-koppeling: zoomen/slepen van de kaart filtert live welke rijen zichtbaar zijn
+var kaartTabelRijen = Array.prototype.slice.call(document.querySelectorAll("#resultatenLijst .data-row"));
+function syncKaartMetTabel() {
+    var bounds = kaart.getBounds();
+    var teller = 0;
+    kaartTabelRijen.forEach(function (rij) {
+        var lat = parseFloat(rij.dataset.lat), lon = parseFloat(rij.dataset.lon);
+        if (isNaN(lat) || isNaN(lon)) { rij.style.display = "none"; return; }
+        var zichtbaar = bounds.contains([lat, lon]);
+        rij.style.display = zichtbaar ? "" : "none";
+        if (zichtbaar) teller++;
+    });
+    var tellerEl = document.getElementById("inBeeldTeller");
+    if (tellerEl) tellerEl.textContent = teller;
+}
+kaart.on("moveend zoomend", syncKaartMetTabel);
+kaart.whenReady(function () { setTimeout(syncKaartMetTabel, 300); });
 {% endif %}
 
 (function () {
