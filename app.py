@@ -3604,16 +3604,6 @@ function toggleMobielMenu() {
                 {% if actieve_filter_count > 0 %}<a href="/" style="font-size:var(--text-xs);color:var(--gray-400);text-decoration:none;font-weight:600;">Wis alles</a>{% endif %}
             </div>
 
-            {% if actieve_filters_lijst %}
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid var(--gray-100);">
-                {% for af in actieve_filters_lijst %}
-                <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-50);color:var(--brand-700);border:1px solid #b3d9da;border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;text-decoration:none;">
-                    {{ af.label }}<span style="font-weight:800;">✕</span>
-                </a>
-                {% endfor %}
-            </div>
-            {% endif %}
-
             <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:var(--space-2);">Bedrijfsprofiel</div>
 
             <div class="filter-group">
@@ -3702,6 +3692,18 @@ function toggleMobielMenu() {
                 {% if volume_totaal_resultaat %}<div><div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume</div><div style="font-size:1.3rem;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ volume_totaal_resultaat }}</div></div>{% endif %}
             </div>
         </div>
+
+        {% if actieve_filters_lijst %}
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;">
+            {% for af in actieve_filters_lijst %}
+            <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-600);color:#fff;border-radius:14px;padding:4px 11px;font-size:12px;font-weight:600;text-decoration:none;">
+                {{ af.label }}<span style="font-weight:800;opacity:0.8;">✕</span>
+            </a>
+            {% endfor %}
+            <a href="#filtersPaneel" onclick="document.querySelector('.filters-panel').scrollIntoView({behavior:'smooth'});" style="font-size:12px;font-weight:600;color:var(--gray-400);text-decoration:none;padding:4px 6px;">+ filter</a>
+            <a href="/" style="font-size:12px;color:var(--gray-300);text-decoration:none;margin-left:4px;">Wis alles</a>
+        </div>
+        {% endif %}
         <!-- MAP -->
         <div class="map-panel">
             <div id="kaart"></div>
