@@ -23,7 +23,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "notities.json", "meldingen.json", "fotos.json", "transport_prijzen.json",
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
         "orders.json", "accountmanagers.json", "fotomappen.json", "materiaal_taxonomie.json", "voorraad_transacties.json",
-        "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json",
+        "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json", "cert_vervaldatums.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -101,6 +101,22 @@ def bewaar_shipments(data):
 CONTRACTEN_FILE = datapad("contracten.json")
 
 MARKTPRIJZEN_FILE = datapad("marktprijzen.json")
+
+CERT_VERVALDATUMS_FILE = datapad("cert_vervaldatums.json")
+
+def laad_cert_vervaldatums():
+    try:
+        with open(CERT_VERVALDATUMS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_cert_vervaldatums(data):
+    with open(CERT_VERVALDATUMS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _cert_sleutel(bedrijf_naam, certificaat):
+    return f"{bedrijf_naam}|||{certificaat}"
 
 def laad_marktprijzen():
     try:
@@ -4960,6 +4976,23 @@ def set_fabriek_kwaliteiten():
             return jsonify({"kwaliteiten": waarde})
     return jsonify({"error": "Fabriek niet gevonden"}), 404
 
+@app.route("/api/cert-vervaldatum", methods=["POST"])
+def set_cert_vervaldatum():
+    data = request.get_json()
+    bedrijf_naam = data.get("bedrijf", "")
+    certificaat = data.get("certificaat", "")
+    vervaldatum = data.get("vervaldatum", "")
+    if not bedrijf_naam or not certificaat:
+        return jsonify({"error": "Bedrijf en certificaat zijn verplicht"}), 400
+    alle = laad_cert_vervaldatums()
+    sleutel = _cert_sleutel(bedrijf_naam, certificaat)
+    if vervaldatum:
+        alle[sleutel] = vervaldatum
+    else:
+        alle.pop(sleutel, None)
+    bewaar_cert_vervaldatums(alle)
+    return jsonify({"vervaldatum": vervaldatum})
+
 @app.route("/api/status", methods=["POST"])
 def set_status():
     data = request.get_json()
@@ -7454,25 +7487,37 @@ def instellingen():
 @app.route("/certificeringen")
 def certificeringen_pagina():
     _am_lookup_cert = laad_accountmanagers()
+    _vervaldatums = laad_cert_vervaldatums()
+    vandaag_cert = datetime.date.today()
+
     cert_rijen = []
     for b in ENF_BEDRIJVEN:
         for c in [x.strip() for x in b.get("certificeringen", "").split(",") if x.strip()]:
+            sleutel = _cert_sleutel(b["naam"], c)
+            geldig_tot = _vervaldatums.get(sleutel, "")
+            status_tekst = ""
+            if geldig_tot:
+                try:
+                    geldig_datum = datetime.datetime.strptime(geldig_tot, "%Y-%m-%d").date()
+                    status_tekst = "Geldig" if geldig_datum >= vandaag_cert else "Verlopen"
+                except (ValueError, TypeError):
+                    status_tekst = ""
             cert_rijen.append({
                 "bedrijf": b["naam"], "certificaat": c, "land": b.get("land",""),
                 "regio": b.get("regio",""), "accountmanager": _am_lookup_cert.get(b["naam"], ""),
+                "geldig_tot": geldig_tot, "status": status_tekst,
             })
     cert_rijen.sort(key=lambda r: r["bedrijf"])
 
     per_cert_telling = {}
     for r in cert_rijen:
         per_cert_telling[r["certificaat"]] = per_cert_telling.get(r["certificaat"], 0) + 1
+    aantal_verlopen_cert = sum(1 for r in cert_rijen if r["status"] == "Verlopen")
     kpis = [
         {"label": "Certificeringen totaal", "value": len(cert_rijen), "sub": f"{len(per_cert_telling)} soorten"},
         {"label": "Bedrijven met certificering", "value": len({r['bedrijf'] for r in cert_rijen}), "sub": f"van {len(ENF_BEDRIJVEN)} totaal"},
+        {"label": "Verlopen", "value": aantal_verlopen_cert, "sub": "vraagt aandacht" if aantal_verlopen_cert else "alles op orde"},
     ]
-    if per_cert_telling:
-        meest_voorkomend = max(per_cert_telling.items(), key=lambda x: x[1])
-        kpis.append({"label": "Meest voorkomend", "value": meest_voorkomend[0], "sub": f"{meest_voorkomend[1]} bedrijven"})
 
     inhoud = """
 <style>
@@ -7488,6 +7533,9 @@ def certificeringen_pagina():
 .kpi-mini-cert .getal { font-size:1.2rem; font-weight:800; color:var(--brand-600); }
 .kpi-mini-cert .label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.06em; }
 .kpi-mini-cert .sub { font-size:0.72rem; color:var(--gray-400); margin-top:2px; }
+.cert-status { font-size:10.5px; padding:3px 9px; border-radius:11px; border:1px solid var(--gray-200); color:var(--gray-500); background:#fff; display:inline-block; }
+.cert-status.geldig { border-color:#bcd9da; background:#eef6f6; color:var(--brand-600); }
+.cert-status.verlopen { border-color:#e6d3b8; background:#fdf6ea; color:#8a6320; }
 </style>
 
 <div class="page-title">Certifications</div>
@@ -7499,21 +7547,28 @@ def certificeringen_pagina():
     {% endfor %}
 </div>
 
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;" id="certLijst">
-    <div class="data-thead">
-        <span style="flex:1.4;" data-sort="bedrijf">Bedrijf</span>
-        <span style="flex:1;" data-sort="certificaat">Certificaat</span>
-        <span style="flex:1;" data-sort="land">Land</span>
-        <span style="width:130px;" data-sort="accountmanager">Accountmgr.</span>
-    </div>
+<div class="data-thead" style="border-radius:var(--radius-md) var(--radius-md) 0 0;">
+    <span style="flex:1.6;" data-sort="bedrijf">Bedrijf</span>
+    <span style="flex:1;" data-sort="certificaat">Certificaat</span>
+    <span style="flex:1;" data-sort="land">Land</span>
+    <span style="width:130px;" data-sort="geldig_tot">Geldig tot</span>
+    <span style="width:130px;" data-sort="status">Status</span>
+    <span style="width:120px;" data-sort="accountmanager">Accountmgr.</span>
+</div>
+<div id="certLijst" style="border:1px solid var(--gray-200);border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);overflow:hidden;">
     {% for r in cert_rijen %}
-    <a class="data-row" href="/bedrijf/{{ r.bedrijf|urlencode }}"
-       data-bedrijf="{{ r.bedrijf|e }}" data-certificaat="{{ r.certificaat|e }}" data-land="{{ r.land|e }}" data-accountmanager="{{ r.accountmanager|default('',true)|e }}">
-        <span style="flex:1.4;font-weight:600;color:var(--gray-800);">{{ r.bedrijf }}</span>
+    <div class="data-row"
+       data-bedrijf="{{ r.bedrijf|e }}" data-certificaat="{{ r.certificaat|e }}" data-land="{{ r.land|e }}"
+       data-geldig_tot="{{ r.geldig_tot|default('',true)|e }}" data-status="{{ r.status|default('',true)|e }}" data-accountmanager="{{ r.accountmanager|default('',true)|e }}">
+        <span style="flex:1.6;"><a href="/bedrijf/{{ r.bedrijf|urlencode }}" style="font-weight:600;color:var(--gray-800);text-decoration:none;">{{ r.bedrijf }}</a></span>
         <span style="flex:1;" class="zacht">🏅 {{ r.certificaat }}</span>
         <span style="flex:1;" class="zacht">{{ r.land }}{% if r.regio %}, {{ r.regio }}{% endif %}</span>
-        <span style="width:130px;" class="zacht">{{ r.accountmanager|default('—',true) }}</span>
-    </a>
+        <span style="width:130px;">
+            <input type="date" value="{{ r.geldig_tot }}" data-bedrijf-veld="{{ r.bedrijf|e }}" data-cert-veld="{{ r.certificaat|e }}" onchange="wijzigCertVervaldatum(this)" style="font-size:11.5px;border:1px solid var(--gray-200);border-radius:5px;padding:3px 5px;font-family:inherit;">
+        </span>
+        <span style="width:130px;">{% if r.status %}<span class="cert-status {{ 'geldig' if r.status == 'Geldig' else 'verlopen' }}">{{ r.status }}</span>{% else %}<span class="zacht">—</span>{% endif %}</span>
+        <span style="width:120px;" class="zacht">{{ r.accountmanager|default('—',true) }}</span>
+    </div>
     {% endfor %}
 </div>
 <div style="display:flex;justify-content:space-between;padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">
@@ -7521,10 +7576,13 @@ def certificeringen_pagina():
     <a href="/export-csv" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Export naar CSV</a>
 </div>
 <script>
+function wijzigCertVervaldatum(input) {
+    fetch("/api/cert-vervaldatum", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: input.dataset.bedrijfVeld, certificaat: input.dataset.certVeld, vervaldatum: input.value})}).then(() => location.reload());
+}
 (function () {
     var lijst = document.getElementById("certLijst");
     if (!lijst) return;
-    var koppen = lijst.querySelectorAll(".data-thead [data-sort]");
+    var koppen = document.querySelectorAll(".data-thead [data-sort]");
     var richting = "desc", sleutel = null;
     koppen.forEach(function (kop) {
         kop.addEventListener("click", function () {
@@ -7568,57 +7626,94 @@ def materialen():
             if aantal_kw > 0:
                 kwaliteit_tellingen[kw] = aantal_kw
         top_kwaliteiten = sorted(kwaliteit_tellingen.items(), key=lambda x: -x[1])[:4]
+        kwaliteiten_tekst = ", ".join(kw for kw, _ in top_kwaliteiten)
+
+        volume_totaal = 0.0
+        for b in bedrijven_in_categorie:
+            volumes_dict = b.get("materiaal_volumes", {})
+            if isinstance(volumes_dict, dict):
+                for mat_naam, waarde in volumes_dict.items():
+                    if mat_naam.strip().lower() == categorie.strip().lower() or any(mat_naam.strip().lower() == kw.strip().lower() for kw in kwaliteiten_lijst):
+                        volume_totaal += parse_hoeveelheid_getal(waarde)
 
         materialen_data.append({
-            "naam": categorie, "aantal": len(bedrijven_in_categorie), "landen": len(landen),
-            "top_kwaliteiten": top_kwaliteiten,
+            "naam": categorie, "kwaliteiten": kwaliteiten_tekst, "bedrijven": len(bedrijven_in_categorie),
+            "volume": (f"{volume_totaal:,.0f}" if volume_totaal else ""), "landen": len(landen),
         })
 
-    materialen_data.sort(key=lambda x: -x["aantal"])
-    max_aantal = max([m["aantal"] for m in materialen_data], default=1)
+    materialen_data.sort(key=lambda x: -x["bedrijven"])
+    max_bedrijven = max([m["bedrijven"] for m in materialen_data], default=1)
     for m in materialen_data:
-        m["pct"] = round(m["aantal"] / max_aantal * 100, 1) if max_aantal else 0
-
-    iconen = {"Paper":"📄","Plastic":"🧴","Metal":"🔩","Glass":"🍾","Wood":"🪵","Organic":"🌱","Electronic":"💻","Karton":"📦"}
+        m["aandeel"] = f"{round(m['bedrijven'] / max_bedrijven * 100, 1) if max_bedrijven else 0}%"
 
     inhoud = """
-<style>
-.mat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
-.mat-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:20px; text-decoration:none; display:block; transition:var(--transition); }
-.mat-kaart:hover { border-color:var(--brand-300); box-shadow:var(--shadow-md); transform:translateY(-2px); }
-.mat-icoon { font-size:1.8rem; margin-bottom:10px; }
-.mat-naam { font-size:1.05rem; font-weight:700; color:var(--gray-800); margin-bottom:4px; }
-.mat-sub { font-size:0.78rem; color:var(--gray-400); margin-bottom:12px; }
-.mat-bar-track { background:var(--gray-100); border-radius:6px; height:7px; overflow:hidden; }
-.mat-bar-fill { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); height:100%; }
-.mat-getal { font-weight:800; color:var(--brand-700); font-size:1.3rem; }
-.mat-kwaliteit-tag { display:inline-block; background:var(--gray-50); color:var(--gray-500); font-size:10.5px; padding:2px 7px; border-radius:5px; margin:2px 3px 0 0; }
-</style>
-
 <div class="page-title">Materials</div>
-<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:24px;font-size:0.88rem;">{{ materialen_data|length }} grondstofgroepen (beheerd via Instellingen → Materialen beheren) over {{ totaal }} bedrijven. Klik op een groep om gefilterd te zoeken.</p>
+<p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.85rem;">Alle materialen en kwaliteiten in de database, met dekking en volume</p>
 
-<div class="mat-grid">
+<div class="data-thead" style="border-radius:var(--radius-md) var(--radius-md) 0 0;">
+    <span style="flex:1.4;" data-sort="naam">Materiaal</span>
+    <span style="flex:1.6;" data-sort="kwaliteiten">Kwaliteiten</span>
+    <span style="width:110px;text-align:right;" data-sort="bedrijven">Bedrijven</span>
+    <span style="width:120px;text-align:right;" data-sort="volume">Volume t/j</span>
+    <span style="width:180px;">Aandeel</span>
+    <span style="width:80px;text-align:right;" data-sort="landen">Landen</span>
+</div>
+<div id="matLijst" style="border:1px solid var(--gray-200);border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);overflow:hidden;">
     {% for m in materialen_data %}
-    <a href="/?materiaal={{ m.naam }}" class="mat-kaart">
-        <div class="mat-icoon">{{ iconen.get(m.naam, "♻️") }}</div>
-        <div class="mat-naam">{{ m.naam }}</div>
-        <div class="mat-sub">{{ m.landen }} landen</div>
-        <div class="mat-getal">{{ m.aantal }}</div>
-        <div class="mat-bar-track" style="margin-top:8px;margin-bottom:10px;"><div class="mat-bar-fill" style="width:{{ m.pct }}%"></div></div>
-        {% if m.top_kwaliteiten %}
-        <div>
-            {% for kw, aantal_kw in m.top_kwaliteiten %}<span class="mat-kwaliteit-tag">{{ kw }} ({{ aantal_kw }})</span>{% endfor %}
-        </div>
-        {% endif %}
+    <a class="data-row" href="/?materiaal={{ m.naam|urlencode }}"
+       data-naam="{{ m.naam|e }}" data-kwaliteiten="{{ m.kwaliteiten|default('',true)|e }}"
+       data-bedrijven="{{ m.bedrijven|default(0,true) }}" data-volume="{{ m.volume|default('',true)|e }}" data-landen="{{ m.landen|default(0,true) }}">
+        <span style="flex:1.4;"><b style="color:var(--gray-800);">{{ m.naam }}</b></span>
+        <span style="flex:1.6;" class="zacht">{{ m.kwaliteiten|default('—',true) }}</span>
+        <span style="width:110px;text-align:right;" class="num">{{ m.bedrijven }}</span>
+        <span style="width:120px;text-align:right;" class="num">{{ m.volume|default('—',true) }}</span>
+        <span style="width:180px;display:flex;align-items:center;gap:10px;">
+            <span class="mat-bar-track" style="flex:1;"><span class="mat-bar-fill" style="width:{{ m.aandeel }}"></span></span>
+            <span style="font-size:11.5px;color:var(--gray-400);width:36px;text-align:right;">{{ m.aandeel }}</span>
+        </span>
+        <span style="width:80px;text-align:right;" class="zacht">{{ m.landen|default('—',true) }}</span>
     </a>
     {% else %}
     <div class="lege-staat">Nog geen grondstofgroepen. Ga naar Instellingen → Materialen beheren.</div>
     {% endfor %}
 </div>
+<div style="display:flex;justify-content:space-between;padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">
+    <span>{{ materialen_data|length }} materialen</span>
+    <a href="/export-csv" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Export naar CSV</a>
+</div>
+<style>
+.mat-bar-track { height:5px; background:var(--gray-100); border-radius:6px; position:relative; overflow:hidden; }
+.mat-bar-fill { position:absolute; top:0; left:0; bottom:0; background:var(--brand-600); }
+</style>
+<script>
+(function () {
+    var lijst = document.getElementById("matLijst");
+    if (!lijst) return;
+    var koppen = document.querySelectorAll(".data-thead [data-sort]");
+    var richting = "desc", sleutel = null;
+    var getal = function (v) { return parseFloat((v || "").replace(/[^\\d,.-]/g, "").replace(/\\./g, "").replace(",", ".")) || 0; };
+    koppen.forEach(function (kop) {
+        kop.addEventListener("click", function () {
+            var k = kop.dataset.sort;
+            richting = (sleutel === k && richting === "desc") ? "asc" : "desc";
+            sleutel = k;
+            koppen.forEach(function (x) { x.textContent = x.textContent.replace(/ [\\u2191\\u2193]$/, ""); });
+            kop.textContent += richting === "desc" ? " \\u2193" : " \\u2191";
+            var rijen = Array.prototype.slice.call(lijst.querySelectorAll(".data-row"));
+            rijen.sort(function (a, b) {
+                var va = a.dataset[k] || "", vb = b.dataset[k] || "";
+                var numeriek = /^[\\d.,\\s-]+$/.test(va) && /^[\\d.,\\s-]+$/.test(vb) && va !== "";
+                var r = numeriek ? getal(va) - getal(vb) : va.localeCompare(vb, "nl");
+                return richting === "asc" ? r : -r;
+            });
+            rijen.forEach(function (r) { lijst.appendChild(r); });
+        });
+    });
+})();
+</script>
     """
     pagina = render_simple_page("Materials", "materialen", inhoud)
-    return render_template_string(pagina, materialen_data=materialen_data, iconen=iconen, totaal=len(ENF_BEDRIJVEN))
+    return render_template_string(pagina, materialen_data=materialen_data, totaal=len(ENF_BEDRIJVEN))
 
 @app.route("/wereldkaart")
 def wereldkaart():
