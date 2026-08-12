@@ -2180,49 +2180,49 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         .search-container {
             background: #fff;
             border: 1px solid var(--gray-200);
-            border-radius: var(--radius-xl);
-            padding: var(--space-5);
-            max-width: 860px;
+            border-radius: 12px;
+            max-width: 900px;
             margin: 0 auto;
             box-shadow: var(--shadow-sm);
+            overflow: hidden;
         }
         .search-row {
             display: flex;
-            gap: var(--space-2);
-            flex-wrap: wrap;
-            justify-content: center;
+            align-items: stretch;
         }
         .search-input, .search-select {
-            background: #fff;
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius-sm);
-            padding: 9px 13px;
+            background: transparent;
+            border: none;
+            border-right: 1px solid var(--gray-100);
+            border-radius: 0;
+            padding: 13px 16px;
             font-size: var(--text-sm);
             font-family: var(--font);
             color: var(--gray-800);
             outline: none;
             transition: var(--transition);
         }
-        .search-input { width: 200px; }
+        .search-input { flex: 1; min-width: 160px; }
         .search-input::placeholder { color: var(--gray-400); }
-        .search-select { width: 155px; cursor: pointer; }
+        .search-select { width: 150px; cursor: pointer; flex: none; }
         .search-input:focus, .search-select:focus {
-            border-color: var(--brand-400);
-            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+            background: var(--gray-50);
         }
         .btn-search {
-            background: var(--brand-500);
+            background: var(--brand-600);
             color: #fff;
             border: none;
-            border-radius: var(--radius-sm);
-            padding: 9px 20px;
+            border-radius: 0;
+            padding: 13px 24px;
             font-size: var(--text-sm);
             font-weight: 700;
             font-family: var(--font);
             cursor: pointer;
             transition: var(--transition);
             white-space: nowrap;
+            flex: none;
         }
+        .btn-search:hover { background: var(--brand-700); }
         .btn-search:hover { background: var(--brand-400); transform: translateY(-1px); box-shadow: var(--shadow-brand); }
 
         /* ============================================
@@ -2250,19 +2250,25 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             display: flex;
             gap: var(--space-5);
             align-items: flex-start;
+            position: relative;
         }
 
         /* ============================================
            FILTERS SIDEBAR
            ============================================ */
         .filters-panel {
-            width: 220px;
-            flex-shrink: 0;
+            width: 300px;
+            position: absolute;
+            top: 44px;
+            left: 0;
+            z-index: 50;
             background: #fff;
             border: 1px solid var(--gray-200);
             border-radius: var(--radius-lg);
             padding: var(--space-5);
-            box-shadow: var(--shadow-sm);
+            box-shadow: 0 18px 44px -12px rgba(27,31,38,.28);
+            max-height: 70vh;
+            overflow-y: auto;
         }
         .filters-title {
             font-size: var(--text-xs);
@@ -2940,49 +2946,49 @@ HTML = '''
         .search-container {
             background: #fff;
             border: 1px solid var(--gray-200);
-            border-radius: var(--radius-xl);
-            padding: var(--space-5);
-            max-width: 860px;
+            border-radius: 12px;
+            max-width: 900px;
             margin: 0 auto;
             box-shadow: var(--shadow-sm);
+            overflow: hidden;
         }
         .search-row {
             display: flex;
-            gap: var(--space-2);
-            flex-wrap: wrap;
-            justify-content: center;
+            align-items: stretch;
         }
         .search-input, .search-select {
-            background: #fff;
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius-sm);
-            padding: 9px 13px;
+            background: transparent;
+            border: none;
+            border-right: 1px solid var(--gray-100);
+            border-radius: 0;
+            padding: 13px 16px;
             font-size: var(--text-sm);
             font-family: var(--font);
             color: var(--gray-800);
             outline: none;
             transition: var(--transition);
         }
-        .search-input { width: 200px; }
+        .search-input { flex: 1; min-width: 160px; }
         .search-input::placeholder { color: var(--gray-400); }
-        .search-select { width: 155px; cursor: pointer; }
+        .search-select { width: 150px; cursor: pointer; flex: none; }
         .search-input:focus, .search-select:focus {
-            border-color: var(--brand-400);
-            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+            background: var(--gray-50);
         }
         .btn-search {
-            background: var(--brand-500);
+            background: var(--brand-600);
             color: #fff;
             border: none;
-            border-radius: var(--radius-sm);
-            padding: 9px 20px;
+            border-radius: 0;
+            padding: 13px 24px;
             font-size: var(--text-sm);
             font-weight: 700;
             font-family: var(--font);
             cursor: pointer;
             transition: var(--transition);
             white-space: nowrap;
+            flex: none;
         }
+        .btn-search:hover { background: var(--brand-700); }
         .btn-search:hover { background: var(--brand-400); transform: translateY(-1px); box-shadow: var(--shadow-brand); }
 
         /* ============================================
@@ -3010,19 +3016,25 @@ HTML = '''
             display: flex;
             gap: var(--space-5);
             align-items: flex-start;
+            position: relative;
         }
 
         /* ============================================
            FILTERS SIDEBAR
            ============================================ */
         .filters-panel {
-            width: 220px;
-            flex-shrink: 0;
+            width: 300px;
+            position: absolute;
+            top: 44px;
+            left: 0;
+            z-index: 50;
             background: #fff;
             border: 1px solid var(--gray-200);
             border-radius: var(--radius-lg);
             padding: var(--space-5);
-            box-shadow: var(--shadow-sm);
+            box-shadow: 0 18px 44px -12px rgba(27,31,38,.28);
+            max-height: 70vh;
+            overflow-y: auto;
         }
         .filters-title {
             font-size: var(--text-xs);
@@ -3579,8 +3591,8 @@ function toggleMobielMenu() {
                 </div>
             </div>
         </form>
-        <button onclick="toonMeldingen()" style="position:relative;background:#fff;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;font-size:16px;padding:10px 14px;flex:none;">
-            🔔<span id="meldingBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:white;font-size:10px;font-weight:700;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;"></span>
+        <button onclick="toonMeldingen()" style="background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--gray-500);white-space:nowrap;flex:none;padding:8px 4px;font-family:inherit;">
+            Meldingen <span id="meldingBadge" style="display:none;background:var(--brand-600);color:#fff;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px;margin-left:2px;"></span>
         </button>
 
     </div>
@@ -3601,7 +3613,10 @@ function toggleMobielMenu() {
                     🎚️ Filters
                     {% if actieve_filter_count > 0 %}<span style="background:var(--brand-600);color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;">{{ actieve_filter_count }}</span>{% endif %}
                 </div>
-                {% if actieve_filter_count > 0 %}<a href="/" style="font-size:var(--text-xs);color:var(--gray-400);text-decoration:none;font-weight:600;">Wis alles</a>{% endif %}
+                <div style="display:flex;align-items:center;gap:10px;">
+                    {% if actieve_filter_count > 0 %}<a href="/" style="font-size:var(--text-xs);color:var(--gray-400);text-decoration:none;font-weight:600;">Wis alles</a>{% endif %}
+                    <button type="button" onclick="toggleFiltersPaneel()" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:1.1rem;line-height:1;padding:0;">✕</button>
+                </div>
             </div>
 
             <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:var(--space-2);">Bedrijfsprofiel</div>
@@ -3814,6 +3829,13 @@ function toggleFiltersPaneel() {
     var paneel = document.getElementById("filtersPaneel");
     paneel.style.display = (paneel.style.display === "none") ? "block" : "none";
 }
+document.addEventListener("click", function(e) {
+    var paneel = document.getElementById("filtersPaneel");
+    if (!paneel || paneel.style.display === "none") return;
+    if (paneel.contains(e.target)) return;
+    if (e.target.closest && e.target.closest("[onclick='toggleFiltersPaneel()']")) return;
+    paneel.style.display = "none";
+});
 {% if actieve_filters_lijst %}
 document.addEventListener("DOMContentLoaded", function() { document.getElementById("filtersPaneel").style.display = "block"; });
 {% endif %}
