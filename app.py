@@ -7050,44 +7050,49 @@ def orders_pagina():
 </div>
 
 {% if getoonde_orders %}
-{% for o in getoonde_orders %}
-<div class="order-kaart">
-    <div class="order-top">
-        <div>
-            <div class="order-bedrijf">{{ '📥' if o.get('ordertype') == 'inkoop' else '📤' }} {{ o.bedrijf }}{% if o.is_verlopen %} <span style="background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;vertical-align:middle;">⚠ Verlopen</span>{% endif %}</div>
-            <div class="order-details">
-                {% if o.materiaal %}{{ o.materiaal }} · {% endif %}
-                {% if o.hoeveelheid %}{{ o.hoeveelheid }} · {% endif %}
-                {% if o.prijs %}€{{ o.prijs }}{% endif %}
-                {% if o.verwachte_datum %} · verwacht: {{ o.verwachte_datum }}{% endif %}
-                {% if o.bestemming %} · 🌍{{ o.bestemming }}{% endif %}
-                {% if o.transportmiddel %} · 🚚{{ o.transportmiddel }}{% endif %}
-            </div>
-            {% if o.notitie %}<div class="order-details" style="margin-top:6px;font-style:italic;">{{ o.notitie }}</div>{% endif %}
-            <div class="order-details" style="margin-top:6px;color:var(--gray-300);">{{ o.verantwoordelijke }} · {{ o.aangemaakt }}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-            {% if o.gekoppelde_shipment %}
-            <span style="font-size:11px;font-weight:700;color:var(--gray-500);background:var(--gray-50);padding:5px 9px;border-radius:5px;white-space:nowrap;">🚢 {{ o.gekoppelde_shipment.status }}</span>
-            {% elif o.status == "Gewonnen" %}
-            <a href="/voorraad?prefill_order={{ o.id }}" style="font-size:11px;font-weight:700;color:#fff;background:{{ '#0891b2' if o.get('ordertype') == 'inkoop' else '#dc2626' }};padding:5px 9px;border-radius:5px;text-decoration:none;white-space:nowrap;">{{ '📥 Inboeken' if o.get('ordertype') == 'inkoop' else '📤 Uitboeken' }}</a>
-            {% endif %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="data-thead">
+        <span style="flex:1.6;">Bedrijf &amp; materiaal</span>
+        <span style="width:110px;text-align:right;">Waarde</span>
+        <span style="width:100px;">Verwacht</span>
+        <span style="width:150px;">Status</span>
+        <span style="width:100px;">Verantw.</span>
+        <span style="width:150px;text-align:right;">Actie</span>
+    </div>
+    {% for o in getoonde_orders %}
+    <div class="data-row" style="cursor:default;">
+        <span style="flex:1.6;">
+            <span style="font-weight:600;color:var(--gray-800);">{{ '📥' if o.get('ordertype') == 'inkoop' else '📤' }} {{ o.bedrijf }}</span>
+            {% if o.is_verlopen %} <span style="background:#fef2f2;color:#dc2626;font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px;">⚠ VERLOPEN</span>{% endif %}
+            <br><span class="zacht">{{ o.materiaal|default('—',true) }}{% if o.hoeveelheid %} · {{ o.hoeveelheid }}{% endif %}{% if o.bestemming %} · 🌍{{ o.bestemming }}{% endif %}</span>
+        </span>
+        <span style="width:110px;text-align:right;" class="num">{% if o.prijs %}€{{ o.prijs }}{% else %}—{% endif %}</span>
+        <span style="width:100px;" class="zacht">{{ o.verwachte_datum|default('—',true) }}</span>
+        <span style="width:150px;">
             <form method="POST" style="margin:0;">
                 <input type="hidden" name="actie" value="status_wijzigen">
                 <input type="hidden" name="order_id" value="{{ o.id }}">
-                <select name="nieuwe_status" class="order-status-select" style="background:{{ statuskleuren.get(o.status, '#94a3b8') }};color:#fff;" onchange="this.form.submit()">
+                <select name="nieuwe_status" class="order-status-select" style="background:{{ statuskleuren.get(o.status, '#94a3b8') }};color:#fff;font-size:11px;" onchange="this.form.submit()">
                     {% for s in statussen %}<option value="{{ s }}" {% if s == o.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
                 </select>
             </form>
+        </span>
+        <span style="width:100px;" class="zacht">{{ o.verantwoordelijke }}</span>
+        <span style="width:150px;text-align:right;display:flex;justify-content:flex-end;align-items:center;gap:6px;">
+            {% if o.gekoppelde_shipment %}
+            <span style="font-size:10px;font-weight:700;color:var(--gray-500);background:var(--gray-50);padding:4px 7px;border-radius:5px;white-space:nowrap;">🚢 {{ o.gekoppelde_shipment.status }}</span>
+            {% elif o.status == "Gewonnen" %}
+            <a href="/voorraad?prefill_order={{ o.id }}" style="font-size:10px;font-weight:700;color:#fff;background:{{ '#0891b2' if o.get('ordertype') == 'inkoop' else '#dc2626' }};padding:4px 7px;border-radius:5px;text-decoration:none;white-space:nowrap;">{{ '📥 In' if o.get('ordertype') == 'inkoop' else '📤 Uit' }}</a>
+            {% endif %}
             <form method="POST" style="margin:0;" onsubmit="return confirm('Order verwijderen?');">
                 <input type="hidden" name="actie" value="verwijderen">
                 <input type="hidden" name="order_id" value="{{ o.id }}">
-                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:1rem;">✕</button>
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.95rem;">✕</button>
             </form>
-        </div>
+        </span>
     </div>
+    {% endfor %}
 </div>
-{% endfor %}
 {% else %}
 {% if alle_orders %}
 <div class="lege-staat">Geen orders gevonden voor deze filters.</div>
