@@ -3595,7 +3595,7 @@ function toggleMobielMenu() {
         <input type="hidden" name="zoekterm" value="{{ zoekterm }}">
         <input type="hidden" name="land" value="{{ land }}">
         <input type="hidden" name="regio" value="{{ regio }}">
-        <aside class="filters-panel">
+        <aside class="filters-panel" id="filtersPaneel" style="display:none;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3);">
                 <div class="filters-title" style="margin-bottom:0;display:flex;align-items:center;gap:8px;">
                     🎚️ Filters
@@ -3693,17 +3693,15 @@ function toggleMobielMenu() {
             </div>
         </div>
 
-        {% if actieve_filters_lijst %}
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;">
             {% for af in actieve_filters_lijst %}
             <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-600);color:#fff;border-radius:14px;padding:4px 11px;font-size:12px;font-weight:600;text-decoration:none;">
                 {{ af.label }}<span style="font-weight:800;opacity:0.8;">✕</span>
             </a>
             {% endfor %}
-            <a href="#filtersPaneel" onclick="document.querySelector('.filters-panel').scrollIntoView({behavior:'smooth'});" style="font-size:12px;font-weight:600;color:var(--gray-400);text-decoration:none;padding:4px 6px;">+ filter</a>
-            <a href="/" style="font-size:12px;color:var(--gray-300);text-decoration:none;margin-left:4px;">Wis alles</a>
+            <button type="button" onclick="toggleFiltersPaneel()" style="font-size:12px;font-weight:600;color:var(--gray-500);background:#fff;border:1px solid var(--gray-200);border-radius:14px;padding:4px 11px;cursor:pointer;font-family:inherit;">+ filter</button>
+            {% if actieve_filters_lijst %}<a href="/" style="font-size:12px;color:var(--gray-300);text-decoration:none;margin-left:4px;">Wis alles</a>{% endif %}
         </div>
-        {% endif %}
         <!-- MAP -->
         <div class="map-panel">
             <div id="kaart"></div>
@@ -3811,6 +3809,14 @@ function toggleMobielMenu() {
 
 <script>
 var regioPer = {{ regio_per_land|tojson }};
+
+function toggleFiltersPaneel() {
+    var paneel = document.getElementById("filtersPaneel");
+    paneel.style.display = (paneel.style.display === "none") ? "block" : "none";
+}
+{% if actieve_filters_lijst %}
+document.addEventListener("DOMContentLoaded", function() { document.getElementById("filtersPaneel").style.display = "block"; });
+{% endif %}
 
 function updateRegio() {
     var land = document.getElementById("landSelect").value;
