@@ -2560,7 +2560,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         }
         .sidebar-link:hover { background: #232830; color: #fff; }
         .sidebar-link.active { background: #232830; color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 var(--brand-600); }
-        .sidebar-link .icoon { font-size: 1.05em; width: 20px; text-align: center; }
+        .sidebar-link .icoon { font-family: var(--font-mono); font-size: 9px; color: #59636f; width: 18px; text-align: left; }
         .sidebar-me { margin-top: auto; padding: var(--space-4) var(--space-5) 0; border-top: 1px solid #2b3138; display: flex; align-items: center; gap: 9px; }
         .sidebar-avatar { width: 26px; height: 26px; flex: none; border-radius: 50%; background: #2f3641; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #cdd4dc; }
         .sidebar-me-naam { font-size: 12.5px; color: #e6eaef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2676,19 +2676,19 @@ def sidebar_html(actief):
         aantal_open_orders = 0
 
     items = [
-        ("zoeken", "/", "🔍", "Zoeken"),
-        ("wereldkaart", "/wereldkaart", "🌍", "World Map"),
-        ("dashboard", "/dashboard", "📊", "Dashboard"),
-        ("inzichten", "/inzichten", "📈", "Inzichten"),
-        ("materialen", "/materialen", "🧱", "Materials"),
-        ("certificeringen", "/certificeringen", "🏅", "Certifications"),
-        ("contacten", "/contacten", "👥", "Contacten"),
-        ("orders", "/orders", "📦", "Orders"),
-        ("marktprijzen", "/marktprijzen", "💹", "Marktprijzen"),
-        ("voorraad", "/voorraad", "⚖️", "Voorraad"),
-        ("opslagen", "/opslagen", "⭐", "Opslagen"),
-        ("notities", "/notities-overzicht", "📝", "Notities"),
-        ("instellingen", "/instellingen", "⚙️", "Instellingen"),
+        ("zoeken", "/", "ZK", "Zoeken"),
+        ("wereldkaart", "/wereldkaart", "WM", "World Map"),
+        ("dashboard", "/dashboard", "DB", "Dashboard"),
+        ("inzichten", "/inzichten", "IZ", "Inzichten"),
+        ("materialen", "/materialen", "MT", "Materials"),
+        ("certificeringen", "/certificeringen", "CF", "Certifications"),
+        ("contacten", "/contacten", "CT", "Contacten"),
+        ("orders", "/orders", "OR", "Orders"),
+        ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
+        ("voorraad", "/voorraad", "VR", "Voorraad"),
+        ("opslagen", "/opslagen", "OP", "Opslagen"),
+        ("notities", "/notities-overzicht", "NT", "Notities"),
+        ("instellingen", "/instellingen", "IN", "Instellingen"),
     ]
     links = ""
     for key, href, icoon, label in items:
@@ -3318,7 +3318,7 @@ HTML = '''
         }
         .sidebar-link:hover { background: #232830; color: #fff; }
         .sidebar-link.active { background: #232830; color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 var(--brand-600); }
-        .sidebar-link .icoon { font-size: 1.05em; width: 20px; text-align: center; }
+        .sidebar-link .icoon { font-family: var(--font-mono); font-size: 9px; color: #59636f; width: 18px; text-align: left; }
         .sidebar-me { margin-top: auto; padding: var(--space-4) var(--space-5) 0; border-top: 1px solid #2b3138; display: flex; align-items: center; gap: 9px; }
         .sidebar-avatar { width: 26px; height: 26px; flex: none; border-radius: 50%; background: #2f3641; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #cdd4dc; }
         .sidebar-me-naam { font-size: 12.5px; color: #e6eaef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3427,19 +3427,19 @@ HTML = '''
 <aside class="sidebar" id="mobielSidebar">
     <a href="/" class="sidebar-logo"><span class="sidebar-mark">FT</span><em>Next</em></a>
     <nav class="sidebar-nav">
-        <a href="/" class="sidebar-link active"><span class="icoon">🔍</span> Zoeken</a>
-        <a href="/wereldkaart" class="sidebar-link"><span class="icoon">🌍</span> World Map</a>
-        <a href="/dashboard" class="sidebar-link"><span class="icoon">📊</span> Dashboard</a>
-        <a href="/inzichten" class="sidebar-link"><span class="icoon">📈</span> Inzichten</a>
-        <a href="/materialen" class="sidebar-link"><span class="icoon">🧱</span> Materials</a>
-        <a href="/certificeringen" class="sidebar-link"><span class="icoon">🏅</span> Certifications</a>
-        <a href="/contacten" class="sidebar-link"><span class="icoon">👥</span> Contacten</a>
-        <a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">📦</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>
-        <a href="/marktprijzen" class="sidebar-link"><span class="icoon">💹</span> Marktprijzen</a>
-        <a href="/voorraad" class="sidebar-link"><span class="icoon">⚖️</span> Voorraad</a>
-        <a href="/opslagen" class="sidebar-link"><span class="icoon">⭐</span> Opslagen</a>
-        <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">📝</span> Notities</a>
-        <a href="/instellingen" class="sidebar-link"><span class="icoon">⚙️</span> Instellingen</a>
+        <a href="/" class="sidebar-link active"><span class="icoon">ZK</span> Zoeken</a>
+        <a href="/wereldkaart" class="sidebar-link"><span class="icoon">WM</span> World Map</a>
+        <a href="/dashboard" class="sidebar-link"><span class="icoon">DB</span> Dashboard</a>
+        <a href="/inzichten" class="sidebar-link"><span class="icoon">IZ</span> Inzichten</a>
+        <a href="/materialen" class="sidebar-link"><span class="icoon">MT</span> Materials</a>
+        <a href="/certificeringen" class="sidebar-link"><span class="icoon">CF</span> Certifications</a>
+        <a href="/contacten" class="sidebar-link"><span class="icoon">CT</span> Contacten</a>
+        <a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">OR</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>
+        <a href="/marktprijzen" class="sidebar-link"><span class="icoon">MP</span> Marktprijzen</a>
+        <a href="/voorraad" class="sidebar-link"><span class="icoon">VR</span> Voorraad</a>
+        <a href="/opslagen" class="sidebar-link"><span class="icoon">OP</span> Opslagen</a>
+        <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">NT</span> Notities</a>
+        <a href="/instellingen" class="sidebar-link"><span class="icoon">IN</span> Instellingen</a>
     </nav>
     <div class="sidebar-me">
         <span class="sidebar-avatar">{{ (session.get('gebruikersnaam','??')[:2])|upper }}</span>
