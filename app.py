@@ -8026,12 +8026,36 @@ def bedrijf_profiel(naam):
 
 <a href="/" class="profiel-terug">← Terug naar zoeken</a>
 
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/" style="color:var(--gray-400);text-decoration:none;">Zoeken</a> &nbsp;/&nbsp; {{ bedrijf.land }} &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ bedrijf.naam }}</span>
+</div>
 <div class="profiel-header">
     <div>
         <div class="profiel-naam">{{ bedrijf.naam }}{% if geverifieerd %}<span class="verificatie-badge" style="margin-left:10px;">✓ Geverifieerd</span>{% endif %}</div>
         <div class="profiel-loc">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</div>
     </div>
     <span class="star-btn {% if opgeslagen %}opgeslagen{% endif %}" id="profielSterBtn" onclick="toggleOpslaanProfiel(this)" style="font-size:1.6rem;">{% if opgeslagen %}★{% else %}☆{% endif %}</span>
+</div>
+
+<div style="display:flex;border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:20px;overflow:hidden;">
+    <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume totaal</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ bedrijf.volume|default('—',true) }}</div>
+        <div style="font-size:11px;color:var(--gray-400);">t/jaar</div>
+    </div>
+    <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Kwaliteiten</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ (bedrijf.kwaliteiten.split(',')|length) if bedrijf.kwaliteiten else '—' }}</div>
+        <div style="font-size:11px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ bedrijf.kwaliteiten|default('niet opgegeven',true) }}</div>
+    </div>
+    <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Certificering</div>
+        <div style="font-size:0.95rem;font-weight:700;color:var(--gray-800);padding-top:4px;">{{ bedrijf.certificeringen|default('—',true) }}</div>
+    </div>
+    <div style="flex:1;padding:14px 20px;">
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Klanttype</div>
+        <div style="font-size:0.95rem;font-weight:700;color:var(--gray-800);padding-top:4px;">{{ bedrijf.klanttype|default('—',true) }}</div>
+    </div>
 </div>
 
 <div class="profiel-grid">
