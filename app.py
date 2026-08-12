@@ -5396,6 +5396,29 @@ def dashboard():
         for b in ENF_BEDRIJVEN if b.get("lat") and b.get("lon")
     ][:1500]
 
+    # Vraagt om aandacht: echte data, niks verzonnen (verlopen orders + verlopen certificeringen)
+    vandaag_dash = datetime.date.today()
+    aandacht_items = []
+    for o in laad_orders():
+        if o.get("status") in ("Open", "Onderhandeling") and o.get("verwachte_datum"):
+            try:
+                verwacht = datetime.datetime.strptime(o["verwachte_datum"], "%Y-%m-%d").date()
+                if verwacht < vandaag_dash:
+                    aandacht_items.append({"titel": f"Order verlopen: {o['bedrijf']}", "sub": f"{o.get('materiaal','')} · verwacht was {o['verwachte_datum']}", "url": f"/orders"})
+            except (ValueError, TypeError):
+                pass
+    _vervaldatums_dash = laad_cert_vervaldatums()
+    for b in ENF_BEDRIJVEN:
+        for c in [x.strip() for x in b.get("certificeringen","").split(",") if x.strip()]:
+            geldig_tot = _vervaldatums_dash.get(_cert_sleutel(b["naam"], c), "")
+            if geldig_tot:
+                try:
+                    if datetime.datetime.strptime(geldig_tot, "%Y-%m-%d").date() < vandaag_dash:
+                        aandacht_items.append({"titel": f"Certificaat verlopen: {b['naam']}", "sub": f"{c} · verliep {geldig_tot}", "url": f"/bedrijf/{b['naam']}"})
+                except (ValueError, TypeError):
+                    pass
+    aandacht_items = aandacht_items[:8]
+
     inhoud = """
 <div class="dash-donker-wrap">
 <style>
@@ -5430,11 +5453,29 @@ def dashboard():
 .dg-lege { color:var(--gray-400); font-size:0.83rem; }
 .dg-rij-2 { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px; }
 .dg-rij-2 > div { flex:1; min-width:280px; }
+.att-item { padding:12px 0; border-bottom:1px solid var(--gray-100); display:flex; align-items:flex-start; gap:10px; text-decoration:none; color:inherit; }
+.att-item:last-child { border-bottom:none; }
+.att-item:hover { background:#f9fbfc; }
+.att-dot { width:6px; height:6px; border-radius:50%; background:#dc2626; margin-top:6px; flex:none; }
+.att-titel { font-size:0.82rem; font-weight:600; color:var(--gray-800); }
+.att-sub { font-size:0.75rem; color:var(--gray-400); margin-top:2px; }
 </style>
 
 <div class="page-title">Dashboard</div>
 {% if groei_pct is none %}
 <p style="color:var(--gray-400);margin-top:-16px;margin-bottom:20px;font-size:0.82rem;">📈 Groeitracking is vandaag gestart — kom over een paar dagen terug voor een echt groeicijfer.</p>
+{% endif %}
+
+{% if aandacht_items %}
+<div class="dg-kaart" style="margin-bottom:20px;">
+    <div class="dg-kaart-titel">⚠ Vraagt om aandacht</div>
+    {% for a in aandacht_items %}
+    <a class="att-item" href="{{ a.url }}">
+        <span class="att-dot"></span>
+        <span><span class="att-titel">{{ a.titel }}</span><br><span class="att-sub">{{ a.sub }}</span></span>
+    </a>
+    {% endfor %}
+</div>
 {% endif %}
 
 <div class="dg-grid">
@@ -5613,7 +5654,7 @@ dKaart.addLayer(dCluster);
         groei_pct=groei_pct, groei_periode=groei_periode,
         openstaande_orders=sorted([o for o in laad_orders() if o["status"] in ("Open", "Onderhandeling")], key=lambda o: o.get("aangemaakt",""), reverse=True)[:5],
         team_prestaties=team_prestaties,
-        vrd=bereken_voorraad_status())
+        vrd=bereken_voorraad_status(), aandacht_items=aandacht_items)
 
 @app.route("/inzichten")
 def inzichten():
