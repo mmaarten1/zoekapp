@@ -2361,7 +2361,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             margin-bottom: 0;
             padding: 10px 16px;
             background: var(--gray-50);
-            border-bottom: 1px solid var(--gray-200);
+            border-top: 1px solid var(--gray-200);
         }
         .results-count { font-size: var(--text-sm); color: var(--gray-400); }
         .results-count strong { color: var(--brand-600); font-weight: 700; }
@@ -3167,7 +3167,7 @@ HTML = '''
             margin-bottom: 0;
             padding: 10px 16px;
             background: var(--gray-50);
-            border-bottom: 1px solid var(--gray-200);
+            border-top: 1px solid var(--gray-200);
         }
         .results-count { font-size: var(--text-sm); color: var(--gray-400); }
         .results-count strong { color: var(--brand-600); font-weight: 700; }
@@ -3747,20 +3747,12 @@ function toggleMobielMenu() {
             <button type="button" onclick="toggleFiltersPaneel()" style="font-size:12px;font-weight:600;color:var(--gray-500);background:#fff;border:1px solid var(--gray-200);border-radius:14px;padding:4px 11px;cursor:pointer;font-family:inherit;">+ filter</button>
             {% if actieve_filters_lijst %}<a href="/" style="font-size:12px;color:var(--gray-300);text-decoration:none;margin-left:4px;">Wis alles</a>{% endif %}
         </div>
-        <!-- MAP + TELLERBALK + TABEL: één doorlopend blok -->
+        <!-- MAP + TABEL: één doorlopend blok -->
         <div class="kaart-tabel-blok">
             <div class="map-panel">
                 <div id="kaart"></div>
             </div>
 
-            <div class="results-header">
-                <div class="results-count">
-                    <strong id="inBeeldTeller">{{ bedrijven|length }}</strong> bedrijven in kaartbeeld · <strong>{{ bedrijven|length }}</strong> van <strong>{{ totaal_gevonden }}</strong>
-                    {% if totaal_paginas > 1 %}<span style="color:var(--gray-300);"> · pagina {{ pagina }}/{{ totaal_paginas }}</span>{% endif %}
-                    <span style="color:var(--gray-300);font-size:11px;"> · zoom of sleep de kaart om te filteren</span>
-                </div>
-                <a href="/export-csv?{{ export_query }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;background:#fff;">⬇ Export to CSV</a>
-            </div>
             <div class="results-list" id="resultatenLijst">
                 <div class="data-thead">
                     <span style="width:26px;"></span>
@@ -3796,6 +3788,14 @@ function toggleMobielMenu() {
                 <span style="width:28px;text-align:center;color:var(--gray-300);">›</span>
             </a>
             {% endfor %}
+        </div>
+        <div class="results-header">
+            <div class="results-count">
+                <strong id="inBeeldTeller">{{ bedrijven|length }}</strong> bedrijven in kaartbeeld · <strong>{{ bedrijven|length }}</strong> van <strong>{{ totaal_gevonden }}</strong>
+                {% if totaal_paginas > 1 %}<span style="color:var(--gray-300);"> · pagina {{ pagina }}/{{ totaal_paginas }}</span>{% endif %}
+                <span style="color:var(--gray-300);font-size:11px;"> · zoom of sleep de kaart om te filteren</span>
+            </div>
+            <a href="/export-csv?{{ export_query }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;">⬇ Export to CSV</a>
         </div>
         </div>
         {% if totaal_paginas > 1 %}
