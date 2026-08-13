@@ -3928,7 +3928,7 @@ var fabriekIcon = L.divIcon({
 {% for f in papierfabrieken %}{% if f.lat and f.lon %}
 L.marker([{{ f.lat }}, {{ f.lon }}], {icon: fabriekIcon})
     .addTo(kaart)
-.bindPopup('<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small><br><button data-fabriek="{{ f.naam }}" onclick="toonFabriekAnalyse(this.dataset.fabriek)" style="margin-top:6px;padding:4px 10px;background:#0d5c62;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Toon leveranciers</button>');
+.bindPopup('<b>🏭 {{ f.naam }}</b><br><small>{{ f.stad }}, {{ f.land }}</small><br><small>{{ f.materialen }}</small><br><a href="/bedrijf/{{ f.naam|urlencode }}" style="display:inline-block;margin-top:6px;padding:4px 10px;background:#0d5c62;color:white;border-radius:6px;font-size:12px;text-decoration:none;">Bekijk profiel →</a> <button data-fabriek="{{ f.naam }}" onclick="toonFabriekAnalyse(this.dataset.fabriek)" style="margin-top:6px;padding:4px 10px;background:#fff;color:#0d5c62;border:1px solid #0d5c62;border-radius:6px;cursor:pointer;font-size:12px;">Toon leveranciers</button>');
 {% endif %}{% endfor %}
 
 // Kaart↔tabel-koppeling: zoomen/slepen van de kaart filtert live welke rijen zichtbaar zijn
@@ -8434,7 +8434,7 @@ select.klik-bewerken-veld { cursor:pointer; }
     border: none;
     border-radius: 0;
     padding: 0 0 16px 0;
-    border-bottom: 1px solid var(--gray-100);
+    border-bottom: 1px solid var(--gray-200);
     margin-bottom: 16px !important;
     box-shadow: none;
 }
@@ -8669,9 +8669,9 @@ select.klik-bewerken-veld { cursor:pointer; }
         </div>
         {% endif %}
 
-        {% if actieve_leveranciers %}
         <div class="info-kaart" style="margin-top:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Leveranciers die leveren</div>
+            {% if actieve_leveranciers %}
             {% for l in actieve_leveranciers %}
             <a href="/bedrijf/{{ l.naam|urlencode }}" style="display:block;padding:10px 0;border-bottom:1px solid var(--gray-50);text-decoration:none;color:inherit;">
                 <div style="display:flex;justify-content:space-between;align-items:baseline;">
@@ -8681,8 +8681,10 @@ select.klik-bewerken-veld { cursor:pointer; }
                 <div style="font-size:11.5px;color:var(--gray-400);margin-top:2px;">{{ l.land }} · {{ l.aantal_shipments }} shipment{{ 's' if l.aantal_shipments != 1 else '' }}{% if l.laatste_datum %} · laatst {{ l.laatste_datum }}{% endif %}</div>
             </a>
             {% endfor %}
+            {% else %}
+            <div style="font-size:13px;color:var(--gray-400);">Nog geen leveranties geregistreerd (via Voorraad-shipments).</div>
+            {% endif %}
         </div>
-        {% endif %}
 
         <div class="info-kaart" style="margin-top:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Notities</div>
@@ -8706,7 +8708,7 @@ var MATERIAAL_TAXONOMIE = {{ materiaal_taxonomie|tojson }};
 var BEDRIJF_MATERIAAL_VOLUMES = {{ (bedrijf.get('materiaal_volumes', {}))|tojson }};
 var BEDRIJF_URL = {{ (bedrijf.url or "")|tojson }};
 var pKaart = L.map("profielKaart", {zoomControl:true}).setView([{{ bedrijf.lat or 20 }}, {{ bedrijf.lon or 0 }}], {{ 12 if bedrijf.lat else 2 }});
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(pKaart);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {attribution:"© OpenStreetMap, © CARTO", subdomains:"abcd", maxZoom:19}).addTo(pKaart);
 {% if bedrijf.lat and bedrijf.lon %}
 L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(pKaart).bindPopup({{ bedrijf.naam|tojson }});
 {% endif %}
