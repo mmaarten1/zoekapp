@@ -2169,42 +2169,54 @@ PAGINA_HOOFD = """<!DOCTYPE html>
            ============================================ */
         .search-bar-section {
             background: var(--gray-50);
-            padding: var(--space-8) var(--space-10);
+            padding: 16px 24px;
             border-bottom: 1px solid var(--gray-200);
         }
-        .hero-content { max-width: 1100px; margin: 0 auto; }
+        @media (max-width: 1200px) { .search-bar-section { padding: 16px; } }
+        @media (max-width: 768px)  { .search-bar-section { padding: 12px; } }
+        .hero-content {
+            width: 100%;
+            max-width: min(1700px, calc(100vw - 260px));
+            box-sizing: border-box;
+            margin: 0 auto;
+        }
 
         /* ============================================
            SEARCH
            ============================================ */
         .search-container {
             background: #fff;
-            border: 1px solid var(--gray-200);
-            border-radius: 12px;
-            max-width: 900px;
-            margin: 0 auto;
-            box-shadow: var(--shadow-sm);
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 820px;
+            margin: 0;
+            box-shadow: none;
             overflow: hidden;
+            height: 44px;
         }
         .search-row {
             display: flex;
             align-items: stretch;
+            height: 44px;
         }
         .search-input, .search-select {
             background: transparent;
             border: none;
             border-right: 1px solid var(--gray-100);
             border-radius: 0;
-            padding: 13px 16px;
-            font-size: var(--text-sm);
+            padding: 0 14px;
+            font-size: 14px;
             font-family: var(--font);
             color: var(--gray-800);
             outline: none;
             transition: var(--transition);
+            height: 44px;
+            box-sizing: border-box;
         }
-        .search-input { flex: 1; min-width: 160px; }
-        .search-input::placeholder { color: var(--gray-400); }
-        .search-select { width: 150px; cursor: pointer; flex: none; }
+        .search-input { flex: 1; min-width: 140px; }
+        .search-input::placeholder { color: #94A3B8; }
+        .search-select { width: 130px; cursor: pointer; flex: none; }
         .search-input:focus, .search-select:focus {
             background: var(--gray-50);
         }
@@ -2213,14 +2225,16 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             color: #fff;
             border: none;
             border-radius: 0;
-            padding: 13px 24px;
-            font-size: var(--text-sm);
+            padding: 0 20px;
+            font-size: 14px;
             font-weight: 700;
             font-family: var(--font);
             cursor: pointer;
             transition: var(--transition);
             white-space: nowrap;
             flex: none;
+            height: 44px;
+            box-sizing: border-box;
         }
         .btn-search:hover { background: var(--brand-700); }
         .btn-search:hover { background: var(--brand-400); transform: translateY(-1px); box-shadow: var(--shadow-brand); }
@@ -2244,14 +2258,18 @@ PAGINA_HOOFD = """<!DOCTYPE html>
            MAIN LAYOUT
            ============================================ */
         .main {
-            max-width: 1440px;
+            width: 100%;
+            max-width: min(1700px, calc(100vw - 260px));
+            box-sizing: border-box;
             margin: var(--space-6) auto;
-            padding: 0 var(--space-6);
+            padding: 0 24px;
             display: flex;
             gap: var(--space-5);
             align-items: flex-start;
             position: relative;
         }
+        @media (max-width: 1200px) { .main { padding: 0 16px; } }
+        @media (max-width: 768px)  { .main { padding: 0 12px; max-width: 100%; } }
 
         /* ============================================
            FILTERS SIDEBAR
@@ -2356,13 +2374,13 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         .data-thead span[data-sort] { cursor: pointer; user-select: none; }
         .data-thead span[data-sort]:hover { color: var(--brand-600); }
         .data-row {
-            padding-top: 11px; padding-bottom: 11px;
+            padding-top: 9px; padding-bottom: 9px;
             border-bottom: 1px solid var(--gray-100);
-            font-size: 12.5px; cursor: pointer; text-decoration: none; color: inherit;
+            font-size: 13px; cursor: pointer; text-decoration: none; color: inherit;
         }
         .data-row:hover { background: #f9fbfc; }
-        .data-row .num { font-family: var(--font-mono); font-size: 12px; }
-        .data-row .zacht { color: #4b5563; font-size: 12px; }
+        .data-row .num { font-family: var(--font-mono); font-size: 12.5px; }
+        .data-row .zacht { color: #4b5563; font-size: 12.5px; }
 
         /* ============================================
            COMPANY CARD
@@ -2563,8 +2581,8 @@ PAGINA_HOOFD = """<!DOCTYPE html>
            ============================================ */
         body { display: flex; }
         .sidebar {
-            width: 220px;
-            min-width: 220px;
+            width: 240px;
+            min-width: 240px;
             height: 100vh;
             position: sticky;
             top: 0;
@@ -2797,6 +2815,15 @@ HTML = '''
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+.marker-cluster-small { background-color: rgba(179,217,218,0.7); }
+.marker-cluster-small div { background-color: rgba(63,146,149,0.85); color: #fff; }
+.marker-cluster-medium { background-color: rgba(63,146,149,0.6); }
+.marker-cluster-medium div { background-color: rgba(20,118,123,0.9); color: #fff; }
+.marker-cluster-large { background-color: rgba(10,74,79,0.6); }
+.marker-cluster-large div { background-color: rgba(10,74,79,0.95); color: #fff; }
+.marker-cluster div { font-weight: 700; font-family: 'Libre Franklin', -apple-system, sans-serif; }
+</style>
     <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         /* ============================================
@@ -2937,42 +2964,54 @@ HTML = '''
            ============================================ */
         .search-bar-section {
             background: var(--gray-50);
-            padding: var(--space-8) var(--space-10);
+            padding: 16px 24px;
             border-bottom: 1px solid var(--gray-200);
         }
-        .hero-content { max-width: 1100px; margin: 0 auto; }
+        @media (max-width: 1200px) { .search-bar-section { padding: 16px; } }
+        @media (max-width: 768px)  { .search-bar-section { padding: 12px; } }
+        .hero-content {
+            width: 100%;
+            max-width: min(1700px, calc(100vw - 260px));
+            box-sizing: border-box;
+            margin: 0 auto;
+        }
 
         /* ============================================
            SEARCH
            ============================================ */
         .search-container {
             background: #fff;
-            border: 1px solid var(--gray-200);
-            border-radius: 12px;
-            max-width: 900px;
-            margin: 0 auto;
-            box-shadow: var(--shadow-sm);
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 820px;
+            margin: 0;
+            box-shadow: none;
             overflow: hidden;
+            height: 44px;
         }
         .search-row {
             display: flex;
             align-items: stretch;
+            height: 44px;
         }
         .search-input, .search-select {
             background: transparent;
             border: none;
             border-right: 1px solid var(--gray-100);
             border-radius: 0;
-            padding: 13px 16px;
-            font-size: var(--text-sm);
+            padding: 0 14px;
+            font-size: 14px;
             font-family: var(--font);
             color: var(--gray-800);
             outline: none;
             transition: var(--transition);
+            height: 44px;
+            box-sizing: border-box;
         }
-        .search-input { flex: 1; min-width: 160px; }
-        .search-input::placeholder { color: var(--gray-400); }
-        .search-select { width: 150px; cursor: pointer; flex: none; }
+        .search-input { flex: 1; min-width: 140px; }
+        .search-input::placeholder { color: #94A3B8; }
+        .search-select { width: 130px; cursor: pointer; flex: none; }
         .search-input:focus, .search-select:focus {
             background: var(--gray-50);
         }
@@ -2981,14 +3020,16 @@ HTML = '''
             color: #fff;
             border: none;
             border-radius: 0;
-            padding: 13px 24px;
-            font-size: var(--text-sm);
+            padding: 0 20px;
+            font-size: 14px;
             font-weight: 700;
             font-family: var(--font);
             cursor: pointer;
             transition: var(--transition);
             white-space: nowrap;
             flex: none;
+            height: 44px;
+            box-sizing: border-box;
         }
         .btn-search:hover { background: var(--brand-700); }
         .btn-search:hover { background: var(--brand-400); transform: translateY(-1px); box-shadow: var(--shadow-brand); }
@@ -3012,14 +3053,18 @@ HTML = '''
            MAIN LAYOUT
            ============================================ */
         .main {
-            max-width: 1440px;
+            width: 100%;
+            max-width: min(1700px, calc(100vw - 260px));
+            box-sizing: border-box;
             margin: var(--space-6) auto;
-            padding: 0 var(--space-6);
+            padding: 0 24px;
             display: flex;
             gap: var(--space-5);
             align-items: flex-start;
             position: relative;
         }
+        @media (max-width: 1200px) { .main { padding: 0 16px; } }
+        @media (max-width: 768px)  { .main { padding: 0 12px; max-width: 100%; } }
 
         /* ============================================
            FILTERS SIDEBAR
@@ -3124,13 +3169,13 @@ HTML = '''
         .data-thead span[data-sort] { cursor: pointer; user-select: none; }
         .data-thead span[data-sort]:hover { color: var(--brand-600); }
         .data-row {
-            padding-top: 11px; padding-bottom: 11px;
+            padding-top: 9px; padding-bottom: 9px;
             border-bottom: 1px solid var(--gray-100);
-            font-size: 12.5px; cursor: pointer; text-decoration: none; color: inherit;
+            font-size: 13px; cursor: pointer; text-decoration: none; color: inherit;
         }
         .data-row:hover { background: #f9fbfc; }
-        .data-row .num { font-family: var(--font-mono); font-size: 12px; }
-        .data-row .zacht { color: #4b5563; font-size: 12px; }
+        .data-row .num { font-family: var(--font-mono); font-size: 12.5px; }
+        .data-row .zacht { color: #4b5563; font-size: 12.5px; }
 
         /* ============================================
            COMPANY CARD
@@ -3341,8 +3386,8 @@ HTML = '''
            ============================================ */
         body { display: flex; }
         .sidebar {
-            width: 220px;
-            min-width: 220px;
+            width: 240px;
+            min-width: 240px;
             height: 100vh;
             position: sticky;
             top: 0;
@@ -3660,14 +3705,14 @@ function toggleMobielMenu() {
     <div class="results-panel">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
             <div>
-                <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">
+                <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">
                     {% if materiaal %}{{ materiaal }}bedrijven{% if land %} in {{ land }}{% endif %}{% elif land %}Bedrijven in {{ land }}{% else %}Alle bedrijven{% endif %}
                 </div>
             </div>
             <div style="display:flex;gap:22px;">
-                <div><div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:1.3rem;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ totaal_gevonden }}</div></div>
-                <div><div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:1.3rem;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat }}</div></div>
-                {% if volume_totaal_resultaat %}<div><div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume</div><div style="font-size:1.3rem;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ volume_totaal_resultaat }}</div></div>{% endif %}
+                <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ totaal_gevonden }}</div></div>
+                <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat }}</div></div>
+                {% if volume_totaal_resultaat %}<div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ volume_totaal_resultaat }}</div></div>{% endif %}
             </div>
         </div>
 
@@ -5635,6 +5680,15 @@ def dashboard():
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+.marker-cluster-small { background-color: rgba(179,217,218,0.7); }
+.marker-cluster-small div { background-color: rgba(63,146,149,0.85); color: #fff; }
+.marker-cluster-medium { background-color: rgba(63,146,149,0.6); }
+.marker-cluster-medium div { background-color: rgba(20,118,123,0.9); color: #fff; }
+.marker-cluster-large { background-color: rgba(10,74,79,0.6); }
+.marker-cluster-large div { background-color: rgba(10,74,79,0.95); color: #fff; }
+.marker-cluster div { font-weight: 700; font-family: 'Libre Franklin', -apple-system, sans-serif; }
+</style>
 <script>
 var dKaart = L.map("dashKaart", {zoomControl:false, attributionControl:false}).setView([30,10], 2);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {attribution:"© OpenStreetMap, © CARTO"}).addTo(dKaart);
@@ -8010,6 +8064,15 @@ def wereldkaart():
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+.marker-cluster-small { background-color: rgba(179,217,218,0.7); }
+.marker-cluster-small div { background-color: rgba(63,146,149,0.85); color: #fff; }
+.marker-cluster-medium { background-color: rgba(63,146,149,0.6); }
+.marker-cluster-medium div { background-color: rgba(20,118,123,0.9); color: #fff; }
+.marker-cluster-large { background-color: rgba(10,74,79,0.6); }
+.marker-cluster-large div { background-color: rgba(10,74,79,0.95); color: #fff; }
+.marker-cluster div { font-weight: 700; font-family: 'Libre Franklin', -apple-system, sans-serif; }
+</style>
 <script>
 var ALLE_BEDRIJVEN_WK = {{ kaart_data|tojson }};
 var wkKaart = L.map("wereldKaart").setView([30, 10], 2);
