@@ -8651,7 +8651,7 @@ def bedrijf_profiel(naam):
 
         {% if fabrieken_gedeelde_kwaliteiten %}
         <div class="info-kaart" style="margin-top:16px;">
-            <div class="dg-kaart-titel" style="color:var(--gray-400);">Fabrieken met gedeelde kwaliteiten</div>
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">{{ matchpoel_label }}</div>
             {% for f in fabrieken_gedeelde_kwaliteiten %}
             <a href="/bedrijf/{{ f.naam|urlencode }}" style="display:block;padding:10px 0;border-bottom:1px solid var(--gray-50);text-decoration:none;color:inherit;">
                 <div style="display:flex;justify-content:space-between;align-items:baseline;">
@@ -8962,9 +8962,11 @@ herbouwVolumeRijen();
 
     # --- Fabrieken met gedeelde kwaliteiten (echte data: overlap in kwaliteiten, gesorteerd op afstand) ---
     fabrieken_gedeelde_kwaliteiten = []
+    _matchpoel = PAPIERFABRIEKEN if not is_fabriek_profiel else ENF_BEDRIJVEN
+    matchpoel_label = "Fabrieken met gedeelde kwaliteiten" if not is_fabriek_profiel else "Leveranciers met gedeelde kwaliteiten"
     _eigen_kwaliteiten = set(k.strip().lower() for k in (bedrijf.get("kwaliteiten","") or "").split(",") if k.strip())
     if _eigen_kwaliteiten:
-        for ander in ENF_BEDRIJVEN:
+        for ander in _matchpoel:
             if ander["naam"] == bedrijf["naam"] or not ander.get("kwaliteiten"):
                 continue
             _andere_kwaliteiten = set(k.strip().lower() for k in ander["kwaliteiten"].split(",") if k.strip())
@@ -8974,7 +8976,7 @@ herbouwVolumeRijen();
                 if bedrijf.get("lat") and bedrijf.get("lon") and ander.get("lat") and ander.get("lon"):
                     _afstand = round(_haversine_km(bedrijf["lat"], bedrijf["lon"], ander["lat"], ander["lon"]))
                 fabrieken_gedeelde_kwaliteiten.append({
-                    "naam": ander["naam"], "regio": ander.get("regio",""), "land": ander.get("land",""),
+                    "naam": ander["naam"], "regio": ander.get("regio", ander.get("stad","")), "land": ander.get("land",""),
                     "afstand": _afstand, "gedeelde_kwaliteiten": ", ".join(sorted(_gedeeld, key=str.lower))[:60],
                     "_sorteer_afstand": _afstand if _afstand is not None else 999999,
                 })
@@ -8992,7 +8994,7 @@ herbouwVolumeRijen();
                                     open_orders_aantal=open_orders_aantal, open_orders_ton=open_orders_ton,
                                     laatst_contact_profiel=laatst_contact_profiel, afstand_alblasserdam=afstand_alblasserdam,
                                     materialen_volume_lijst=materialen_volume_lijst, recente_orders_profiel=recente_orders_profiel,
-                                    fabrieken_gedeelde_kwaliteiten=fabrieken_gedeelde_kwaliteiten,
+                                    fabrieken_gedeelde_kwaliteiten=fabrieken_gedeelde_kwaliteiten, matchpoel_label=matchpoel_label,
                                     bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
                                     orderkleuren=ORDER_KLEUREN,
                                     accountmanager=laad_accountmanagers().get(bedrijf["naam"], ""),
