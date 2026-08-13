@@ -8416,6 +8416,14 @@ def bedrijf_profiel(naam):
 {% if is_fabriek_profiel %}<input type="hidden" id="isFabriekProfiel" value="1">{% endif %}
 <style>
 .profiel-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
+.veld-label { font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-400); margin-bottom:3px; }
+.klik-bewerken-veld {
+    width:100%; border:1px solid transparent; background:transparent; padding:3px 6px; margin-left:-6px;
+    font-size:13px; font-family:inherit; color:var(--gray-800); border-radius:5px; box-sizing:border-box; cursor:text;
+}
+.klik-bewerken-veld:hover { background:var(--gray-50); border-color:var(--gray-100); }
+.klik-bewerken-veld:focus { background:#fff; border-color:var(--brand-300); outline:none; box-shadow:0 0 0 2px rgba(20,118,123,0.12); cursor:auto; }
+select.klik-bewerken-veld { cursor:pointer; }
 .profiel-naam { font-size:1.6rem; font-weight:800; color:var(--gray-900); letter-spacing:-0.5px; }
 .profiel-loc { color:var(--gray-400); font-size:0.9rem; margin-top:4px; }
 .profiel-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start; }
@@ -8433,17 +8441,21 @@ def bedrijf_profiel(naam):
 .tag-purple { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
 </style>
 
-<a href="/" class="profiel-terug">← Terug naar zoeken</a>
-
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/" style="color:var(--gray-400);text-decoration:none;">Zoeken</a> &nbsp;/&nbsp; {{ bedrijf.land }} &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ bedrijf.naam }}</span>
 </div>
 <div class="profiel-header">
-    <div>
-        <div class="profiel-naam">{{ bedrijf.naam }}{% if geverifieerd %}<span class="verificatie-badge" style="margin-left:10px;">✓ Geverifieerd</span>{% endif %}</div>
-        <div class="profiel-loc">📍 {{ bedrijf.regio }}, {{ bedrijf.land }}</div>
+    <div class="profiel-naam">{{ bedrijf.naam }}{% if geverifieerd %}<span class="verificatie-badge" style="margin-left:10px;">✓ Geverifieerd</span>{% endif %}</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+        <span class="star-btn {% if opgeslagen %}opgeslagen{% endif %}" id="profielSterBtn" onclick="toggleOpslaanProfiel(this)" style="font-size:1.3rem;margin-right:4px;">{% if opgeslagen %}★{% else %}☆{% endif %}</span>
+        <a href="#notitiesSectie" onclick="document.getElementById('nieuweNotitieTekst').focus();" style="font-size:13px;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);padding:8px 14px;border-radius:6px;text-decoration:none;">Notitie</a>
+        <a href="/export-csv?zoekterm={{ bedrijf.naam|urlencode }}" style="font-size:13px;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);padding:8px 14px;border-radius:6px;text-decoration:none;">Export</a>
+        <a href="/orders?bedrijf={{ bedrijf.naam|urlencode }}" style="font-size:13px;font-weight:600;color:#fff;background:var(--brand-600);padding:8px 14px;border-radius:6px;text-decoration:none;">Order aanmaken</a>
     </div>
-    <span class="star-btn {% if opgeslagen %}opgeslagen{% endif %}" id="profielSterBtn" onclick="toggleOpslaanProfiel(this)" style="font-size:1.6rem;">{% if opgeslagen %}★{% else %}☆{% endif %}</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:-14px;margin-bottom:20px;font-size:13px;color:var(--gray-500);">
+    {% if bedrijf.brontype %}<span style="background:var(--brand-600);color:#fff;font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:5px;">{{ bedrijf.brontype }}</span>{% endif %}
+    <span>{{ bedrijf.regio }}, {{ bedrijf.land }}</span>
 </div>
 
 <div style="display:flex;border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:20px;overflow:hidden;">
@@ -8502,43 +8514,71 @@ def bedrijf_profiel(naam):
         <span style="width:100px;text-align:right;font-weight:600;color:{{ '#16a34a' if o.status == 'Gewonnen' else ('#dc2626' if o.status == 'Verloren' else 'var(--brand-600)') }};">{{ o.status }}</span>
     </div>
     {% endfor %}
+    <a href="/orders?bedrijf={{ bedrijf.naam|urlencode }}" style="display:block;margin-top:10px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">+ Order toevoegen voor {{ bedrijf.naam }} →</a>
 </div>
 {% endif %}
 
 <div class="profiel-grid">
     <div>
         <div class="info-kaart" style="margin-bottom:16px;">
-            <div class="dg-kaart-titel" style="color:var(--gray-400);">Company Overview</div>
-            <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
-                <select id="statusSelect" onchange="wijzigStatusProfiel()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
-                    <option value="" {% if not status %}selected{% endif %}>Geen status</option>
-                    <option value="klant" {% if status=='klant' %}selected{% endif %}>🟢 Klant</option>
-                    <option value="potentie" {% if status=='potentie' %}selected{% endif %}>🟡 Potentie</option>
-                    <option value="in_proces" {% if status=='in_proces' %}selected{% endif %}>🔵 In Proces</option>
-                    <option value="geen_interesse" {% if status=='geen_interesse' %}selected{% endif %}>⚪ Geen Interesse</option>
-                </select>
-            </span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Accountmanager</span><span class="drawer-row-value">
-                <select id="accountmanagerSelect" onchange="wijzigAccountmanagerProfiel()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
-                    <option value="" {% if not accountmanager %}selected{% endif %}>Niet toegewezen</option>
-                    {% for gebruikersnaam in alle_gebruikersnamen %}
-                    <option value="{{ gebruikersnaam }}" {% if accountmanager == gebruikersnaam %}selected{% endif %}>{{ gebruikersnaam }}</option>
-                    {% endfor %}
-                </select>
-            </span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Type</span><span class="drawer-row-value">
-                <input type="text" value="{{ bedrijf.brontype or '' }}" data-veld="brontype" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
-            </span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">
-                <input type="text" value="{{ bedrijf.klanttype or '' }}" data-veld="klanttype" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
-            </span></div>
-            <div class="drawer-row"><span class="drawer-row-label">Contactpersoon</span><span class="drawer-row-value">
-                <input type="text" value="{{ bedrijf.contactpersoon or '' }}" data-veld="contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="Naam invullen..." style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;">
-            </span></div>
+    <div class="dg-kaart-titel" style="color:var(--gray-400);">Bedrijfsgegevens</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;">
+        <div>
+            <div class="veld-label">Status</div>
+            <select id="statusSelect" onchange="wijzigStatusProfiel()" class="klik-bewerken-veld">
+                <option value="" {% if not status %}selected{% endif %}>Geen status</option>
+                <option value="klant" {% if status=='klant' %}selected{% endif %}>🟢 Klant</option>
+                <option value="potentie" {% if status=='potentie' %}selected{% endif %}>🟡 Potentie</option>
+                <option value="in_proces" {% if status=='in_proces' %}selected{% endif %}>🔵 In Proces</option>
+                <option value="geen_interesse" {% if status=='geen_interesse' %}selected{% endif %}>⚪ Geen Interesse</option>
+            </select>
         </div>
+        <div>
+            <div class="veld-label">Accountmanager</div>
+            <select id="accountmanagerSelect" onchange="wijzigAccountmanagerProfiel()" class="klik-bewerken-veld">
+                <option value="" {% if not accountmanager %}selected{% endif %}>Niet toegewezen</option>
+                {% for gebruikersnaam in alle_gebruikersnamen %}
+                <option value="{{ gebruikersnaam }}" {% if accountmanager == gebruikersnaam %}selected{% endif %}>{{ gebruikersnaam }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <div class="veld-label">Bedrijfstype</div>
+            <input type="text" value="{{ bedrijf.brontype or '' }}" data-veld="brontype" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+        </div>
+        <div>
+            <div class="veld-label">Klanttype</div>
+            <input type="text" value="{{ bedrijf.klanttype or '' }}" data-veld="klanttype" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+        </div>
+        <div>
+            <div class="veld-label">Certificering</div>
+            <input type="text" value="{{ bedrijf.certificeringen or '' }}" data-veld="certificeringen" onblur="wijzigBedrijfVeld(this)" placeholder="bv. ISO 9001, FSC..." class="klik-bewerken-veld">
+        </div>
+        <div>
+            <div class="veld-label">Contactpersoon</div>
+            <input type="text" value="{{ bedrijf.contactpersoon or '' }}" data-veld="contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="Naam invullen..." class="klik-bewerken-veld">
+        </div>
+        <div>
+            <div class="veld-label">Adres</div>
+            <input type="text" value="{{ bedrijf.adres or '' }}" data-veld="adres" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+        </div>
+        <div>
+            <div class="veld-label">Telefoon</div>
+            <input type="text" value="{{ bedrijf.telefoon or '' }}" data-veld="telefoon" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+        </div>
+        <div>
+            <div class="veld-label">Website</div>
+            <div style="font-size:13px;color:var(--gray-700);padding:3px 0;">{% if bedrijf.url %}<a href="{{ bedrijf.url }}" target="_blank" style="color:var(--brand-600);text-decoration:none;">{{ bedrijf.url }}</a>{% else %}—{% endif %}</div>
+        </div>
+    </div>
+</div>
 
-        <div class="info-kaart" style="margin-bottom:16px;">
-            <div class="dg-kaart-titel" style="color:var(--gray-400);">Materialen &amp; Kwaliteiten</div>
+<div class="info-kaart" style="margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:0;">Materialen &amp; Kwaliteiten</div>
+        <button type="button" onclick="toggleMaterialenBewerken()" id="materialenToggleBtn" style="font-size:12px;font-weight:600;color:var(--brand-600);background:none;border:none;cursor:pointer;">Bewerken</button>
+    </div>
+    <div id="materialenBewerkenPaneel" style="display:none;margin-top:12px;">
             {% set gekozen_materialen = (bedrijf.materialen or "").split(",") | map("trim") | list %}
             {% set gekozen_kwaliteiten = (bedrijf.kwaliteiten or "").split(",") | map("trim") | list %}
             {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
@@ -8561,42 +8601,10 @@ def bedrijf_profiel(naam):
             {% else %}
             <div style="font-size:0.8rem;color:var(--gray-300);">Nog geen materialen gedefinieerd. Ga naar Instellingen → Materialen beheren (admin).</div>
             {% endfor %}
-        </div>
+    </div>
+    <div id="volumeRijenContainer"></div>
+</div>
 
-        <div class="info-kaart" style="margin-bottom:16px;">
-            <div class="dg-kaart-titel" style="color:var(--gray-400);">Recycling Operations</div>
-            <div class="drawer-row"><span class="drawer-row-label">Annual Capacity (totaal)</span><span class="drawer-row-value">{{ (bedrijf.volume ~ " t/y") if bedrijf.volume else "—" }}</span></div>
-            <div class="company-tags" style="padding-left:0;margin-top:8px;margin-bottom:10px;">
-                {% if bedrijf.materialen %}{% for m in bedrijf.materialen.split(",") %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
-            </div>
-            <div id="volumeRijenContainer"></div>
-        </div>
-
-        <div class="info-kaart" style="margin-bottom:16px;">
-            <div class="dg-kaart-titel" style="color:var(--gray-400);">Certifications</div>
-            {% if bedrijf.certificeringen %}
-            <div class="company-tags" style="padding-left:0;margin-bottom:10px;">
-                {% for c in bedrijf.certificeringen.split(",") %}<span class="tag tag-purple">🏅 {{ c.strip() }}</span>{% endfor %}
-            </div>
-            {% endif %}
-            <input type="text" value="{{ bedrijf.certificeringen or '' }}" data-veld="certificeringen" onblur="wijzigBedrijfVeld(this)" placeholder="bv. ISO 9001, FSC, PEFC..." style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-        </div>
-
-        <div class="info-kaart" style="margin-bottom:16px;">
-            <div class="dg-kaart-titel" style="color:var(--gray-400);">Orders</div>
-            {% if bedrijf_orders %}
-                {% for o in bedrijf_orders %}
-                <div class="dg-activiteit-item">
-                    {% if o.materiaal %}{{ o.materiaal }}{% endif %}{% if o.prijs %} · €{{ o.prijs }}{% endif %}
-                    <span style="color:{{ orderkleuren.get(o.status, '#94a3b8') }};font-weight:700;"> · {{ o.status }}</span>
-                    <small>{{ o.verantwoordelijke }} · {{ o.aangemaakt }}</small>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div style="font-size:0.82rem;color:var(--gray-400);margin-bottom:10px;">Nog geen orders voor dit bedrijf.</div>
-            {% endif %}
-            <a href="/orders?bedrijf={{ bedrijf.naam|urlencode }}" style="display:block;margin-top:8px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">+ Order toevoegen voor {{ bedrijf.naam }} →</a>
-        </div>
 
         <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Shipments</div>
@@ -8766,6 +8774,14 @@ async function wijzigMateriaalVolume(input) {
         input.style.opacity = "1";
     }
 }
+function toggleMaterialenBewerken() {
+    var paneel = document.getElementById("materialenBewerkenPaneel");
+    var knop = document.getElementById("materialenToggleBtn");
+    var isOpen = paneel.style.display !== "none";
+    paneel.style.display = isOpen ? "none" : "block";
+    knop.textContent = isOpen ? "Bewerken" : "Sluiten";
+}
+
 function herbouwVolumeRijen() {
     const container = document.getElementById("volumeRijenContainer");
     if (!container) return;
