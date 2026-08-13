@@ -5038,6 +5038,12 @@ def set_bedrijf_veld():
             with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
                 json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
             return jsonify({"veld": veld, "waarde": waarde})
+    for f_item in PAPIERFABRIEKEN:
+        if f_item["naam"] == bedrijf_naam:
+            f_item[veld] = waarde
+            with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
+                json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+            return jsonify({"veld": veld, "waarde": waarde})
     return jsonify({"error": "Bedrijf niet gevonden"}), 404
 
 @app.route("/api/materiaal-volume", methods=["POST"])
@@ -5060,6 +5066,19 @@ def set_materiaal_volume():
             b["materiaal_volumes"] = volumes
             with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
                 json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            return jsonify({"materiaal": materiaal, "volume": volume})
+    for f_item in PAPIERFABRIEKEN:
+        if f_item["naam"] == bedrijf_naam:
+            volumes = f_item.get("materiaal_volumes", {})
+            if not isinstance(volumes, dict):
+                volumes = {}
+            if volume:
+                volumes[materiaal] = volume
+            else:
+                volumes.pop(materiaal, None)
+            f_item["materiaal_volumes"] = volumes
+            with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
+                json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
             return jsonify({"materiaal": materiaal, "volume": volume})
     return jsonify({"error": "Bedrijf niet gevonden"}), 404
 
@@ -8046,14 +8065,14 @@ def fabrieken_pagina():
             <span style="width:150px;text-align:right;"></span>
         </div>
         {% for f in fabrieken_lijst %}
-        <a class="data-row" href="/fabriek/{{ f.naam|urlencode }}"
+        <a class="data-row" href="/bedrijf/{{ f.naam|urlencode }}"
            data-naam="{{ f.naam|e }}" data-locatie="{{ f.stad|default('',true)|e }}, {{ f.land|default('',true)|e }}" data-materialen="{{ f.materialen|default('',true)|e }}"
            data-lat="{{ f.lat or '' }}" data-lon="{{ f.lon or '' }}">
             <span style="flex:1.6;font-weight:600;color:var(--gray-800);">🏭 {{ f.naam }}</span>
             <span style="flex:1;" class="zacht">{{ f.stad }}, {{ f.land }}</span>
             <span style="flex:1.6;" class="zacht">{{ f.materialen|default('—',true) }}</span>
             <span style="width:150px;text-align:right;">
-                <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Toon leveranciers →</span>
+                <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Bekijk profiel →</span>
             </span>
         </a>
         {% endfor %}
@@ -8138,67 +8157,7 @@ if (fabriekenData.length) {
 
 @app.route("/fabriek/<naam>")
 def fabriek_detail(naam):
-    fabriek = next((f for f in PAPIERFABRIEKEN if f["naam"] == naam), None)
-    if not fabriek:
-        inhoud = '<div class="page-title">Niet gevonden</div><div class="lege-staat">Deze fabriek bestaat niet (meer).</div>'
-        pagina = render_simple_page("Niet gevonden", "fabrieken", inhoud)
-        return render_template_string(pagina), 404
-
-    leveranciers = []
-    if "lat" in fabriek and "lon" in fabriek:
-        fabriek_materialen = [m.strip().lower() for m in fabriek.get("materialen", "").split(",")]
-        fabriek_kwaliteiten = [k.strip().lower() for k in fabriek.get("kwaliteiten", "").split(",") if k.strip()]
-        for b in ENF_BEDRIJVEN:
-            if "lat" not in b or "lon" not in b:
-                continue
-            bedrijf_materialen = [m.strip().lower() for m in b.get("materialen", "").split(",")]
-            gedeeld = [m for m in fabriek_materialen if m in bedrijf_materialen]
-            if not gedeeld:
-                continue
-            bedrijf_kwaliteiten = [k.strip().lower() for k in b.get("kwaliteiten", "").split(",") if k.strip()]
-            gedeelde_kwaliteiten = [k for k in fabriek_kwaliteiten if k in bedrijf_kwaliteiten]
-            afstand = bereken_afstand_km(fabriek["lat"], fabriek["lon"], b["lat"], b["lon"])
-            leveranciers.append({
-                "naam": b["naam"], "land": b["land"], "regio": b["regio"],
-                "gedeelde_materialen": ", ".join(gedeeld), "gedeelde_kwaliteiten": ", ".join(gedeelde_kwaliteiten),
-                "afstand_km": round(afstand, 1),
-            })
-        leveranciers.sort(key=lambda x: (0 if x["gedeelde_kwaliteiten"] else 1, x["afstand_km"]))
-        leveranciers = leveranciers[:25]
-
-    inhoud = """
-<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/fabrieken" style="color:var(--gray-400);text-decoration:none;">Fabrieken</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ fabriek.naam }}</span>
-</div>
-<div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);margin-bottom:4px;">🏭 {{ fabriek.naam }}</div>
-<p style="color:var(--gray-400);margin-bottom:20px;font-size:0.9rem;">{{ fabriek.stad }}, {{ fabriek.land }}{% if fabriek.materialen %} · {{ fabriek.materialen }}{% endif %}</p>
-
-<div class="dg-kaart-titel" style="margin-bottom:12px;">Leveranciers met gedeeld materiaal ({{ leveranciers|length }})</div>
-{% if leveranciers %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
-    <div class="data-thead" style="display:flex;padding:10px 16px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#7d8792;">
-        <span style="flex:1.4;">Bedrijf</span>
-        <span style="flex:1;">Locatie</span>
-        <span style="flex:1.2;">Gedeeld materiaal</span>
-        <span style="flex:1.2;">Gedeelde kwaliteit</span>
-        <span style="width:90px;text-align:right;">Afstand</span>
-    </div>
-    {% for l in leveranciers %}
-    <a href="/bedrijf/{{ l.naam|urlencode }}" style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--gray-100);font-size:13px;text-decoration:none;color:inherit;">
-        <span style="flex:1.4;font-weight:600;color:var(--gray-800);">{{ l.naam }}</span>
-        <span style="flex:1;color:#4b5563;font-size:12.5px;">{{ l.regio }}, {{ l.land }}</span>
-        <span style="flex:1.2;color:#4b5563;font-size:12.5px;">{{ l.gedeelde_materialen }}</span>
-        <span style="flex:1.2;color:{{ '#16a34a' if l.gedeelde_kwaliteiten else 'var(--gray-300)' }};font-size:12.5px;">{{ l.gedeelde_kwaliteiten or '—' }}</span>
-        <span style="width:90px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--brand-600);">{{ l.afstand_km }} km</span>
-    </a>
-    {% endfor %}
-</div>
-{% else %}
-<div class="lege-staat">Geen leveranciers gevonden met gedeeld materiaal (of deze fabriek heeft nog geen coördinaten).</div>
-{% endif %}
-    """
-    pagina = render_simple_page(fabriek["naam"], "fabrieken", inhoud)
-    return render_template_string(pagina, fabriek=fabriek, leveranciers=leveranciers)
+    return redirect(url_for("bedrijf_profiel", naam=naam))
 
 @app.route("/materialen")
 def materialen():
@@ -8435,6 +8394,14 @@ wkFilter();
 @app.route("/bedrijf/<naam>")
 def bedrijf_profiel(naam):
     bedrijf = next((b for b in ENF_BEDRIJVEN if b["naam"] == naam), None)
+    is_fabriek_profiel = False
+    if not bedrijf:
+        _fabriek_bron = next((f for f in PAPIERFABRIEKEN if f["naam"] == naam), None)
+        if _fabriek_bron:
+            is_fabriek_profiel = True
+            bedrijf = dict(_fabriek_bron)
+            bedrijf.setdefault("regio", bedrijf.get("stad", ""))
+            bedrijf.setdefault("brontype", "Papierfabriek")
     if not bedrijf:
         inhoud = '<div class="page-title">Niet gevonden</div><div class="lege-staat">Dit bedrijf bestaat niet (meer).</div>'
         pagina = render_simple_page("Niet gevonden", "zoeken", inhoud)
@@ -8446,6 +8413,7 @@ def bedrijf_profiel(naam):
     geverifieerd = bool(bedrijf.get("adres") or bedrijf.get("telefoon"))
 
     inhoud = """
+{% if is_fabriek_profiel %}<input type="hidden" id="isFabriekProfiel" value="1">{% endif %}
 <style>
 .profiel-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
 .profiel-naam { font-size:1.6rem; font-weight:800; color:var(--gray-900); letter-spacing:-0.5px; }
@@ -9020,6 +8988,7 @@ herbouwVolumeRijen();
         key=lambda s: s.get("datum",""), reverse=True
     )
     return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd,
+                                    is_fabriek_profiel=is_fabriek_profiel,
                                     open_orders_aantal=open_orders_aantal, open_orders_ton=open_orders_ton,
                                     laatst_contact_profiel=laatst_contact_profiel, afstand_alblasserdam=afstand_alblasserdam,
                                     materialen_volume_lijst=materialen_volume_lijst, recente_orders_profiel=recente_orders_profiel,
