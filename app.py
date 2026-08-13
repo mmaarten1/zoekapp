@@ -2261,10 +2261,10 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             width: 100%;
             max-width: min(1700px, calc(100vw - 260px));
             box-sizing: border-box;
-            margin: var(--space-6) auto;
+            margin: var(--space-6) 0 0 0;
             padding: 0 24px 0 0;
             display: flex;
-            gap: var(--space-5);
+            gap: 0;
             align-items: flex-start;
             position: relative;
         }
@@ -2440,18 +2440,17 @@ PAGINA_HOOFD = """<!DOCTYPE html>
            ============================================ */
         .kaart-tabel-blok {
             width: 100%;
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-sm);
-            overflow: hidden;
-            background: #fff;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            overflow: visible;
+            background: transparent;
         }
         .map-panel { width: 100%; margin-bottom: 0; }
         #kaart {
             height: 340px;
-            border-radius: 0;
-            border: none;
-            border-bottom: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--gray-200);
             box-shadow: none;
         }
 
@@ -3067,10 +3066,10 @@ HTML = '''
             width: 100%;
             max-width: min(1700px, calc(100vw - 260px));
             box-sizing: border-box;
-            margin: var(--space-6) auto;
+            margin: var(--space-6) 0 0 0;
             padding: 0 24px 0 0;
             display: flex;
-            gap: var(--space-5);
+            gap: 0;
             align-items: flex-start;
             position: relative;
         }
@@ -3256,18 +3255,17 @@ HTML = '''
            ============================================ */
         .kaart-tabel-blok {
             width: 100%;
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-sm);
-            overflow: hidden;
-            background: #fff;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            overflow: visible;
+            background: transparent;
         }
         .map-panel { width: 100%; margin-bottom: 0; }
         #kaart {
             height: 340px;
-            border-radius: 0;
-            border: none;
-            border-bottom: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--gray-200);
             box-shadow: none;
         }
 
@@ -3633,7 +3631,7 @@ function toggleMobielMenu() {
 
     {% if bedrijven %}
     <!-- FILTERS -->
-    <form method="POST" id="filterForm">
+    <form method="POST" id="filterForm" style="flex:0 0 0;width:0;margin:0;padding:0;overflow:visible;">
         <input type="hidden" name="zoekterm" value="{{ zoekterm }}">
         <input type="hidden" name="land" value="{{ land }}">
         <input type="hidden" name="regio" value="{{ regio }}">
