@@ -8601,8 +8601,8 @@ select.klik-bewerken-veld { cursor:pointer; }
             {% else %}
             <div style="font-size:0.8rem;color:var(--gray-300);">Nog geen materialen gedefinieerd. Ga naar Instellingen → Materialen beheren (admin).</div>
             {% endfor %}
-    </div>
     <div id="volumeRijenContainer"></div>
+    </div>
 </div>
 
 
@@ -8637,17 +8637,6 @@ select.klik-bewerken-veld { cursor:pointer; }
                 <input type="file" id="fotoInputProfiel" accept="image/*" onchange="uploadFotoProfiel()" style="display:none;">
             </label>
         </div>
-
-        <div class="info-kaart">
-            <div class="dg-kaart-titel" style="color:var(--gray-400);">Notities</div>
-            <div id="notitiesLijst" style="margin-bottom:12px;"></div>
-            <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-                <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
-                <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
-                <button onclick="voegNotitieToeProfiel()" style="margin-left:auto;padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
-            </div>
-        </div>
     </div>
 
     <div>
@@ -8669,6 +8658,17 @@ select.klik-bewerken-veld { cursor:pointer; }
             {% endfor %}
         </div>
         {% endif %}
+
+        <div class="info-kaart" style="margin-top:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Notities</div>
+            <div id="notitiesLijst" style="margin-bottom:12px;"></div>
+            <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box;"></textarea>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+                <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
+                <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
+                <button onclick="voegNotitieToeProfiel()" style="margin-left:auto;padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
+            </div>
+        </div>
     </div>
 </div>
 
