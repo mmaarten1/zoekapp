@@ -2169,7 +2169,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
            ============================================ */
         .search-bar-section {
             background: transparent;
-            padding: 16px 24px 16px 0;
+            padding: 16px 24px 16px 20px;
             border-bottom: none;
         }
         @media (max-width: 1200px) { .search-bar-section { padding: 16px 16px 16px 0; } }
@@ -2449,7 +2449,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         .map-panel { width: 100%; margin-bottom: 0; }
         #kaart {
             height: 340px;
-            border-radius: var(--radius-lg);
+            border-radius: 0;
             border: 1px solid var(--gray-200);
             box-shadow: none;
         }
@@ -2974,7 +2974,7 @@ HTML = '''
            ============================================ */
         .search-bar-section {
             background: transparent;
-            padding: 16px 24px 16px 0;
+            padding: 16px 24px 16px 20px;
             border-bottom: none;
         }
         @media (max-width: 1200px) { .search-bar-section { padding: 16px 16px 16px 0; } }
@@ -3264,7 +3264,7 @@ HTML = '''
         .map-panel { width: 100%; margin-bottom: 0; }
         #kaart {
             height: 340px;
-            border-radius: var(--radius-lg);
+            border-radius: 0;
             border: 1px solid var(--gray-200);
             box-shadow: none;
         }
@@ -3723,7 +3723,7 @@ function toggleMobielMenu() {
 
     <!-- RESULTS -->
     <div class="results-panel">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;padding-left:20px;">
             <div>
                 <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">
                     {% if materiaal %}{{ materiaal }}bedrijven{% if land %} in {{ land }}{% endif %}{% elif land %}Bedrijven in {{ land }}{% else %}Alle bedrijven{% endif %}
@@ -8241,22 +8241,60 @@ def bedrijf_profiel(naam):
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
         <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume totaal</div>
         <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ bedrijf.volume|default('—',true) }}</div>
-        <div style="font-size:11px;color:var(--gray-400);">t/jaar</div>
+        <div style="font-size:11px;color:var(--gray-400);">t/jaar{% if bedrijf.materiaal_volumes %}, {{ bedrijf.materiaal_volumes|length }} materialen{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Kwaliteiten</div>
-        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ (bedrijf.kwaliteiten.split(',')|length) if bedrijf.kwaliteiten else '—' }}</div>
-        <div style="font-size:11px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ bedrijf.kwaliteiten|default('niet opgegeven',true) }}</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Open orders</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ open_orders_aantal }}</div>
+        <div style="font-size:11px;color:var(--gray-400);">{% if open_orders_ton %}{{ open_orders_ton }} t deze periode{% else %}&nbsp;{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Certificering</div>
-        <div style="font-size:0.95rem;font-weight:700;color:var(--gray-800);padding-top:4px;">{{ bedrijf.certificeringen|default('—',true) }}</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Laatste contact</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ laatst_contact_profiel|default('—',true) }}</div>
+        <div style="font-size:11px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ bedrijf.accountmanager|default('',true) }}{% if bedrijf.telefoon %}, telefoon{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Klanttype</div>
-        <div style="font-size:0.95rem;font-weight:700;color:var(--gray-800);padding-top:4px;">{{ bedrijf.klanttype|default('—',true) }}</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Afstand tot Alblasserdam</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{% if afstand_alblasserdam %}{{ afstand_alblasserdam }} km{% else %}—{% endif %}</div>
+        <div style="font-size:11px;color:var(--gray-400);">{{ bedrijf.regio }}, {{ bedrijf.land }}</div>
     </div>
 </div>
+
+{% if materialen_volume_lijst %}
+<div class="info-kaart" style="margin-bottom:16px;">
+    <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:12px;">Materialen en volume</div>
+    <div style="display:flex;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gray-400);padding-bottom:8px;border-bottom:1px solid var(--gray-100);">
+        <span style="flex:1.4;">Materiaal</span>
+        <span style="width:100px;text-align:right;">T/jaar</span>
+        <span style="width:160px;padding-left:16px;">Aandeel</span>
+    </div>
+    {% for m in materialen_volume_lijst %}
+    <div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--gray-50);font-size:13px;">
+        <span style="flex:1.4;font-weight:600;color:var(--gray-800);">{{ m.naam }}</span>
+        <span style="width:100px;text-align:right;font-family:var(--font-mono);">{{ "{:,.0f}".format(m.volume) }}</span>
+        <span style="width:160px;padding-left:16px;display:flex;align-items:center;gap:8px;">
+            <span style="flex:1;height:5px;background:var(--gray-100);border-radius:5px;overflow:hidden;"><span style="display:block;height:100%;background:var(--brand-600);width:{{ m.aandeel }}%;"></span></span>
+            <span style="font-size:11px;color:var(--gray-400);width:32px;text-align:right;">{{ m.aandeel }}%</span>
+        </span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if recente_orders_profiel %}
+<div class="info-kaart" style="margin-bottom:16px;">
+    <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:12px;">Recente orders</div>
+    {% for o in recente_orders_profiel %}
+    <div style="display:flex;align-items:center;padding:9px 0;border-bottom:1px solid var(--gray-50);font-size:13px;">
+        <span style="width:90px;color:var(--gray-400);font-family:var(--font-mono);font-size:11.5px;">{{ o.referentie }}</span>
+        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ o.materiaal }}</span>
+        <span style="width:110px;color:var(--gray-400);">{{ o.datum }}</span>
+        <span style="width:80px;text-align:right;font-family:var(--font-mono);">{{ o.hoeveelheid }}</span>
+        <span style="width:100px;text-align:right;font-weight:600;color:{{ '#16a34a' if o.status == 'Gewonnen' else ('#dc2626' if o.status == 'Verloren' else 'var(--brand-600)') }};">{{ o.status }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
 
 <div class="profiel-grid">
     <div>
@@ -8401,6 +8439,21 @@ def bedrijf_profiel(naam):
             <div id="profielContact"><div style="color:var(--gray-400);font-size:var(--text-sm);">Laden...</div></div>
             <div id="profielKaart"></div>
         </div>
+
+        {% if fabrieken_gedeelde_kwaliteiten %}
+        <div class="info-kaart" style="margin-top:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Fabrieken met gedeelde kwaliteiten</div>
+            {% for f in fabrieken_gedeelde_kwaliteiten %}
+            <a href="/bedrijf/{{ f.naam|urlencode }}" style="display:block;padding:10px 0;border-bottom:1px solid var(--gray-50);text-decoration:none;color:inherit;">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                    <b style="font-size:13px;color:var(--gray-800);">{{ f.naam }}</b>
+                    {% if f.afstand %}<span style="font-size:11.5px;color:var(--brand-600);font-family:var(--font-mono);">{{ f.afstand }} km</span>{% endif %}
+                </div>
+                <div style="font-size:11.5px;color:var(--gray-400);margin-top:2px;">{{ f.regio }}, {{ f.land }} · match op {{ f.gedeelde_kwaliteiten }}</div>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -8639,6 +8692,86 @@ initFotoBrowser();
 herbouwVolumeRijen();
 </script>
     """
+
+    # --- Open orders + laatste contact (echte data, dezelfde logica als op de zoekpagina) ---
+    _orders_alle_profiel = laad_orders()
+    _orders_van_bedrijf = [o for o in _orders_alle_profiel if o.get("bedrijf","") == bedrijf["naam"]]
+    open_orders_lijst = [o for o in _orders_van_bedrijf if o.get("status") in ("Open", "Onderhandeling")]
+    open_orders_aantal = len(open_orders_lijst)
+    open_orders_ton = round(sum(parse_hoeveelheid_getal(o.get("hoeveelheid","")) for o in open_orders_lijst))
+    open_orders_ton = f"{open_orders_ton:,.0f}" if open_orders_ton else ""
+
+    _notities_alle_profiel = laad_notities()
+    laatst_contact_profiel = ""
+    _laatste_datum_profiel = None
+    for n in _notities_alle_profiel.get(bedrijf["naam"], []):
+        try:
+            dt = datetime.datetime.strptime(n.get("timestamp",""), "%d-%m-%Y %H:%M").date()
+            if _laatste_datum_profiel is None or dt > _laatste_datum_profiel:
+                _laatste_datum_profiel = dt
+        except (ValueError, TypeError):
+            continue
+    if _laatste_datum_profiel:
+        _dagen_geleden_profiel = (datetime.date.today() - _laatste_datum_profiel).days
+        if _dagen_geleden_profiel <= 0:
+            laatst_contact_profiel = "Vandaag"
+        elif _dagen_geleden_profiel == 1:
+            laatst_contact_profiel = "Gisteren"
+        else:
+            laatst_contact_profiel = f"{_dagen_geleden_profiel} dagen"
+
+    # --- Afstand tot Alblasserdam (haversine, echte berekening) ---
+    def _haversine_km(lat1, lon1, lat2, lon2):
+        import math
+        R = 6371
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        return R * 2 * math.asin(math.sqrt(a))
+    ALBLASSERDAM_LAT, ALBLASSERDAM_LON = 51.868, 4.663
+    afstand_alblasserdam = None
+    if bedrijf.get("lat") and bedrijf.get("lon"):
+        afstand_alblasserdam = round(_haversine_km(ALBLASSERDAM_LAT, ALBLASSERDAM_LON, bedrijf["lat"], bedrijf["lon"]))
+
+    # --- Materialen en volume (echte data uit materiaal_volumes) ---
+    materialen_volume_lijst = []
+    _volumes_dict = bedrijf.get("materiaal_volumes", {})
+    if isinstance(_volumes_dict, dict) and _volumes_dict:
+        _totaal_volume = sum(parse_hoeveelheid_getal(v) for v in _volumes_dict.values())
+        for mat_naam, waarde in sorted(_volumes_dict.items(), key=lambda x: -parse_hoeveelheid_getal(x[1])):
+            vol = parse_hoeveelheid_getal(waarde)
+            materialen_volume_lijst.append({"naam": mat_naam, "volume": vol, "aandeel": round(vol / _totaal_volume * 100) if _totaal_volume else 0})
+
+    # --- Recente orders (echte data, laatste 5) ---
+    recente_orders_profiel = []
+    for o in sorted(_orders_van_bedrijf, key=lambda x: x.get("aangemaakt",""), reverse=True)[:5]:
+        recente_orders_profiel.append({
+            "referentie": f"ORD-{o['id'][:4].upper()}", "materiaal": o.get("materiaal","—"),
+            "datum": o.get("verwachte_datum","") or o.get("aangemaakt","").split(" ")[0],
+            "hoeveelheid": o.get("hoeveelheid",""), "status": o.get("status",""),
+        })
+
+    # --- Fabrieken met gedeelde kwaliteiten (echte data: overlap in kwaliteiten, gesorteerd op afstand) ---
+    fabrieken_gedeelde_kwaliteiten = []
+    _eigen_kwaliteiten = set(k.strip().lower() for k in (bedrijf.get("kwaliteiten","") or "").split(",") if k.strip())
+    if _eigen_kwaliteiten:
+        for ander in ENF_BEDRIJVEN:
+            if ander["naam"] == bedrijf["naam"] or not ander.get("kwaliteiten"):
+                continue
+            _andere_kwaliteiten = set(k.strip().lower() for k in ander["kwaliteiten"].split(",") if k.strip())
+            _gedeeld = _eigen_kwaliteiten & _andere_kwaliteiten
+            if _gedeeld:
+                _afstand = None
+                if bedrijf.get("lat") and bedrijf.get("lon") and ander.get("lat") and ander.get("lon"):
+                    _afstand = round(_haversine_km(bedrijf["lat"], bedrijf["lon"], ander["lat"], ander["lon"]))
+                fabrieken_gedeelde_kwaliteiten.append({
+                    "naam": ander["naam"], "regio": ander.get("regio",""), "land": ander.get("land",""),
+                    "afstand": _afstand, "gedeelde_kwaliteiten": ", ".join(sorted(_gedeeld, key=str.lower))[:60],
+                    "_sorteer_afstand": _afstand if _afstand is not None else 999999,
+                })
+        fabrieken_gedeelde_kwaliteiten.sort(key=lambda x: x["_sorteer_afstand"])
+        fabrieken_gedeelde_kwaliteiten = fabrieken_gedeelde_kwaliteiten[:5]
+
     pagina = render_simple_page(bedrijf["naam"], "zoeken", inhoud)
     _bedrijf_naam_laag = bedrijf["naam"].strip().lower()
     _bedrijf_shipments = sorted(
@@ -8646,6 +8779,10 @@ herbouwVolumeRijen();
         key=lambda s: s.get("datum",""), reverse=True
     )
     return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd,
+                                    open_orders_aantal=open_orders_aantal, open_orders_ton=open_orders_ton,
+                                    laatst_contact_profiel=laatst_contact_profiel, afstand_alblasserdam=afstand_alblasserdam,
+                                    materialen_volume_lijst=materialen_volume_lijst, recente_orders_profiel=recente_orders_profiel,
+                                    fabrieken_gedeelde_kwaliteiten=fabrieken_gedeelde_kwaliteiten,
                                     bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
                                     orderkleuren=ORDER_KLEUREN,
                                     accountmanager=laad_accountmanagers().get(bedrijf["naam"], ""),
