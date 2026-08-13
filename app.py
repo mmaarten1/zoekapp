@@ -8517,13 +8517,28 @@ select.klik-bewerken-veld { cursor:pointer; }
 {% if recente_orders_profiel %}
 <div class="info-kaart" style="margin-bottom:16px;">
     <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:12px;">Recente orders</div>
+    <div style="display:flex;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gray-400);padding-bottom:8px;border-bottom:1px solid var(--gray-100);">
+        <span style="width:90px;">Referentie</span>
+        <span style="flex:1;">Materiaal</span>
+        <span style="width:110px;">Datum</span>
+        <span style="width:80px;text-align:right;">Besteld</span>
+        <span style="width:100px;text-align:right;">Status</span>
+    </div>
     {% for o in recente_orders_profiel %}
-    <div style="display:flex;align-items:center;padding:9px 0;border-bottom:1px solid var(--gray-50);font-size:13px;">
-        <span style="width:90px;color:var(--gray-400);font-family:var(--font-mono);font-size:11.5px;">{{ o.referentie }}</span>
-        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ o.materiaal }}</span>
-        <span style="width:110px;color:var(--gray-400);">{{ o.datum }}</span>
-        <span style="width:80px;text-align:right;font-family:var(--font-mono);">{{ o.hoeveelheid }}</span>
-        <span style="width:100px;text-align:right;font-weight:600;color:{{ '#16a34a' if o.status == 'Gewonnen' else ('#dc2626' if o.status == 'Verloren' else 'var(--brand-600)') }};">{{ o.status }}</span>
+    <div style="padding:9px 0;border-bottom:1px solid var(--gray-50);font-size:13px;">
+        <div style="display:flex;align-items:center;">
+            <span style="width:90px;color:var(--gray-400);font-family:var(--font-mono);font-size:11.5px;">{{ o.referentie }}</span>
+            <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ o.materiaal }}</span>
+            <span style="width:110px;color:var(--gray-400);">{{ o.datum }}</span>
+            <span style="width:80px;text-align:right;font-family:var(--font-mono);">{{ o.hoeveelheid }}</span>
+            <span style="width:100px;text-align:right;font-weight:600;color:{{ '#16a34a' if o.status == 'Gewonnen' else ('#dc2626' if o.status == 'Verloren' else 'var(--brand-600)') }};">{{ o.status }}</span>
+        </div>
+        {% if o.heeft_levering_data %}
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;padding-left:90px;">
+            <span style="flex:1;height:5px;background:var(--gray-100);border-radius:5px;overflow:hidden;"><span style="display:block;height:100%;background:{{ '#16a34a' if o.openstaand_order == 0 else 'var(--brand-600)' }};width:{{ o.geleverd_pct }}%;"></span></span>
+            <span style="font-size:11px;color:var(--gray-400);white-space:nowrap;">{{ "{:,.0f}".format(o.geleverd_order) }}t geleverd{% if o.openstaand_order > 0 %} · {{ "{:,.0f}".format(o.openstaand_order) }}t openstaand{% endif %}</span>
+        </div>
+        {% endif %}
     </div>
     {% endfor %}
     <a href="/orders?bedrijf={{ bedrijf.naam|urlencode }}" style="display:block;margin-top:10px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">+ Order toevoegen voor {{ bedrijf.naam }} →</a>
@@ -8990,13 +9005,22 @@ herbouwVolumeRijen();
             vol = parse_hoeveelheid_getal(waarde)
             materialen_volume_lijst.append({"naam": mat_naam, "volume": vol, "aandeel": round(vol / _totaal_volume * 100) if _totaal_volume else 0})
 
-    # --- Recente orders (echte data, laatste 5) ---
+    # --- Recente orders (echte data, laatste 5) + geleverd/openstaand obv gekoppelde shipments ---
+    _alle_shipments_profiel = laad_shipments()
     recente_orders_profiel = []
     for o in sorted(_orders_van_bedrijf, key=lambda x: x.get("aangemaakt",""), reverse=True)[:5]:
+        _order_ref = f"Order-{o['id'][:8]}"
+        _gekoppelde_shipments = [s for s in _alle_shipments_profiel if s.get("referentie","") == _order_ref]
+        _totaal_order = parse_hoeveelheid_getal(o.get("hoeveelheid",""))
+        _geleverd_order = sum(parse_hoeveelheid_getal(s.get("werkelijk_hoeveelheid","")) for s in _gekoppelde_shipments if s.get("werkelijk_hoeveelheid"))
+        _openstaand_order = max(0, _totaal_order - _geleverd_order) if _totaal_order else 0
         recente_orders_profiel.append({
             "referentie": f"ORD-{o['id'][:4].upper()}", "materiaal": o.get("materiaal","—"),
             "datum": o.get("verwachte_datum","") or o.get("aangemaakt","").split(" ")[0],
             "hoeveelheid": o.get("hoeveelheid",""), "status": o.get("status",""),
+            "totaal_order": _totaal_order, "geleverd_order": _geleverd_order, "openstaand_order": _openstaand_order,
+            "geleverd_pct": round(_geleverd_order / _totaal_order * 100) if _totaal_order else 0,
+            "heeft_levering_data": bool(_gekoppelde_shipments and _totaal_order),
         })
 
     # --- Fabrieken met gedeelde kwaliteiten (echte data: overlap in kwaliteiten, gesorteerd op afstand) ---
