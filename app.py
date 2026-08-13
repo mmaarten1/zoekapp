@@ -7972,23 +7972,44 @@ def fabrieken_pagina():
     if land_fab:
         fabrieken_lijst = [f for f in fabrieken_lijst if f.get("land","") == land_fab]
     fabrieken_lijst.sort(key=lambda f: f.get("naam",""))
+    fabrieken_met_coords = [f for f in fabrieken_lijst if f.get("lat") and f.get("lon")]
 
     alle_landen_fab = sorted({f.get("land","") for f in PAPIERFABRIEKEN if f.get("land","")})
     landen_in_resultaat_fab = len({f.get("land","") for f in fabrieken_lijst if f.get("land","")})
 
+    actieve_filters_fab = []
+    if land_fab:
+        actieve_filters_fab.append({"label": f"Land: {land_fab}", "url": f"/fabrieken?zoekterm={zoekterm_fab}"})
+
     inhoud = """
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+.marker-cluster-small { background-color: rgba(179,217,218,0.7); }
+.marker-cluster-small div { background-color: rgba(63,146,149,0.85); color: #fff; }
+.marker-cluster-medium { background-color: rgba(63,146,149,0.6); }
+.marker-cluster-medium div { background-color: rgba(20,118,123,0.9); color: #fff; }
+.marker-cluster-large { background-color: rgba(10,74,79,0.6); }
+.marker-cluster-large div { background-color: rgba(10,74,79,0.95); color: #fff; }
+.marker-cluster div { font-weight: 700; font-family: 'Libre Franklin', -apple-system, sans-serif; }
+</style>
 <style>
 .data-thead, .data-row { display: flex; align-items: center; padding: 0 var(--space-4); }
 .data-thead { padding-top: 10px; padding-bottom: 10px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8792; }
-.data-row { padding-top: 11px; padding-bottom: 11px; border-bottom: 1px solid var(--gray-100); font-size: 13px; text-decoration: none; color: inherit; }
+.data-thead span[data-sort] { cursor: pointer; user-select: none; }
+.data-thead span[data-sort]:hover { color: var(--brand-600); }
+.data-row { padding-top: 9px; padding-bottom: 9px; border-bottom: 1px solid var(--gray-100); font-size: 13px; text-decoration: none; color: inherit; }
 .data-row:hover { background: #f9fbfc; }
 .data-row .zacht { color: #4b5563; font-size: 12.5px; }
+#fabriekenKaart { height: 340px; border: 1px solid var(--gray-200); }
 </style>
 
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;padding-left:20px;">
     <div>
         <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Fabrieken</div>
-        <p style="color:var(--gray-400);margin-top:4px;font-size:0.85rem;">Papierfabrieken, met automatische leverancier-matching op materiaal en kwaliteit</p>
     </div>
     <div style="display:flex;gap:22px;">
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ fabrieken_lijst|length }}</div></div>
@@ -7996,41 +8017,123 @@ def fabrieken_pagina():
     </div>
 </div>
 
-<form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-    <input type="text" name="zoekterm" value="{{ zoekterm_fab }}" placeholder="Fabriek of stad..." style="flex:1;max-width:280px;padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;">
-    <select name="land" onchange="this.form.submit()" style="padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;">
+<form method="GET" id="fabriekZoekForm" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;">
+    <input type="text" name="zoekterm" value="{{ zoekterm_fab }}" placeholder="Fabriek of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
+    <select name="land" onchange="this.form.submit()" style="width:150px;border:none;border-left:1px solid var(--gray-100);padding:0 14px;font-size:14px;cursor:pointer;">
         <option value="">Alle landen</option>
         {% for l in alle_landen_fab %}<option value="{{ l }}" {% if land_fab == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
     </select>
-    <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">Zoeken</button>
-    {% if zoekterm_fab or land_fab %}<a href="/fabrieken" style="align-self:center;font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
+    <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">Search →</button>
 </form>
 
-{% if fabrieken_lijst %}
-<div class="data-thead">
-    <span style="flex:1.5;">Fabriek</span>
-    <span style="flex:1;">Locatie</span>
-    <span style="flex:1.5;">Materialen</span>
-    <span style="width:130px;text-align:right;"></span>
-</div>
-<div>
-    {% for f in fabrieken_lijst %}
-    <div class="data-row">
-        <span style="flex:1.5;font-weight:600;color:var(--gray-800);">🏭 {{ f.naam }}</span>
-        <span style="flex:1;" class="zacht">{{ f.stad }}, {{ f.land }}</span>
-        <span style="flex:1.5;" class="zacht">{{ f.materialen|default('—',true) }}</span>
-        <span style="width:130px;text-align:right;">
-            <a href="/fabriek/{{ f.naam|urlencode }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;">Toon leveranciers →</a>
-        </span>
-    </div>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;">
+    {% for af in actieve_filters_fab %}
+    <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-600);color:#fff;border-radius:14px;padding:4px 11px;font-size:12px;font-weight:600;text-decoration:none;">{{ af.label }}<span style="font-weight:800;opacity:0.8;">✕</span></a>
     {% endfor %}
+    {% if actieve_filters_fab %}<a href="/fabrieken" style="font-size:12px;color:var(--gray-300);text-decoration:none;margin-left:4px;">Wis alles</a>{% endif %}
+</div>
+
+{% if fabrieken_lijst %}
+<div class="kaart-tabel-blok">
+    <div class="map-panel">
+        <div id="fabriekenKaart"></div>
+    </div>
+    <div class="results-list" id="fabriekenLijst">
+        <div class="data-thead">
+            <span style="flex:1.6;" data-sort="naam">Fabriek</span>
+            <span style="flex:1;" data-sort="locatie">Locatie</span>
+            <span style="flex:1.6;" data-sort="materialen">Materialen</span>
+            <span style="width:150px;text-align:right;"></span>
+        </div>
+        {% for f in fabrieken_lijst %}
+        <a class="data-row" href="/fabriek/{{ f.naam|urlencode }}"
+           data-naam="{{ f.naam|e }}" data-locatie="{{ f.stad|default('',true)|e }}, {{ f.land|default('',true)|e }}" data-materialen="{{ f.materialen|default('',true)|e }}"
+           data-lat="{{ f.lat or '' }}" data-lon="{{ f.lon or '' }}">
+            <span style="flex:1.6;font-weight:600;color:var(--gray-800);">🏭 {{ f.naam }}</span>
+            <span style="flex:1;" class="zacht">{{ f.stad }}, {{ f.land }}</span>
+            <span style="flex:1.6;" class="zacht">{{ f.materialen|default('—',true) }}</span>
+            <span style="width:150px;text-align:right;">
+                <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Toon leveranciers →</span>
+            </span>
+        </a>
+        {% endfor %}
+    </div>
+    <div class="results-header">
+        <div class="results-count">
+            <strong id="fabInBeeldTeller">{{ fabrieken_met_coords|length }}</strong> fabrieken in kaartbeeld · <strong>{{ fabrieken_lijst|length }}</strong> totaal
+            <span style="color:var(--gray-300);font-size:11px;"> · zoom of sleep de kaart om te filteren</span>
+        </div>
+    </div>
 </div>
 {% else %}
 <div class="lege-staat">Geen fabrieken gevonden voor deze filters.</div>
 {% endif %}
+
+<script>
+var fabriekenData = {{ fabrieken_met_coords|tojson }};
+if (fabriekenData.length) {
+    var fKaart = L.map("fabriekenKaart").setView([fabriekenData[0].lat, fabriekenData[0].lon], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(fKaart);
+    var fCluster = L.markerClusterGroup();
+    var fabriekIconFab = L.divIcon({
+        html: '<div style="width:18px;height:18px;border-radius:50%;background:#0d5c62;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-size:9px;">🏭</div>',
+        className: '', iconSize: [18,18], iconAnchor: [9,9]
+    });
+    fabriekenData.forEach(function(f) {
+        L.marker([f.lat, f.lon], {icon: fabriekIconFab})
+            .bindPopup("<b>🏭 " + f.naam.replace(/"/g,"") + "</b><br><small>" + f.stad + ", " + f.land + "</small>")
+            .addTo(fCluster);
+    });
+    fKaart.addLayer(fCluster);
+    if (fabriekenData.length > 1) {
+        fKaart.fitBounds(fabriekenData.map(function(f){ return [f.lat, f.lon]; }), {padding:[30,30], maxZoom:7});
+    }
+
+    var fabRijen = Array.prototype.slice.call(document.querySelectorAll("#fabriekenLijst .data-row"));
+    function syncFabKaart() {
+        var bounds = fKaart.getBounds();
+        var teller = 0;
+        fabRijen.forEach(function(rij) {
+            var lat = parseFloat(rij.dataset.lat), lon = parseFloat(rij.dataset.lon);
+            if (isNaN(lat) || isNaN(lon)) { rij.style.display = "none"; return; }
+            var zichtbaar = bounds.contains([lat, lon]);
+            rij.style.display = zichtbaar ? "" : "none";
+            if (zichtbaar) teller++;
+        });
+        var tellerEl = document.getElementById("fabInBeeldTeller");
+        if (tellerEl) tellerEl.textContent = teller;
+    }
+    fKaart.on("moveend zoomend", syncFabKaart);
+    fKaart.whenReady(function () { setTimeout(syncFabKaart, 300); });
+}
+
+(function () {
+    var lijst = document.getElementById("fabriekenLijst");
+    if (!lijst) return;
+    var koppen = lijst.querySelectorAll(".data-thead [data-sort]");
+    var richting = "desc", sleutel = null;
+    koppen.forEach(function (kop) {
+        kop.addEventListener("click", function () {
+            var k = kop.dataset.sort;
+            richting = (sleutel === k && richting === "desc") ? "asc" : "desc";
+            sleutel = k;
+            koppen.forEach(function (x) { x.textContent = x.textContent.replace(/ [\\u2191\\u2193]$/, ""); });
+            kop.textContent += richting === "desc" ? " \\u2193" : " \\u2191";
+            var rijen = Array.prototype.slice.call(lijst.querySelectorAll(".data-row"));
+            rijen.sort(function (a, b) {
+                var va = a.dataset[k] || "", vb = b.dataset[k] || "";
+                var r = va.localeCompare(vb, "nl");
+                return richting === "asc" ? r : -r;
+            });
+            rijen.forEach(function (r) { lijst.appendChild(r); });
+        });
+    });
+})();
+</script>
     """
     pagina = render_simple_page("Fabrieken", "fabrieken", inhoud)
-    return render_template_string(pagina, fabrieken_lijst=fabrieken_lijst, zoekterm_fab=zoekterm_fab, land_fab=land_fab,
+    return render_template_string(pagina, fabrieken_lijst=fabrieken_lijst, fabrieken_met_coords=fabrieken_met_coords,
+                                    zoekterm_fab=zoekterm_fab, land_fab=land_fab, actieve_filters_fab=actieve_filters_fab,
                                     alle_landen_fab=alle_landen_fab, landen_in_resultaat_fab=landen_in_resultaat_fab)
 
 @app.route("/fabriek/<naam>")
