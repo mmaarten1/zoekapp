@@ -2358,8 +2358,10 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: var(--space-3);
-            padding: 0 2px;
+            margin-bottom: 0;
+            padding: 10px 16px;
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
         }
         .results-count { font-size: var(--text-sm); color: var(--gray-400); }
         .results-count strong { color: var(--brand-600); font-weight: 700; }
@@ -2436,12 +2438,21 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         /* ============================================
            MAP
            ============================================ */
-        .map-panel { width: 100%; margin-bottom: var(--space-4); }
+        .kaart-tabel-blok {
+            width: 100%;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            background: #fff;
+        }
+        .map-panel { width: 100%; margin-bottom: 0; }
         #kaart {
             height: 340px;
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--gray-200);
-            box-shadow: var(--shadow-sm);
+            border-radius: 0;
+            border: none;
+            border-bottom: 1px solid var(--gray-200);
+            box-shadow: none;
         }
 
         /* ============================================
@@ -3153,8 +3164,10 @@ HTML = '''
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: var(--space-3);
-            padding: 0 2px;
+            margin-bottom: 0;
+            padding: 10px 16px;
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
         }
         .results-count { font-size: var(--text-sm); color: var(--gray-400); }
         .results-count strong { color: var(--brand-600); font-weight: 700; }
@@ -3241,12 +3254,21 @@ HTML = '''
         /* ============================================
            MAP
            ============================================ */
-        .map-panel { width: 100%; margin-bottom: var(--space-4); }
+        .kaart-tabel-blok {
+            width: 100%;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            background: #fff;
+        }
+        .map-panel { width: 100%; margin-bottom: 0; }
         #kaart {
             height: 340px;
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--gray-200);
-            box-shadow: var(--shadow-sm);
+            border-radius: 0;
+            border: none;
+            border-bottom: 1px solid var(--gray-200);
+            box-shadow: none;
         }
 
         /* ============================================
@@ -3580,7 +3602,7 @@ function toggleMobielMenu() {
         <form method="POST" id="searchForm" style="flex:1;">
             <div class="search-container">
                 <div class="search-row">
-                    <input class="search-input" name="zoekterm" placeholder="🔍  Bedrijf, contactpersoon of stad..." value="{{ zoekterm }}">
+                    <input class="search-input" name="zoekterm" placeholder="Bedrijf, contactpersoon of stad..." value="{{ zoekterm }}">
                     <select class="search-select" name="land" id="landSelect" onchange="updateRegio()">
                         <option value="">All Countries</option>
                         {% for l in landen %}
@@ -3725,30 +3747,31 @@ function toggleMobielMenu() {
             <button type="button" onclick="toggleFiltersPaneel()" style="font-size:12px;font-weight:600;color:var(--gray-500);background:#fff;border:1px solid var(--gray-200);border-radius:14px;padding:4px 11px;cursor:pointer;font-family:inherit;">+ filter</button>
             {% if actieve_filters_lijst %}<a href="/" style="font-size:12px;color:var(--gray-300);text-decoration:none;margin-left:4px;">Wis alles</a>{% endif %}
         </div>
-        <!-- MAP -->
-        <div class="map-panel">
-            <div id="kaart"></div>
-        </div>
-
-        <div class="results-header">
-            <div class="results-count">
-                <strong id="inBeeldTeller">{{ bedrijven|length }}</strong> bedrijven in kaartbeeld · <strong>{{ bedrijven|length }}</strong> van <strong>{{ totaal_gevonden }}</strong>
-                {% if totaal_paginas > 1 %}<span style="color:var(--gray-300);"> · pagina {{ pagina }}/{{ totaal_paginas }}</span>{% endif %}
-                <span style="color:var(--gray-300);font-size:11px;"> · zoom of sleep de kaart om te filteren</span>
+        <!-- MAP + TELLERBALK + TABEL: één doorlopend blok -->
+        <div class="kaart-tabel-blok">
+            <div class="map-panel">
+                <div id="kaart"></div>
             </div>
-            <a href="/export-csv?{{ export_query }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;">⬇ Export to CSV</a>
-        </div>
-        <div class="results-list" id="resultatenLijst" style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
-            <div class="data-thead">
-                <span style="width:26px;"></span>
-                <span style="flex:1.5;" data-sort="naam">Bedrijf</span>
-                <span style="flex:1;" data-sort="brontype">Bedrijfstype</span>
+
+            <div class="results-header">
+                <div class="results-count">
+                    <strong id="inBeeldTeller">{{ bedrijven|length }}</strong> bedrijven in kaartbeeld · <strong>{{ bedrijven|length }}</strong> van <strong>{{ totaal_gevonden }}</strong>
+                    {% if totaal_paginas > 1 %}<span style="color:var(--gray-300);"> · pagina {{ pagina }}/{{ totaal_paginas }}</span>{% endif %}
+                    <span style="color:var(--gray-300);font-size:11px;"> · zoom of sleep de kaart om te filteren</span>
+                </div>
+                <a href="/export-csv?{{ export_query }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;background:#fff;">⬇ Export to CSV</a>
+            </div>
+            <div class="results-list" id="resultatenLijst">
+                <div class="data-thead">
+                    <span style="width:26px;"></span>
+                    <span style="flex:1.5;" data-sort="naam">Bedrijf</span>
+                    <span style="flex:1;" data-sort="brontype">Bedrijfstype</span>
                 <span style="flex:1.2;" data-sort="materialen">Materialen</span>
                 <span style="flex:1.2;" data-sort="kwaliteiten">Kwaliteiten</span>
                 <span style="flex:1;" data-sort="klanttype">Klanttype</span>
                 <span style="width:90px;text-align:right;" data-sort="volume">Volume t/j</span>
                 <span style="width:110px;" data-sort="accountmanager">Accountmgr.</span>
-                <span style="width:70px;">Cert.</span>
+                <span style="width:90px;text-align:right;" data-sort="laatst_contact">Contact</span>
                 <span style="width:28px;"></span>
             </div>
             {% for bedrijf in bedrijven %}
@@ -3758,6 +3781,7 @@ function toggleMobielMenu() {
                 data-materialen="{{ bedrijf.materialen|default('',true)|e }}" data-kwaliteiten="{{ bedrijf.kwaliteiten|default('',true)|e }}"
                 data-klanttype="{{ bedrijf.klanttype|default('',true)|e }}" data-volume="{{ bedrijf.volume|default('',true)|e }}"
                 data-accountmanager="{{ bedrijf.accountmanager|default('',true)|e }}"
+                data-laatst_contact="{{ bedrijf.laatst_contact|default('',true)|e }}"
                 data-lat="{{ bedrijf.lat or '' }}" data-lon="{{ bedrijf.lon or '' }}"
                 onclick="event.preventDefault(); openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}', '{{ bedrijf.certificeringen|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.contactpersoon|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.kwaliteiten|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.brontype|default("", true)|replace("'","&#39;") }}')">
                 <span style="width:26px;"><span class="star-btn {% if bedrijf.naam in opgeslagen_namen %}opgeslagen{% endif %}" onclick="event.stopPropagation(); toggleOpslaan(event, '{{ bedrijf.naam|replace("'","\\'") }}', this)">{% if bedrijf.naam in opgeslagen_namen %}★{% else %}☆{% endif %}</span></span>
@@ -3768,10 +3792,11 @@ function toggleMobielMenu() {
                 <span style="flex:1;" class="zacht">{{ bedrijf.klanttype|default('—',true) }}</span>
                 <span style="width:90px;text-align:right;" class="num">{{ bedrijf.volume|default('—',true) }}</span>
                 <span style="width:110px;" class="zacht">{{ bedrijf.accountmanager|default('—',true) }}</span>
-                <span style="width:70px;font-size:11px;" class="zacht">{{ (bedrijf.certificeringen.split(",")[0].strip() if bedrijf.certificeringen else '—') }}</span>
+                <span style="width:90px;text-align:right;font-size:11px;" class="zacht">{{ bedrijf.laatst_contact|default('—',true) }}</span>
                 <span style="width:28px;text-align:center;color:var(--gray-300);">›</span>
             </a>
             {% endfor %}
+        </div>
         </div>
         {% if totaal_paginas > 1 %}
         <div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:14px;flex-wrap:wrap;">
@@ -5261,8 +5286,29 @@ def index():
     opgeslagen_namen = set(laad_opgeslagen())
 
     _am_lookup = laad_accountmanagers()
+    _alle_notities_index = laad_notities()
+    _vandaag_index = datetime.date.today()
     for b in bedrijven:
         b["accountmanager"] = _am_lookup.get(b["naam"], "")
+
+        b["laatst_contact"] = ""
+        notities_van_bedrijf = _alle_notities_index.get(b["naam"], [])
+        laatste_datum = None
+        for n in notities_van_bedrijf:
+            try:
+                dt = datetime.datetime.strptime(n.get("timestamp",""), "%d-%m-%Y %H:%M").date()
+                if laatste_datum is None or dt > laatste_datum:
+                    laatste_datum = dt
+            except (ValueError, TypeError):
+                continue
+        if laatste_datum:
+            dagen_geleden = (_vandaag_index - laatste_datum).days
+            if dagen_geleden <= 0:
+                b["laatst_contact"] = "Vandaag"
+            elif dagen_geleden == 1:
+                b["laatst_contact"] = "Gisteren"
+            else:
+                b["laatst_contact"] = f"{dagen_geleden} dagen"
 
     _volume_labels = {"small": "Volume: <1.000 t/j", "medium": "Volume: 1.000-10.000 t/j", "large": "Volume: >10.000 t/j"}
     _accountmanager_label = "Accountmanager: Mijn bedrijven" if accountmanager == "__mij__" else (f"Accountmanager: {accountmanager}" if accountmanager else "")
