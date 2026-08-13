@@ -2168,17 +2168,17 @@ PAGINA_HOOFD = """<!DOCTYPE html>
            HERO
            ============================================ */
         .search-bar-section {
-            background: var(--gray-50);
-            padding: 16px 24px;
-            border-bottom: 1px solid var(--gray-200);
+            background: transparent;
+            padding: 16px 24px 16px 0;
+            border-bottom: none;
         }
-        @media (max-width: 1200px) { .search-bar-section { padding: 16px; } }
-        @media (max-width: 768px)  { .search-bar-section { padding: 12px; } }
+        @media (max-width: 1200px) { .search-bar-section { padding: 16px 16px 16px 0; } }
+        @media (max-width: 768px)  { .search-bar-section { padding: 12px 12px 12px 0; } }
         .hero-content {
             width: 100%;
             max-width: min(1700px, calc(100vw - 260px));
             box-sizing: border-box;
-            margin: 0 auto;
+            margin: 0;
         }
 
         /* ============================================
@@ -2262,13 +2262,13 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             max-width: min(1700px, calc(100vw - 260px));
             box-sizing: border-box;
             margin: var(--space-6) auto;
-            padding: 0 24px;
+            padding: 0 24px 0 0;
             display: flex;
             gap: var(--space-5);
             align-items: flex-start;
             position: relative;
         }
-        @media (max-width: 1200px) { .main { padding: 0 16px; } }
+        @media (max-width: 1200px) { .main { padding: 0 16px 0 0; } }
         @media (max-width: 768px)  { .main { padding: 0 12px; max-width: 100%; } }
 
         /* ============================================
@@ -2974,17 +2974,17 @@ HTML = '''
            HERO
            ============================================ */
         .search-bar-section {
-            background: var(--gray-50);
-            padding: 16px 24px;
-            border-bottom: 1px solid var(--gray-200);
+            background: transparent;
+            padding: 16px 24px 16px 0;
+            border-bottom: none;
         }
-        @media (max-width: 1200px) { .search-bar-section { padding: 16px; } }
-        @media (max-width: 768px)  { .search-bar-section { padding: 12px; } }
+        @media (max-width: 1200px) { .search-bar-section { padding: 16px 16px 16px 0; } }
+        @media (max-width: 768px)  { .search-bar-section { padding: 12px 12px 12px 0; } }
         .hero-content {
             width: 100%;
             max-width: min(1700px, calc(100vw - 260px));
             box-sizing: border-box;
-            margin: 0 auto;
+            margin: 0;
         }
 
         /* ============================================
@@ -3068,13 +3068,13 @@ HTML = '''
             max-width: min(1700px, calc(100vw - 260px));
             box-sizing: border-box;
             margin: var(--space-6) auto;
-            padding: 0 24px;
+            padding: 0 24px 0 0;
             display: flex;
             gap: var(--space-5);
             align-items: flex-start;
             position: relative;
         }
-        @media (max-width: 1200px) { .main { padding: 0 16px; } }
+        @media (max-width: 1200px) { .main { padding: 0 16px 0 0; } }
         @media (max-width: 768px)  { .main { padding: 0 12px; max-width: 100%; } }
 
         /* ============================================
