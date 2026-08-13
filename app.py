@@ -8652,9 +8652,7 @@ select.klik-bewerken-veld { cursor:pointer; }
 
     <div>
         <div class="info-kaart">
-            <div class="dg-kaart-titel" style="color:var(--gray-400);">Contact Intelligence</div>
-            <div id="profielContact"><div style="color:var(--gray-400);font-size:var(--text-sm);">Laden...</div></div>
-            <div id="profielKaart"></div>
+            <div id="profielKaart" style="height:200px;border-radius:10px;overflow:hidden;"></div>
         </div>
 
         {% if fabrieken_gedeelde_kwaliteiten %}
@@ -8689,13 +8687,10 @@ L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(pKaart).bindPopup({{ bedr
 {% endif %}
 
 function vulContact(data) {
-    var html = "";
-    if (data.website) html += `<div class="drawer-row"><span class="drawer-row-label">Website</span><span class="drawer-row-value"><a href="${data.website}" target="_blank" style="color:var(--brand-600);font-weight:600;">${data.website.replace("https://","").replace("http://","").split("/")[0]}</a></span></div>`;
-    var tel = data.telefoon || {{ (bedrijf.telefoon or "")|tojson }};
-    var adr = data.adres || {{ (bedrijf.adres or "")|tojson }};
-    html += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value"><input type="text" value="${tel.replace(/"/g,'&quot;')}" data-veld="telefoon" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:160px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;"></span></div>`;
-    html += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value"><input type="text" value="${adr.replace(/"/g,'&quot;')}" data-veld="adres" onblur="wijzigBedrijfVeld(this)" placeholder="—" style="width:200px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;"></span></div>`;
-    document.getElementById("profielContact").innerHTML = html;
+    var telInput = document.querySelector('[data-veld="telefoon"]');
+    var adrInput = document.querySelector('[data-veld="adres"]');
+    if (telInput && !telInput.value && data.telefoon) telInput.value = data.telefoon;
+    if (adrInput && !adrInput.value && data.adres) adrInput.value = data.adres;
 }
 
 if (BEDRIJF_URL) {
