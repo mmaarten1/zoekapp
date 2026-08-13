@@ -8606,9 +8606,9 @@ select.klik-bewerken-veld { cursor:pointer; }
 </div>
 
 
+        {% if bedrijf_shipments %}
         <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Shipments</div>
-            {% if bedrijf_shipments %}
                 {% for s in bedrijf_shipments %}
                 <div class="dg-activiteit-item">
                     {{ s.referentie or s.id[:8] }} · {{ s.materiaal }} · {{ s.origin_land }} → {{ s.destination_land }}
@@ -8616,11 +8616,9 @@ select.klik-bewerken-veld { cursor:pointer; }
                     <small>{{ s.datum }}{% if s.werkelijk_hoeveelheid %} · {{ s.werkelijk_hoeveelheid }} ton (gewogen){% elif s.gepland_hoeveelheid %} · {{ s.gepland_hoeveelheid }} ton (gepland){% endif %}</small>
                 </div>
                 {% endfor %}
-            {% else %}
-                <div style="font-size:0.82rem;color:var(--gray-400);">Nog geen shipments voor dit bedrijf.</div>
-            {% endif %}
             <a href="/voorraad" style="display:block;margin-top:8px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">Naar Voorraad →</a>
         </div>
+        {% endif %}
 
         <div class="info-kaart" style="margin-bottom:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Foto's</div>
