@@ -2759,6 +2759,7 @@ def sidebar_html(actief):
         ("dashboard", "/dashboard", "DB", "Dashboard"),
         ("inzichten", "/inzichten", "IZ", "Inzichten"),
         ("materialen", "/materialen", "MT", "Materials"),
+        ("fabrieken", "/fabrieken", "FB", "Fabrieken"),
         ("certificeringen", "/certificeringen", "CF", "Certifications"),
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
@@ -3567,6 +3568,7 @@ HTML = '''
         <a href="/dashboard" class="sidebar-link"><span class="icoon">DB</span> Dashboard</a>
         <a href="/inzichten" class="sidebar-link"><span class="icoon">IZ</span> Inzichten</a>
         <a href="/materialen" class="sidebar-link"><span class="icoon">MT</span> Materials</a>
+        <a href="/fabrieken" class="sidebar-link"><span class="icoon">FB</span> Fabrieken</a>
         <a href="/certificeringen" class="sidebar-link"><span class="icoon">CF</span> Certifications</a>
         <a href="/contacten" class="sidebar-link"><span class="icoon">CT</span> Contacten</a>
         <a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">OR</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>
@@ -7958,6 +7960,142 @@ function wijzigCertVervaldatum(input) {
     """
     pagina = render_simple_page("Certifications", "certificeringen", inhoud)
     return render_template_string(pagina, cert_rijen=cert_rijen, kpis=kpis)
+
+@app.route("/fabrieken")
+def fabrieken_pagina():
+    zoekterm_fab = request.args.get("zoekterm", "").strip().lower()
+    land_fab = request.args.get("land", "")
+
+    fabrieken_lijst = list(PAPIERFABRIEKEN)
+    if zoekterm_fab:
+        fabrieken_lijst = [f for f in fabrieken_lijst if zoekterm_fab in f.get("naam","").lower() or zoekterm_fab in f.get("stad","").lower()]
+    if land_fab:
+        fabrieken_lijst = [f for f in fabrieken_lijst if f.get("land","") == land_fab]
+    fabrieken_lijst.sort(key=lambda f: f.get("naam",""))
+
+    alle_landen_fab = sorted({f.get("land","") for f in PAPIERFABRIEKEN if f.get("land","")})
+    landen_in_resultaat_fab = len({f.get("land","") for f in fabrieken_lijst if f.get("land","")})
+
+    inhoud = """
+<style>
+.data-thead, .data-row { display: flex; align-items: center; padding: 0 var(--space-4); }
+.data-thead { padding-top: 10px; padding-bottom: 10px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8792; }
+.data-row { padding-top: 11px; padding-bottom: 11px; border-bottom: 1px solid var(--gray-100); font-size: 13px; text-decoration: none; color: inherit; }
+.data-row:hover { background: #f9fbfc; }
+.data-row .zacht { color: #4b5563; font-size: 12.5px; }
+</style>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
+    <div>
+        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Fabrieken</div>
+        <p style="color:var(--gray-400);margin-top:4px;font-size:0.85rem;">Papierfabrieken, met automatische leverancier-matching op materiaal en kwaliteit</p>
+    </div>
+    <div style="display:flex;gap:22px;">
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ fabrieken_lijst|length }}</div></div>
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat_fab }}</div></div>
+    </div>
+</div>
+
+<form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+    <input type="text" name="zoekterm" value="{{ zoekterm_fab }}" placeholder="Fabriek of stad..." style="flex:1;max-width:280px;padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;">
+    <select name="land" onchange="this.form.submit()" style="padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;">
+        <option value="">Alle landen</option>
+        {% for l in alle_landen_fab %}<option value="{{ l }}" {% if land_fab == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">Zoeken</button>
+    {% if zoekterm_fab or land_fab %}<a href="/fabrieken" style="align-self:center;font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
+</form>
+
+{% if fabrieken_lijst %}
+<div class="data-thead">
+    <span style="flex:1.5;">Fabriek</span>
+    <span style="flex:1;">Locatie</span>
+    <span style="flex:1.5;">Materialen</span>
+    <span style="width:130px;text-align:right;"></span>
+</div>
+<div>
+    {% for f in fabrieken_lijst %}
+    <div class="data-row">
+        <span style="flex:1.5;font-weight:600;color:var(--gray-800);">🏭 {{ f.naam }}</span>
+        <span style="flex:1;" class="zacht">{{ f.stad }}, {{ f.land }}</span>
+        <span style="flex:1.5;" class="zacht">{{ f.materialen|default('—',true) }}</span>
+        <span style="width:130px;text-align:right;">
+            <a href="/fabriek/{{ f.naam|urlencode }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;">Toon leveranciers →</a>
+        </span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">Geen fabrieken gevonden voor deze filters.</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Fabrieken", "fabrieken", inhoud)
+    return render_template_string(pagina, fabrieken_lijst=fabrieken_lijst, zoekterm_fab=zoekterm_fab, land_fab=land_fab,
+                                    alle_landen_fab=alle_landen_fab, landen_in_resultaat_fab=landen_in_resultaat_fab)
+
+@app.route("/fabriek/<naam>")
+def fabriek_detail(naam):
+    fabriek = next((f for f in PAPIERFABRIEKEN if f["naam"] == naam), None)
+    if not fabriek:
+        inhoud = '<div class="page-title">Niet gevonden</div><div class="lege-staat">Deze fabriek bestaat niet (meer).</div>'
+        pagina = render_simple_page("Niet gevonden", "fabrieken", inhoud)
+        return render_template_string(pagina), 404
+
+    leveranciers = []
+    if "lat" in fabriek and "lon" in fabriek:
+        fabriek_materialen = [m.strip().lower() for m in fabriek.get("materialen", "").split(",")]
+        fabriek_kwaliteiten = [k.strip().lower() for k in fabriek.get("kwaliteiten", "").split(",") if k.strip()]
+        for b in ENF_BEDRIJVEN:
+            if "lat" not in b or "lon" not in b:
+                continue
+            bedrijf_materialen = [m.strip().lower() for m in b.get("materialen", "").split(",")]
+            gedeeld = [m for m in fabriek_materialen if m in bedrijf_materialen]
+            if not gedeeld:
+                continue
+            bedrijf_kwaliteiten = [k.strip().lower() for k in b.get("kwaliteiten", "").split(",") if k.strip()]
+            gedeelde_kwaliteiten = [k for k in fabriek_kwaliteiten if k in bedrijf_kwaliteiten]
+            afstand = bereken_afstand_km(fabriek["lat"], fabriek["lon"], b["lat"], b["lon"])
+            leveranciers.append({
+                "naam": b["naam"], "land": b["land"], "regio": b["regio"],
+                "gedeelde_materialen": ", ".join(gedeeld), "gedeelde_kwaliteiten": ", ".join(gedeelde_kwaliteiten),
+                "afstand_km": round(afstand, 1),
+            })
+        leveranciers.sort(key=lambda x: (0 if x["gedeelde_kwaliteiten"] else 1, x["afstand_km"]))
+        leveranciers = leveranciers[:25]
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/fabrieken" style="color:var(--gray-400);text-decoration:none;">Fabrieken</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ fabriek.naam }}</span>
+</div>
+<div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);margin-bottom:4px;">🏭 {{ fabriek.naam }}</div>
+<p style="color:var(--gray-400);margin-bottom:20px;font-size:0.9rem;">{{ fabriek.stad }}, {{ fabriek.land }}{% if fabriek.materialen %} · {{ fabriek.materialen }}{% endif %}</p>
+
+<div class="dg-kaart-titel" style="margin-bottom:12px;">Leveranciers met gedeeld materiaal ({{ leveranciers|length }})</div>
+{% if leveranciers %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="data-thead" style="display:flex;padding:10px 16px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#7d8792;">
+        <span style="flex:1.4;">Bedrijf</span>
+        <span style="flex:1;">Locatie</span>
+        <span style="flex:1.2;">Gedeeld materiaal</span>
+        <span style="flex:1.2;">Gedeelde kwaliteit</span>
+        <span style="width:90px;text-align:right;">Afstand</span>
+    </div>
+    {% for l in leveranciers %}
+    <a href="/bedrijf/{{ l.naam|urlencode }}" style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--gray-100);font-size:13px;text-decoration:none;color:inherit;">
+        <span style="flex:1.4;font-weight:600;color:var(--gray-800);">{{ l.naam }}</span>
+        <span style="flex:1;color:#4b5563;font-size:12.5px;">{{ l.regio }}, {{ l.land }}</span>
+        <span style="flex:1.2;color:#4b5563;font-size:12.5px;">{{ l.gedeelde_materialen }}</span>
+        <span style="flex:1.2;color:{{ '#16a34a' if l.gedeelde_kwaliteiten else 'var(--gray-300)' }};font-size:12.5px;">{{ l.gedeelde_kwaliteiten or '—' }}</span>
+        <span style="width:90px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--brand-600);">{{ l.afstand_km }} km</span>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">Geen leveranciers gevonden met gedeeld materiaal (of deze fabriek heeft nog geen coördinaten).</div>
+{% endif %}
+    """
+    pagina = render_simple_page(fabriek["naam"], "fabrieken", inhoud)
+    return render_template_string(pagina, fabriek=fabriek, leveranciers=leveranciers)
 
 @app.route("/materialen")
 def materialen():
