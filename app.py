@@ -3749,8 +3749,15 @@ function toggleMobielMenu() {
         </div>
         <!-- MAP + TABEL: één doorlopend blok -->
         <div class="kaart-tabel-blok">
-            <div class="map-panel">
+            <div class="map-panel" style="position:relative;">
                 <div id="kaart"></div>
+                {% if legenda_tellingen.recyclingcentrum or legenda_tellingen.inzamelaar or legenda_tellingen.papierfabriek %}
+                <div style="position:absolute;left:12px;bottom:12px;z-index:400;background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:8px 14px;display:flex;gap:16px;align-items:center;box-shadow:var(--shadow-sm);font-size:12px;">
+                    {% if legenda_tellingen.recyclingcentrum %}<span style="display:flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:#0d5c62;display:inline-block;"></span>Recyclingcentra <b>{{ legenda_tellingen.recyclingcentrum }}</b></span>{% endif %}
+                    {% if legenda_tellingen.inzamelaar %}<span style="display:flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:#3f9295;display:inline-block;"></span>Inzamelaars <b>{{ legenda_tellingen.inzamelaar }}</b></span>{% endif %}
+                    {% if legenda_tellingen.papierfabriek %}<span style="display:flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:#d97706;display:inline-block;"></span>Papierfabrieken <b>{{ legenda_tellingen.papierfabriek }}</b></span>{% endif %}
+                </div>
+                {% endif %}
             </div>
 
             <div class="results-list" id="resultatenLijst">
@@ -3901,8 +3908,12 @@ var satellietKaart = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/se
 straatKaart.addTo(kaart);
 L.control.layers({"Kaart": straatKaart, "Satelliet": satellietKaart}).addTo(kaart);
 var clusterGroep = L.markerClusterGroup();
+var kaartCategorieKleuren = {"recyclingcentrum": "#0d5c62", "inzamelaar": "#3f9295", "papierfabriek": "#d97706", "overig": "#94a3b8"};
 {% for b in bedrijven %}
-L.marker([{{ b.lat }}, {{ b.lon }}])
+L.marker([{{ b.lat }}, {{ b.lon }}], {icon: L.divIcon({
+    html: '<div style="width:16px;height:16px;border-radius:50%;background:' + kaartCategorieKleuren["{{ b.kaart_categorie }}"] + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>',
+    className: '', iconSize: [16,16], iconAnchor: [8,8]
+})})
     .bindPopup("<b>{{ b.naam|replace('"','') }}</b><br><small>{{ b.regio }}, {{ b.land }}</small>")
     .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }},"{{ b.adres|default('', true)|replace("'","&#39;") }}","{{ b.telefoon|default('', true) }}","{{ b.certificeringen|default('', true)|replace("'","&#39;") }}","{{ b.contactpersoon|default('', true)|replace("'","&#39;") }}","{{ b.kwaliteiten|default('', true)|replace("'","&#39;") }}","{{ b.brontype|default('', true)|replace("'","&#39;") }}"); })
     .addTo(clusterGroep);
@@ -5310,6 +5321,22 @@ def index():
             else:
                 b["laatst_contact"] = f"{dagen_geleden} dagen"
 
+    # Brontype-categorie bepalen voor kaartkleur + legenda (op basis van wat al bekend is, niks verzonnen)
+    def _kaart_categorie(brontype_tekst):
+        t = (brontype_tekst or "").strip().lower()
+        if "papierfabriek" in t:
+            return "papierfabriek"
+        if "recyclingcentrum" in t:
+            return "recyclingcentrum"
+        if "inzamelaar" in t:
+            return "inzamelaar"
+        return "overig"
+    for b in bedrijven:
+        b["kaart_categorie"] = _kaart_categorie(b.get("brontype",""))
+    _legenda_tellingen = {"recyclingcentrum": 0, "inzamelaar": 0, "papierfabriek": 0, "overig": 0}
+    for b in bedrijven:
+        _legenda_tellingen[b["kaart_categorie"]] += 1
+
     _volume_labels = {"small": "Volume: <1.000 t/j", "medium": "Volume: 1.000-10.000 t/j", "large": "Volume: >10.000 t/j"}
     _accountmanager_label = "Accountmanager: Mijn bedrijven" if accountmanager == "__mij__" else (f"Accountmanager: {accountmanager}" if accountmanager else "")
     _alle_filter_velden = [
@@ -5356,6 +5383,7 @@ def index():
         totaal=len(ENF_BEDRIJVEN), landen=LANDEN,
         totaal_gevonden=totaal_gevonden, regio_per_land=REGIO_PER_LAND,
         landen_in_resultaat=landen_in_resultaat, volume_totaal_resultaat=volume_totaal_resultaat,
+        legenda_tellingen=_legenda_tellingen,
         papierfabrieken=PAPIERFABRIEKEN, opgeslagen_namen=opgeslagen_namen,
         er_is_gefilterd=er_is_gefilterd, pagina=pagina, totaal_paginas=totaal_paginas,
         maak_pagina_url=maak_pagina_url, export_query=export_query,
