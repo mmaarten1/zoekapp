@@ -2172,7 +2172,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             padding: var(--space-8) var(--space-10);
             border-bottom: 1px solid var(--gray-200);
         }
-        .hero-content { max-width: 860px; margin: 0 auto; }
+        .hero-content { max-width: 1100px; margin: 0 auto; }
 
         /* ============================================
            SEARCH
@@ -2258,10 +2258,11 @@ PAGINA_HOOFD = """<!DOCTYPE html>
            ============================================ */
         .filters-panel {
             width: 300px;
-            position: absolute;
+            max-width: calc(100vw - 32px);
+            position: fixed;
             top: 44px;
-            left: 0;
-            z-index: 50;
+            left: 16px;
+            z-index: 9999;
             background: #fff;
             border: 1px solid var(--gray-200);
             border-radius: var(--radius-lg);
@@ -2269,6 +2270,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
             box-shadow: 0 18px 44px -12px rgba(27,31,38,.28);
             max-height: 70vh;
             overflow-y: auto;
+            box-sizing: border-box;
         }
         .filters-title {
             font-size: var(--text-xs);
@@ -2938,7 +2940,7 @@ HTML = '''
             padding: var(--space-8) var(--space-10);
             border-bottom: 1px solid var(--gray-200);
         }
-        .hero-content { max-width: 860px; margin: 0 auto; }
+        .hero-content { max-width: 1100px; margin: 0 auto; }
 
         /* ============================================
            SEARCH
@@ -3024,10 +3026,11 @@ HTML = '''
            ============================================ */
         .filters-panel {
             width: 300px;
-            position: absolute;
+            max-width: calc(100vw - 32px);
+            position: fixed;
             top: 44px;
-            left: 0;
-            z-index: 50;
+            left: 16px;
+            z-index: 9999;
             background: #fff;
             border: 1px solid var(--gray-200);
             border-radius: var(--radius-lg);
@@ -3035,6 +3038,7 @@ HTML = '''
             box-shadow: 0 18px 44px -12px rgba(27,31,38,.28);
             max-height: 70vh;
             overflow-y: auto;
+            box-sizing: border-box;
         }
         .filters-title {
             font-size: var(--text-xs);
@@ -3525,47 +3529,6 @@ function toggleMobielMenu() {
 
 <div class="content-wrapper">
 
-<div class="ai-search-box">
-  <input type="text" id="aiSearchInput" placeholder="Bijv. papierbedrijven in Duitsland met meer dan 50 werknemers" />
-  <button id="aiSearchButton">Zoeken</button>
-</div>
-<div id="aiSearchResults"></div>
-<script>
-  const input = document.getElementById('aiSearchInput');
-  const button = document.getElementById('aiSearchButton');
-  const resultsDiv = document.getElementById('aiSearchResults');
-  async function aiSearch(query) {
-    const res = await fetch('/api/ai-search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query })
-    });
-    return await res.json();
-  }
-  async function handleSearch() {
-    const query = input.value.trim();
-    if (!query) return;
-    resultsDiv.innerHTML = '<p>Zoeken...</p>';
-    try {
-      const data = await aiSearch(query);
-      if (data.error) {
-        resultsDiv.innerHTML = `<p>Fout: ${data.error}</p>`;
-        return;
-      }
-      let html = `<p>${data.total} resultaten gevonden</p>`;
-      data.results.forEach(company => {
-        html += `<div class="company-card"><h3>${company.naam}</h3><p>${company.land || ''} - ${company.regio || ''}</p></div>`;
-      });
-      resultsDiv.innerHTML = html;
-    } catch (err) {
-      resultsDiv.innerHTML = '<p>Er ging iets mis.</p>';
-      console.error(err);
-    }
-  }
-  button.addEventListener('click', handleSearch);
-  input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearch(); });
-</script>
-
 <!-- ZOEKBALK -->
 <section class="search-bar-section">
     <div class="hero-content" style="display:flex;align-items:center;gap:14px;">
@@ -3591,8 +3554,8 @@ function toggleMobielMenu() {
                 </div>
             </div>
         </form>
-        <button onclick="toonMeldingen()" style="background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--gray-500);white-space:nowrap;flex:none;padding:8px 4px;font-family:inherit;">
-            Meldingen <span id="meldingBadge" style="display:none;background:var(--brand-600);color:#fff;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px;margin-left:2px;"></span>
+        <button onclick="toonMeldingen()" style="background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--gray-500);white-space:nowrap;flex:none;padding:8px 4px;font-family:inherit;display:inline-flex;align-items:center;gap:5px;">
+            <span style="white-space:nowrap;">Meldingen</span><span id="meldingBadge" style="display:none;background:var(--brand-600);color:#fff;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px;white-space:nowrap;"></span>
         </button>
 
     </div>
@@ -3827,7 +3790,18 @@ var regioPer = {{ regio_per_land|tojson }};
 
 function toggleFiltersPaneel() {
     var paneel = document.getElementById("filtersPaneel");
-    paneel.style.display = (paneel.style.display === "none") ? "block" : "none";
+    var isOpen = paneel.style.display === "block";
+    if (isOpen) {
+        paneel.style.display = "none";
+        return;
+    }
+    var knop = event.currentTarget;
+    var rect = knop.getBoundingClientRect();
+    paneel.style.position = "fixed";
+    paneel.style.top = (rect.bottom + 8) + "px";
+    paneel.style.left = rect.left + "px";
+    paneel.style.zIndex = "9999";
+    paneel.style.display = "block";
 }
 document.addEventListener("click", function(e) {
     var paneel = document.getElementById("filtersPaneel");
@@ -3836,9 +3810,6 @@ document.addEventListener("click", function(e) {
     if (e.target.closest && e.target.closest("[onclick='toggleFiltersPaneel()']")) return;
     paneel.style.display = "none";
 });
-{% if actieve_filters_lijst %}
-document.addEventListener("DOMContentLoaded", function() { document.getElementById("filtersPaneel").style.display = "block"; });
-{% endif %}
 
 function updateRegio() {
     var land = document.getElementById("landSelect").value;
@@ -4247,6 +4218,12 @@ async function toonMeldingen() {
     const isOpen = paneel.style.display === "block";
     paneel.style.display = isOpen ? "none" : "block";
     if (isOpen) return;
+
+    var knop = event.currentTarget;
+    var rect = knop.getBoundingClientRect();
+    paneel.style.top = (rect.bottom + 8) + "px";
+    paneel.style.right = (window.innerWidth - rect.right) + "px";
+    paneel.style.left = "auto";
 
     try {
         const res = await fetch("/api/meldingen");
@@ -4917,24 +4894,6 @@ def details():
         return jsonify({})
     return jsonify(haal_bedrijf_details(url))
 
-@app.route("/api/ai-search", methods=["POST"])
-def ai_search():
-    from ai_filter import parse_search_query, apply_filters
-
-    data = request.get_json()
-    query = data.get("query", "").strip()
-
-    if not query:
-        return jsonify({"error": "Geen zoekopdracht opgegeven"}), 400
-
-    filters = parse_search_query(query)
-    results = apply_filters(ENF_BEDRIJVEN, filters)
-
-    return jsonify({
-        "results": results[:200],
-        "total": len(results),
-        "detected_filters": filters,
-    })
 @app.route("/api/transport", methods=["GET"])
 def get_transport():
     lat = request.args.get("lat", type=float)
