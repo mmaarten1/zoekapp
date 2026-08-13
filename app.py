@@ -8414,6 +8414,7 @@ def bedrijf_profiel(naam):
 
     inhoud = """
 {% if is_fabriek_profiel %}<input type="hidden" id="isFabriekProfiel" value="1">{% endif %}
+<div class="bedrijfsprofiel-inhoud">
 <style>
 .profiel-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
 .veld-label { font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-400); margin-bottom:3px; }
@@ -8428,6 +8429,17 @@ select.klik-bewerken-veld { cursor:pointer; }
 .profiel-loc { color:var(--gray-400); font-size:0.9rem; margin-top:4px; }
 .profiel-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start; }
 @media (max-width:900px) { .profiel-grid { grid-template-columns:1fr; } }
+.bedrijfsprofiel-inhoud .info-kaart {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0 0 16px 0;
+    border-bottom: 1px solid var(--gray-100);
+    margin-bottom: 16px !important;
+    box-shadow: none;
+}
+.bedrijfsprofiel-inhoud .info-kaart:last-child { border-bottom: none; }
+.bedrijfsprofiel-inhoud .profiel-grid > div .info-kaart:last-child { margin-bottom: 0 !important; }
 #profielKaart { height:260px; border-radius:14px; overflow:hidden; border:1px solid var(--gray-200); margin-top:16px; }
 .profiel-terug { color:var(--gray-400); text-decoration:none; font-size:0.85rem; display:inline-block; margin-bottom:16px; }
 .profiel-terug:hover { color:var(--brand-600); }
@@ -8652,6 +8664,21 @@ select.klik-bewerken-veld { cursor:pointer; }
                     {% if f.afstand %}<span style="font-size:11.5px;color:var(--brand-600);font-family:var(--font-mono);">{{ f.afstand }} km</span>{% endif %}
                 </div>
                 <div style="font-size:11.5px;color:var(--gray-400);margin-top:2px;">{{ f.regio }}, {{ f.land }} · match op {{ f.gedeelde_kwaliteiten }}</div>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if actieve_leveranciers %}
+        <div class="info-kaart" style="margin-top:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Leveranciers die leveren</div>
+            {% for l in actieve_leveranciers %}
+            <a href="/bedrijf/{{ l.naam|urlencode }}" style="display:block;padding:10px 0;border-bottom:1px solid var(--gray-50);text-decoration:none;color:inherit;">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                    <b style="font-size:13px;color:var(--gray-800);">{{ l.naam }}</b>
+                    {% if l.totaal_volume %}<span style="font-size:11.5px;color:var(--brand-600);font-family:var(--font-mono);">{{ "{:,.0f}".format(l.totaal_volume) }} t</span>{% endif %}
+                </div>
+                <div style="font-size:11.5px;color:var(--gray-400);margin-top:2px;">{{ l.land }} · {{ l.aantal_shipments }} shipment{{ 's' if l.aantal_shipments != 1 else '' }}{% if l.laatste_datum %} · laatst {{ l.laatste_datum }}{% endif %}</div>
             </a>
             {% endfor %}
         </div>
@@ -8909,6 +8936,7 @@ async function uploadFotoProfiel() {
 initFotoBrowser();
 herbouwVolumeRijen();
 </script>
+</div>
     """
 
     # --- Open orders + laatste contact (echte data, dezelfde logica als op de zoekpagina) ---
@@ -8998,11 +9026,30 @@ herbouwVolumeRijen();
         [s for s in laad_shipments() if _bedrijf_naam_laag in (s.get("origin_leverancier","").strip().lower(), s.get("destination_naam","").strip().lower())],
         key=lambda s: s.get("datum",""), reverse=True
     )
+
+    # --- Echte leveranciers die aan dit bedrijf leveren (uit shipment-geschiedenis, geen matching-gok) ---
+    _leveren_aan_dict = {}
+    for s in laad_shipments():
+        if s.get("destination_naam","").strip().lower() != _bedrijf_naam_laag:
+            continue
+        _lev_naam = s.get("origin_leverancier","").strip()
+        if not _lev_naam:
+            continue
+        if _lev_naam not in _leveren_aan_dict:
+            _leveren_aan_dict[_lev_naam] = {"naam": _lev_naam, "land": s.get("origin_land",""), "aantal_shipments": 0, "totaal_volume": 0.0, "laatste_datum": ""}
+        _entry = _leveren_aan_dict[_lev_naam]
+        _entry["aantal_shipments"] += 1
+        _entry["totaal_volume"] += parse_hoeveelheid_getal(s.get("werkelijk_hoeveelheid") or s.get("gepland_hoeveelheid") or "")
+        if s.get("datum","") > _entry["laatste_datum"]:
+            _entry["laatste_datum"] = s.get("datum","")
+    actieve_leveranciers = sorted(_leveren_aan_dict.values(), key=lambda x: -x["totaal_volume"])
+
     return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd,
                                     is_fabriek_profiel=is_fabriek_profiel,
                                     open_orders_aantal=open_orders_aantal, open_orders_ton=open_orders_ton,
                                     laatst_contact_profiel=laatst_contact_profiel, afstand_alblasserdam=afstand_alblasserdam,
                                     materialen_volume_lijst=materialen_volume_lijst, recente_orders_profiel=recente_orders_profiel,
+                                    actieve_leveranciers=actieve_leveranciers,
                                     fabrieken_gedeelde_kwaliteiten=fabrieken_gedeelde_kwaliteiten, matchpoel_label=matchpoel_label,
                                     bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
                                     orderkleuren=ORDER_KLEUREN,
