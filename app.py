@@ -2805,6 +2805,7 @@ def sidebar_html(actief):
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
         ("logistiek", "/logistiek", "LG", "Logistiek"),
+        ("facturen", "/facturen", "FA", "Facturen"),
         ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
         ("voorraad", "/voorraad", "VR", "Voorraad"),
         ("opslagen", "/opslagen", "OP", "Opslagen"),
@@ -5064,7 +5065,7 @@ def set_accountmanager():
 
     return jsonify({"accountmanager": nieuwe_am})
 
-BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten", "certificeringen", "betalingstermijn"}
+BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten", "certificeringen", "betalingstermijn", "bankgegevens", "vat_nummer", "email_logistiek", "email_finance", "email_sales"}
 
 @app.route("/api/bedrijf-veld", methods=["POST"])
 def set_bedrijf_veld():
@@ -7850,6 +7851,163 @@ def logistiek_pagina():
         filter_flow_type=filter_flow_type, filter_status_log=filter_status_log, filter_materiaal_log=filter_materiaal_log,
         shipment_statussen=SHIPMENT_STATUSSEN, shipment_materialen_log=shipment_materialen_log)
 
+@app.route("/facturen", methods=["GET", "POST"])
+def facturen_pagina():
+    if request.method == "POST":
+        actie = request.form.get("actie", "")
+        alle_facturen = laad_facturen()
+        if actie == "toevoegen":
+            nieuwe_factuur = {
+                "id": str(uuid.uuid4()),
+                "bedrijf": request.form.get("bedrijf", "").strip(),
+                "referentie": request.form.get("referentie", "").strip(),
+                "omschrijving": request.form.get("omschrijving", "").strip(),
+                "bedrag": request.form.get("bedrag", "").strip(),
+                "factuurdatum": request.form.get("factuurdatum", "").strip(),
+                "vervaldatum": request.form.get("vervaldatum", "").strip(),
+                "betaalddatum": "",
+                "gebruiker": session.get("gebruikersnaam", ""),
+                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            }
+            if nieuwe_factuur["bedrijf"] and nieuwe_factuur["bedrag"] and nieuwe_factuur["vervaldatum"]:
+                alle_facturen.append(nieuwe_factuur)
+                bewaar_facturen(alle_facturen)
+        elif actie == "markeer_betaald":
+            factuur_id = request.form.get("factuur_id", "")
+            for f in alle_facturen:
+                if f.get("id") == factuur_id:
+                    f["betaalddatum"] = datetime.date.today().isoformat()
+            bewaar_facturen(alle_facturen)
+        elif actie == "verwijderen":
+            factuur_id = request.form.get("factuur_id", "")
+            alle_facturen = [f for f in alle_facturen if f.get("id") != factuur_id]
+            bewaar_facturen(alle_facturen)
+        return redirect(url_for("facturen_pagina", **{k: v for k, v in request.args.items()}))
+
+    vooringevuld_bedrijf = request.args.get("bedrijf", "")
+    filter_status_fact = request.args.get("filter_status", "")
+
+    alle_facturen = laad_facturen()
+    for f in alle_facturen:
+        f["status"] = bepaal_factuur_status(f)
+
+    getoonde_facturen = alle_facturen
+    if vooringevuld_bedrijf:
+        getoonde_facturen = [f for f in getoonde_facturen if f.get("bedrijf") == vooringevuld_bedrijf]
+    if filter_status_fact:
+        getoonde_facturen = [f for f in getoonde_facturen if f.get("status") == filter_status_fact]
+    getoonde_facturen.sort(key=lambda f: f.get("vervaldatum", ""))
+
+    def _bedrag_getal(f):
+        try:
+            return float(str(f.get("bedrag", "0")).replace(",", "."))
+        except (ValueError, TypeError):
+            return 0.0
+
+    openstaande_facturen = [f for f in alle_facturen if f.get("status") != "Betaald"]
+    te_laat_facturen = [f for f in alle_facturen if f.get("status") == "Te laat"]
+    totaal_openstaand = sum(_bedrag_getal(f) for f in openstaande_facturen)
+
+    _status_alle_fact = laad_status()
+    _accountmanagers_alle_fact = laad_accountmanagers()
+    alle_bedrijfsnamen_fact = sorted(set(_status_alle_fact.keys()) | set(_accountmanagers_alle_fact.keys()))[:500]
+
+    inhoud = """
+<style>
+.fact-badge { font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:10px; }
+.fact-rij { display:flex; align-items:center; padding:0 var(--space-4); }
+.fact-thead { padding-top:10px; padding-bottom:10px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
+.fact-row { padding-top:11px; padding-bottom:11px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
+.fact-row:last-child { border-bottom:none; }
+</style>
+<div class="page-title">Facturen</div>
+
+<div class="kpi-mini" style="display:flex;gap:16px;margin-bottom:20px;">
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px 18px;flex:1;">
+        <div style="font-size:1.4rem;font-weight:800;color:var(--brand-600);">{{ openstaande_facturen|length }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Openstaand</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px 18px;flex:1;">
+        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">€{{ "{:,.0f}".format(totaal_openstaand).replace(",", ".") }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Totaal openstaand bedrag</div>
+    </div>
+    <div style="background:#fff;border:1px solid {{ '#fecaca' if te_laat_facturen else 'var(--gray-200)' }};border-radius:10px;padding:14px 18px;flex:1;">
+        <div style="font-size:1.4rem;font-weight:800;color:{{ '#dc2626' if te_laat_facturen else 'var(--gray-800)' }};">{{ te_laat_facturen|length }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Te laat</div>
+    </div>
+</div>
+
+<form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    {% if vooringevuld_bedrijf %}<input type="hidden" name="bedrijf" value="{{ vooringevuld_bedrijf }}">{% endif %}
+    <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle statussen</option>
+        <option value="Open" {% if filter_status_fact == "Open" %}selected{% endif %}>Open</option>
+        <option value="Te laat" {% if filter_status_fact == "Te laat" %}selected{% endif %}>Te laat</option>
+        <option value="Betaald" {% if filter_status_fact == "Betaald" %}selected{% endif %}>Betaald</option>
+    </select>
+    {% if vooringevuld_bedrijf %}<a href="/facturen" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Alle bedrijven tonen</a>{% endif %}
+    <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_facturen|length }} van {{ alle_facturen|length }}</span>
+</form>
+
+<div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px 18px;max-width:600px;margin-bottom:20px;">
+    <div class="dg-kaart-titel" style="margin-bottom:10px;">Factuur toevoegen</div>
+    <form method="POST">
+        <input type="hidden" name="actie" value="toevoegen">
+        <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" list="bedrijvenLijstFacturen" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+        <datalist id="bedrijvenLijstFacturen">{% for naam in alle_bedrijfsnamen_fact %}<option value="{{ naam }}">{% endfor %}</datalist>
+        <input type="text" name="referentie" placeholder="Referentie / omschrijving" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+            <input type="text" name="bedrag" placeholder="Bedrag (€)" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <input type="date" name="factuurdatum" title="Factuurdatum" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <input type="date" name="vervaldatum" title="Vervaldatum" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        </div>
+        <button type="submit" style="margin-top:10px;padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Factuur toevoegen</button>
+    </form>
+</div>
+
+{% if getoonde_facturen %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="fact-rij fact-thead">
+        <span style="flex:1.4;">Bedrijf</span>
+        <span style="flex:1.2;">Referentie</span>
+        <span style="width:100px;text-align:right;">Bedrag</span>
+        <span style="width:100px;">Vervaldatum</span>
+        <span style="width:100px;">Status</span>
+        <span style="width:140px;text-align:right;">Actie</span>
+    </div>
+    {% for f in getoonde_facturen %}
+    <div class="fact-rij fact-row">
+        <span style="flex:1.4;"><a href="/bedrijf/{{ f.bedrijf|urlencode }}" style="color:var(--gray-800);font-weight:600;text-decoration:none;">{{ f.bedrijf }}</a></span>
+        <span style="flex:1.2;color:var(--gray-600);">{{ f.referentie|default('—', true) }}</span>
+        <span style="width:100px;text-align:right;font-family:var(--font-mono);">€{{ f.bedrag }}</span>
+        <span style="width:100px;color:var(--gray-500);">{{ f.vervaldatum }}</span>
+        <span style="width:100px;">
+            <span class="fact-badge" style="background:{{ '#f0fdf4' if f.status=='Betaald' else ('#fef2f2' if f.status=='Te laat' else '#eff6ff') }};color:{{ '#16a34a' if f.status=='Betaald' else ('#dc2626' if f.status=='Te laat' else '#1d4ed8') }};">{{ f.status }}</span>
+        </span>
+        <span style="width:140px;text-align:right;display:flex;justify-content:flex-end;gap:6px;">
+            {% if f.status != "Betaald" %}
+            <form method="POST" style="margin:0;"><input type="hidden" name="actie" value="markeer_betaald"><input type="hidden" name="factuur_id" value="{{ f.id }}">
+                <button type="submit" style="background:#f0fdf4;color:#16a34a;border:none;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700;">✓ Betaald</button>
+            </form>
+            {% endif %}
+            <form method="POST" style="margin:0;" onsubmit="return confirm('Factuur verwijderen?');"><input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="factuur_id" value="{{ f.id }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.95rem;">✕</button>
+            </form>
+        </span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">{% if vooringevuld_bedrijf %}Nog geen facturen voor {{ vooringevuld_bedrijf }}.{% else %}Nog geen facturen toegevoegd.{% endif %}</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Facturen", "facturen", inhoud)
+    return render_template_string(pagina,
+        vooringevuld_bedrijf=vooringevuld_bedrijf, filter_status_fact=filter_status_fact,
+        alle_facturen=alle_facturen, getoonde_facturen=getoonde_facturen,
+        openstaande_facturen=openstaande_facturen, te_laat_facturen=te_laat_facturen,
+        totaal_openstaand=totaal_openstaand, alle_bedrijfsnamen_fact=alle_bedrijfsnamen_fact)
+
 @app.route("/contacten", methods=["GET", "POST"])
 def contacten():
     if request.method == "POST":
@@ -9137,6 +9295,38 @@ select.klik-bewerken-veld { cursor:pointer; }
         </div>
         {% endif %}
     </div>
+    <div style="margin-top:10px;font-size:13px;">
+        <span id="echteWebsiteWrap" style="display:none;">🌐 <a id="echteWebsiteLink" href="#" target="_blank" style="color:var(--brand-600);font-weight:600;text-decoration:none;"></a></span>
+    </div>
+    {% if not is_fabriek_profiel %}
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100);">
+        <button type="button" onclick="toggleMeerInfo()" id="meerInfoToggleBtn" style="font-size:12px;font-weight:600;color:var(--brand-600);background:none;border:none;cursor:pointer;padding:0;">+ Meer informatie (bank, VAT, contact per afdeling)</button>
+        <div id="meerInfoPaneel" style="display:none;margin-top:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;">
+                <div>
+                    <div class="veld-label">Bankgegevens (IBAN)</div>
+                    <input type="text" value="{{ bedrijf.bankgegevens or '' }}" data-veld="bankgegevens" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+                </div>
+                <div>
+                    <div class="veld-label">VAT / BTW-nummer</div>
+                    <input type="text" value="{{ bedrijf.vat_nummer or '' }}" data-veld="vat_nummer" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+                </div>
+                <div>
+                    <div class="veld-label">E-mail logistiek</div>
+                    <input type="text" value="{{ bedrijf.email_logistiek or '' }}" data-veld="email_logistiek" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+                </div>
+                <div>
+                    <div class="veld-label">E-mail finance</div>
+                    <input type="text" value="{{ bedrijf.email_finance or '' }}" data-veld="email_finance" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+                </div>
+                <div>
+                    <div class="veld-label">E-mail sales</div>
+                    <input type="text" value="{{ bedrijf.email_sales or '' }}" data-veld="email_sales" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <div class="info-kaart" style="margin-bottom:16px;">
@@ -9174,15 +9364,10 @@ select.klik-bewerken-veld { cursor:pointer; }
 {% if not is_fabriek_profiel %}
 <div class="info-kaart" style="margin-bottom:16px;">
     <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:4px;">Financieel</div>
-    <div id="facturenSamenvatting" style="font-size:0.78rem;color:var(--gray-400);margin-bottom:12px;">Laden...</div>
-    <div id="facturenLijst"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;">
-        <input type="text" id="factuurReferentie" placeholder="Referentie / omschrijving" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;grid-column:span 3;">
-        <input type="text" id="factuurBedrag" placeholder="Bedrag (€)" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;">
-        <input type="date" id="factuurFactuurdatum" title="Factuurdatum" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;">
-        <input type="date" id="factuurVervaldatum" title="Vervaldatum" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;">
-    </div>
-    <button onclick="voegFactuurToe()" style="margin-top:8px;padding:6px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">+ Factuur toevoegen</button>
+    <a href="/facturen?bedrijf={{ bedrijf.naam|urlencode }}" id="facturenSamenvattingLink" style="display:block;text-decoration:none;padding:4px 0;">
+        <div id="facturenSamenvatting" style="font-size:1.2rem;font-weight:700;color:var(--brand-600);">Laden...</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">Bekijk alle facturen →</div>
+    </a>
 </div>
 
 <div class="info-kaart" style="margin-bottom:16px;">
@@ -9295,12 +9480,29 @@ function vulContact(data) {
     var adrInput = document.querySelector('[data-veld="adres"]');
     if (telInput && !telInput.value && data.telefoon) telInput.value = data.telefoon;
     if (adrInput && !adrInput.value && data.adres) adrInput.value = data.adres;
+    if (data.website) {
+        var wrap = document.getElementById("echteWebsiteWrap");
+        var link = document.getElementById("echteWebsiteLink");
+        if (wrap && link) {
+            link.href = data.website;
+            link.textContent = data.website.replace("https://", "").replace("http://", "").split("/")[0];
+            wrap.style.display = "inline";
+        }
+    }
 }
 
 if (BEDRIJF_URL) {
     fetch("/details?url=" + encodeURIComponent(BEDRIJF_URL)).then(r => r.json()).then(vulContact);
 } else {
     vulContact({});
+}
+
+function toggleMeerInfo() {
+    var paneel = document.getElementById("meerInfoPaneel");
+    var knop = document.getElementById("meerInfoToggleBtn");
+    var isOpen = paneel.style.display !== "none";
+    paneel.style.display = isOpen ? "none" : "block";
+    knop.textContent = isOpen ? "+ Meer informatie (bank, VAT, contact per afdeling)" : "− Meer informatie verbergen";
 }
 
 async function laadNotities() {
@@ -9424,74 +9626,25 @@ async function toggleOpslaanProfiel(el) {
 laadNotities();
 
 async function laadFacturen() {
-    const lijstDiv = document.getElementById("facturenLijst");
     const samenvattingDiv = document.getElementById("facturenSamenvatting");
-    if (!lijstDiv) return;
-    lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Laden...</p>";
+    if (!samenvattingDiv) return;
+    samenvattingDiv.textContent = "Laden...";
     try {
         const res = await fetch("/api/facturen?bedrijf=" + encodeURIComponent(BEDRIJF_NAAM));
         const facturen = await res.json();
-        const badgeKleur = {"Open": "#eff6ff", "Te laat": "#fef2f2", "Betaald": "#f0fdf4"};
-        const tekstKleur = {"Open": "#1d4ed8", "Te laat": "#dc2626", "Betaald": "#16a34a"};
-
         const openstaand = facturen.filter(f => f.status !== "Betaald");
         const teLaat = facturen.filter(f => f.status === "Te laat");
         const totaalOpenstaand = openstaand.reduce((som, f) => som + (parseFloat(String(f.bedrag).replace(",", ".")) || 0), 0);
-        samenvattingDiv.textContent = facturen.length
-            ? `${openstaand.length} openstaand (€${totaalOpenstaand.toLocaleString("nl-NL", {maximumFractionDigits:0})}) · ${teLaat.length} te laat`
-            : "Nog geen facturen.";
-
         if (facturen.length === 0) {
-            lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Nog geen facturen toegevoegd.</p>";
-            return;
+            samenvattingDiv.textContent = "0";
+        } else {
+            samenvattingDiv.innerHTML = `${openstaand.length}<span style="font-size:0.7rem;font-weight:600;color:var(--gray-300);"> openstaand</span>`;
+            const subDiv = samenvattingDiv.parentElement.querySelector("div:last-child");
+            if (subDiv) subDiv.textContent = `€${totaalOpenstaand.toLocaleString("nl-NL", {maximumFractionDigits:0})} · ${teLaat.length} te laat — Bekijk alle facturen →`;
         }
-        let html = "";
-        facturen.forEach(f => {
-            html += `
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
-                    <div>
-                        <span style="font-weight:600;color:#1e293b;">${f.referentie || "(geen referentie)"}</span>
-                        <span style="color:#94a3b8;"> · €${f.bedrag} · vervalt ${f.vervaldatum || "—"}</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;background:${badgeKleur[f.status]};color:${tekstKleur[f.status]};">${f.status}</span>
-                        ${f.status !== "Betaald" ? `<button onclick="markeerFactuurBetaald('${f.id}')" title="Markeer als betaald" style="background:none;border:1px solid #e2e8f0;border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;color:#16a34a;">✓</button>` : ""}
-                        <button onclick="verwijderFactuurProfiel('${f.id}')" title="Verwijderen" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:12px;">✕</button>
-                    </div>
-                </div>`;
-        });
-        lijstDiv.innerHTML = html;
     } catch (err) {
-        lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>Kon facturen niet laden.</p>";
+        samenvattingDiv.textContent = "—";
     }
-}
-
-async function voegFactuurToe() {
-    const referentie = document.getElementById("factuurReferentie").value.trim();
-    const bedrag = document.getElementById("factuurBedrag").value.trim();
-    const factuurdatum = document.getElementById("factuurFactuurdatum").value;
-    const vervaldatum = document.getElementById("factuurVervaldatum").value;
-    if (!bedrag || !vervaldatum) { alert("Bedrag en vervaldatum zijn verplicht."); return; }
-    await fetch("/api/facturen", {
-        method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({bedrijf: BEDRIJF_NAAM, referentie: referentie, bedrag: bedrag, factuurdatum: factuurdatum, vervaldatum: vervaldatum})
-    });
-    document.getElementById("factuurReferentie").value = "";
-    document.getElementById("factuurBedrag").value = "";
-    document.getElementById("factuurFactuurdatum").value = "";
-    document.getElementById("factuurVervaldatum").value = "";
-    laadFacturen();
-}
-
-async function markeerFactuurBetaald(id) {
-    await fetch("/api/facturen/" + id + "/betaald", {method: "POST"});
-    laadFacturen();
-}
-
-async function verwijderFactuurProfiel(id) {
-    if (!confirm("Deze factuur verwijderen?")) return;
-    await fetch("/api/facturen", {method: "DELETE", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: id})});
-    laadFacturen();
 }
 
 async function laadDocumentenProfiel() {
