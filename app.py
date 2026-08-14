@@ -132,6 +132,47 @@ def bewaar_contactpersonen(data):
     with open(CONTACTPERSONEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+FACTUREN_FILE = datapad("facturen.json")
+
+def laad_facturen():
+    try:
+        with open(FACTUREN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_facturen(data):
+    with open(FACTUREN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def bepaal_factuur_status(factuur):
+    """Status wordt afgeleid: Betaald als betaalddatum is gezet, anders Open of Te laat t.o.v. vervaldatum."""
+    if factuur.get("betaalddatum"):
+        return "Betaald"
+    vervaldatum = factuur.get("vervaldatum", "")
+    if vervaldatum:
+        try:
+            if datetime.datetime.strptime(vervaldatum, "%Y-%m-%d").date() < datetime.date.today():
+                return "Te laat"
+        except (ValueError, TypeError):
+            pass
+    return "Open"
+
+DOCUMENTEN_FILE = datapad("documenten.json")
+DOCUMENTEN_MAP = datapad("documenten_uploads")
+DOCUMENT_EXTENSIES_TOEGESTAAN = {"pdf", "doc", "docx"}
+
+def laad_documenten():
+    try:
+        with open(DOCUMENTEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_documenten(data):
+    with open(DOCUMENTEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 def laad_marktprijzen():
     try:
         with open(MARKTPRIJZEN_FILE, "r", encoding="utf-8") as f:
@@ -2763,6 +2804,7 @@ def sidebar_html(actief):
         ("certificeringen", "/certificeringen", "CF", "Certifications"),
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
+        ("logistiek", "/logistiek", "LG", "Logistiek"),
         ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
         ("voorraad", "/voorraad", "VR", "Voorraad"),
         ("opslagen", "/opslagen", "OP", "Opslagen"),
@@ -4697,7 +4739,7 @@ def export_csv():
     output = io.StringIO()
     schrijver = csv.writer(output)
     schrijver.writerow(["Naam", "Land", "Stad/Regio", "Bedrijfstype", "Materialen", "Kwaliteiten", "Klanttype", "Volume (t/jaar)",
-                         "Volume per materiaal", "Adres", "Telefoonnummer", "Contactpersoon", "Accountmanager", "Certificeringen", "Website"])
+                         "Volume per materiaal", "Adres", "Telefoonnummer", "Contactpersoon", "Accountmanager", "Certificeringen"])
     accountmanagers_export = laad_accountmanagers()
     for b in bedrijven:
         volumes_dict = b.get("materiaal_volumes", {})
@@ -4706,7 +4748,7 @@ def export_csv():
             b.get("naam",""), b.get("land",""), b.get("regio",""), b.get("brontype",""),
             b.get("materialen",""), b.get("kwaliteiten",""), b.get("klanttype",""), b.get("volume",""),
             volumes_tekst, b.get("adres",""), b.get("telefoon",""), b.get("contactpersoon",""),
-            accountmanagers_export.get(b.get("naam",""), ""), b.get("certificeringen",""), b.get("url",""),
+            accountmanagers_export.get(b.get("naam",""), ""), b.get("certificeringen",""),
         ])
 
     from flask import Response
@@ -5022,7 +5064,7 @@ def set_accountmanager():
 
     return jsonify({"accountmanager": nieuwe_am})
 
-BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten", "certificeringen"}
+BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten", "certificeringen", "betalingstermijn"}
 
 @app.route("/api/bedrijf-veld", methods=["POST"])
 def set_bedrijf_veld():
@@ -5117,6 +5159,132 @@ def set_cert_vervaldatum():
         alle.pop(sleutel, None)
     bewaar_cert_vervaldatums(alle)
     return jsonify({"vervaldatum": vervaldatum})
+
+@app.route("/api/facturen", methods=["GET"])
+def get_facturen():
+    bedrijf = request.args.get("bedrijf", "")
+    alle = laad_facturen()
+    lijst = [f for f in alle if f.get("bedrijf") == bedrijf]
+    lijst.sort(key=lambda f: f.get("vervaldatum", ""))
+    for f in lijst:
+        f["status"] = bepaal_factuur_status(f)
+    return jsonify(lijst)
+
+@app.route("/api/facturen", methods=["POST"])
+def add_factuur():
+    data = request.get_json()
+    bedrijf = data.get("bedrijf", "")
+    bedrag = data.get("bedrag", "").strip() if data.get("bedrag") else ""
+    factuurdatum = data.get("factuurdatum", "").strip()
+    vervaldatum = data.get("vervaldatum", "").strip()
+    referentie = data.get("referentie", "").strip()
+    omschrijving = data.get("omschrijving", "").strip()
+    if not bedrijf or not bedrag or not vervaldatum:
+        return jsonify({"error": "Bedrijf, bedrag en vervaldatum zijn verplicht"}), 400
+    alle = laad_facturen()
+    nieuwe = {
+        "id": str(uuid.uuid4()), "bedrijf": bedrijf, "bedrag": bedrag,
+        "factuurdatum": factuurdatum, "vervaldatum": vervaldatum,
+        "referentie": referentie, "omschrijving": omschrijving,
+        "betaalddatum": "", "gebruiker": session.get("gebruikersnaam", ""),
+        "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+    }
+    alle.append(nieuwe)
+    bewaar_facturen(alle)
+    nieuwe["status"] = bepaal_factuur_status(nieuwe)
+    return jsonify(nieuwe)
+
+@app.route("/api/facturen/<factuur_id>/betaald", methods=["POST"])
+def markeer_factuur_betaald(factuur_id):
+    alle = laad_facturen()
+    gevonden = False
+    for f in alle:
+        if f.get("id") == factuur_id:
+            f["betaalddatum"] = datetime.date.today().isoformat()
+            gevonden = True
+    if not gevonden:
+        return jsonify({"error": "Factuur niet gevonden"}), 404
+    bewaar_facturen(alle)
+    return jsonify({"ok": True})
+
+@app.route("/api/facturen", methods=["DELETE"])
+def verwijder_factuur():
+    data = request.get_json()
+    factuur_id = data.get("id", "")
+    alle = laad_facturen()
+    if not any(f.get("id") == factuur_id for f in alle):
+        return jsonify({"error": "Factuur niet gevonden"}), 404
+    alle = [f for f in alle if f.get("id") != factuur_id]
+    bewaar_facturen(alle)
+    return jsonify({"ok": True})
+
+@app.route("/api/documenten", methods=["GET"])
+def get_documenten():
+    bedrijf = request.args.get("bedrijf", "")
+    alle = laad_documenten()
+    return jsonify(alle.get(bedrijf, []))
+
+@app.route("/api/documenten", methods=["POST"])
+def upload_document():
+    bedrijf = request.form.get("bedrijf", "")
+    bestand = request.files.get("document")
+    if not bedrijf or not bestand:
+        return jsonify({"error": "Bedrijf en document zijn verplicht"}), 400
+
+    origineel = bestand.filename or ""
+    extensie = origineel.rsplit(".", 1)[-1].lower() if "." in origineel else ""
+    if extensie not in DOCUMENT_EXTENSIES_TOEGESTAAN:
+        return jsonify({"error": "Alleen PDF- en Word-bestanden zijn toegestaan (.pdf, .doc, .docx)"}), 400
+
+    if not os.path.exists(DOCUMENTEN_MAP):
+        os.makedirs(DOCUMENTEN_MAP)
+
+    bestandsnaam = f"{uuid.uuid4()}.{extensie}"
+    bestand.save(os.path.join(DOCUMENTEN_MAP, bestandsnaam))
+
+    alle = laad_documenten()
+    alle.setdefault(bedrijf, [])
+    alle[bedrijf].append({
+        "bestandsnaam": bestandsnaam,
+        "originele_naam": origineel,
+        "geupload_door": session.get("gebruikersnaam", ""),
+        "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+    })
+    bewaar_documenten(alle)
+    return jsonify({"ok": True, "bestandsnaam": bestandsnaam})
+
+@app.route("/api/documenten", methods=["DELETE"])
+def verwijder_document():
+    data = request.get_json()
+    bedrijf = data.get("bedrijf", "")
+    bestandsnaam = data.get("bestandsnaam", "")
+    alle = laad_documenten()
+    lijst = alle.get(bedrijf, [])
+    doel = next((d for d in lijst if d.get("bestandsnaam") == bestandsnaam), None)
+    if not doel:
+        return jsonify({"error": "Document niet gevonden"}), 404
+    if doel.get("geupload_door") != session.get("gebruikersnaam", "") and not is_huidige_gebruiker_admin():
+        return jsonify({"error": "Je kunt alleen je eigen documenten verwijderen."}), 403
+    alle[bedrijf] = [d for d in lijst if d.get("bestandsnaam") != bestandsnaam]
+    bewaar_documenten(alle)
+    pad = os.path.join(DOCUMENTEN_MAP, bestandsnaam)
+    if os.path.exists(pad):
+        try:
+            os.remove(pad)
+        except Exception:
+            pass
+    return jsonify({"ok": True})
+
+@app.route("/documenten_uploads/<bestandsnaam>")
+def get_document_bestand(bestandsnaam):
+    alle = laad_documenten()
+    originele_naam = bestandsnaam
+    for lijst in alle.values():
+        for d in lijst:
+            if d.get("bestandsnaam") == bestandsnaam:
+                originele_naam = d.get("originele_naam", bestandsnaam)
+    from flask import send_from_directory
+    return send_from_directory(DOCUMENTEN_MAP, bestandsnaam, as_attachment=True, download_name=originele_naam)
 
 @app.route("/api/status", methods=["POST"])
 def set_status():
@@ -7586,6 +7754,102 @@ def orders_pagina():
                                     alle_bedrijfsnamen=alle_bedrijfsnamen, aantal_verlopen=aantal_verlopen,
                                     gebruikersnaam=session.get("gebruikersnaam", ""))
 
+@app.route("/logistiek")
+def logistiek_pagina():
+    vooringevuld_bedrijf = request.args.get("bedrijf", "")
+
+    alle_shipments_log = laad_shipments()
+    for s in alle_shipments_log:
+        s["flow_type"] = bepaal_shipment_flow_type(s)
+    actieve_shipments_log = [s for s in alle_shipments_log if s.get("status") != "Cancelled"]
+
+    if vooringevuld_bedrijf:
+        _naam_laag = vooringevuld_bedrijf.strip().lower()
+        actieve_shipments_log = [
+            s for s in actieve_shipments_log
+            if s.get("origin_leverancier", "").strip().lower() == _naam_laag
+            or s.get("destination_naam", "").strip().lower() == _naam_laag
+        ]
+
+    filter_flow_type = request.args.get("filter_flow_type", "")
+    filter_status_log = request.args.get("filter_status", "")
+    filter_materiaal_log = request.args.get("filter_materiaal", "")
+    getoonde_shipments_log = actieve_shipments_log
+    if filter_flow_type:
+        getoonde_shipments_log = [s for s in getoonde_shipments_log if s.get("flow_type") == filter_flow_type]
+    if filter_status_log:
+        getoonde_shipments_log = [s for s in getoonde_shipments_log if s.get("status") == filter_status_log]
+    if filter_materiaal_log:
+        getoonde_shipments_log = [s for s in getoonde_shipments_log if s.get("materiaal") == filter_materiaal_log]
+    getoonde_shipments_log = sorted(getoonde_shipments_log, key=lambda s: s.get("datum", ""), reverse=True)
+
+    shipment_materialen_log = sorted({s.get("materiaal", "") for s in actieve_shipments_log if s.get("materiaal")})
+
+    inhoud = """
+<style>
+.log-tabel-rij { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:13px; }
+.log-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
+.log-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; }
+</style>
+<div class="page-title">Logistiek</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">
+    {% if vooringevuld_bedrijf %}Shipments voor <b style="color:var(--gray-700);">{{ vooringevuld_bedrijf }}</b> — <a href="/logistiek" style="color:var(--brand-600);">alles tonen</a>
+    {% else %}Alle actieve shipments (inbound, outbound en direct flow){% endif %}
+</p>
+
+<form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    {% if vooringevuld_bedrijf %}<input type="hidden" name="bedrijf" value="{{ vooringevuld_bedrijf }}">{% endif %}
+    <select name="filter_flow_type" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle types</option>
+        <option value="inbound" {% if filter_flow_type == "inbound" %}selected{% endif %}>Inbound</option>
+        <option value="outbound" {% if filter_flow_type == "outbound" %}selected{% endif %}>Outbound</option>
+        <option value="direct" {% if filter_flow_type == "direct" %}selected{% endif %}>Direct</option>
+    </select>
+    <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle statussen</option>
+        {% for st in shipment_statussen %}<option value="{{ st }}" {% if filter_status_log == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+    </select>
+    <select name="filter_materiaal" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle materialen</option>
+        {% for m in shipment_materialen_log %}<option value="{{ m }}" {% if filter_materiaal_log == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+    </select>
+    <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_shipments_log|length }} van {{ actieve_shipments_log|length }}</span>
+</form>
+
+{% if getoonde_shipments_log %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="log-tabel-kop">
+        <span style="width:100px;">Datum</span>
+        <span style="flex:1.6;">Route</span>
+        <span style="flex:1;">Materiaal</span>
+        <span style="width:110px;text-align:right;">Ton</span>
+        <span style="width:90px;">Type</span>
+        <span style="width:120px;">Status</span>
+    </div>
+    {% for s in getoonde_shipments_log %}
+    <div class="log-tabel-rij">
+        <span style="width:100px;color:var(--gray-500);">{{ s.datum }}</span>
+        <span style="flex:1.6;color:var(--gray-800);font-weight:600;">{{ s.origin_land }}{% if s.origin_leverancier %} ({{ s.origin_leverancier }}){% endif %} → {{ s.destination_land }}{% if s.destination_naam %} ({{ s.destination_naam }}){% endif %}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ s.materiaal }}</span>
+        <span style="width:110px;text-align:right;font-family:var(--font-mono);color:var(--gray-600);">{{ s.gepland_hoeveelheid }}{% if s.werkelijk_hoeveelheid %} / {{ s.werkelijk_hoeveelheid }}{% endif %}</span>
+        <span style="width:90px;">
+            <span class="log-badge" style="background:{{ '#eff6ff' if s.flow_type=='inbound' else ('#fef2f2' if s.flow_type=='outbound' else '#f5f3ff') }};color:{{ '#1d4ed8' if s.flow_type=='inbound' else ('#dc2626' if s.flow_type=='outbound' else '#7c3aed') }};">{{ s.flow_type|upper }}</span>
+        </span>
+        <span style="width:120px;color:var(--gray-600);">{{ s.status }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">{% if vooringevuld_bedrijf %}Geen shipments gevonden voor {{ vooringevuld_bedrijf }}.{% else %}Geen shipments gevonden voor deze filters.{% endif %}</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Logistiek", "logistiek", inhoud)
+    return render_template_string(pagina,
+        vooringevuld_bedrijf=vooringevuld_bedrijf,
+        getoonde_shipments_log=getoonde_shipments_log, actieve_shipments_log=actieve_shipments_log,
+        filter_flow_type=filter_flow_type, filter_status_log=filter_status_log, filter_materiaal_log=filter_materiaal_log,
+        shipment_statussen=SHIPMENT_STATUSSEN, shipment_materialen_log=shipment_materialen_log)
+
 @app.route("/contacten", methods=["GET", "POST"])
 def contacten():
     if request.method == "POST":
@@ -8687,6 +8951,7 @@ select.klik-bewerken-veld { cursor:pointer; }
     <span>{{ bedrijf.regio }}, {{ bedrijf.land }}</span>
 </div>
 
+{% if is_fabriek_profiel %}
 <div style="display:flex;border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:20px;overflow:hidden;">
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
         <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume totaal</div>
@@ -8709,6 +8974,32 @@ select.klik-bewerken-veld { cursor:pointer; }
         <div style="font-size:11px;color:var(--gray-400);">{{ bedrijf.regio }}, {{ bedrijf.land }}</div>
     </div>
 </div>
+{% else %}
+<div style="display:flex;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:20px;">
+    <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-200);">
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume totaal</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ bedrijf.volume|default('—',true) }}</div>
+        <div style="font-size:11px;color:var(--gray-400);">t/jaar{% if bedrijf.materiaal_volumes %}, {{ bedrijf.materiaal_volumes|length }} materialen{% endif %}</div>
+    </div>
+    <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-200);">
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Open orders</div>
+        <a href="/logistiek?bedrijf={{ bedrijf.naam|urlencode }}" style="text-decoration:none;">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--brand-600);">{{ open_orders_aantal }} →</div>
+        </a>
+        <div style="font-size:11px;color:var(--gray-400);">{% if open_orders_ton %}{{ open_orders_ton }} t deze periode{% else %}&nbsp;{% endif %}</div>
+    </div>
+    <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-200);">
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Laatste contact</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ laatst_contact_profiel|default('—',true) }}</div>
+        <div style="font-size:11px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ bedrijf.accountmanager|default('',true) }}{% if bedrijf.telefoon %}, telefoon{% endif %}</div>
+    </div>
+    <div style="flex:1;padding:14px 20px;">
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Afstand tot Alblasserdam</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{% if afstand_alblasserdam %}{{ afstand_alblasserdam }} km{% else %}—{% endif %}</div>
+        <div style="font-size:11px;color:var(--gray-400);">{{ bedrijf.regio }}, {{ bedrijf.land }}</div>
+    </div>
+</div>
+{% endif %}
 
 {% if materialen_volume_lijst %}
 <div class="info-kaart" style="margin-bottom:16px;">
@@ -8730,6 +9021,35 @@ select.klik-bewerken-veld { cursor:pointer; }
     {% endfor %}
 </div>
 {% endif %}
+
+{% if inkoop_voortgang_lijst %}
+<div class="info-kaart" style="margin-bottom:16px;">
+    <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:12px;">Inkoop dit jaar t.o.v. jaarvolume</div>
+    <div style="display:flex;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gray-400);padding-bottom:8px;border-bottom:1px solid var(--gray-100);">
+        <span style="flex:1.2;">Materiaal</span>
+        <span style="width:90px;text-align:right;">Beschikbaar</span>
+        <span style="width:90px;text-align:right;">Ingekocht</span>
+        <span style="width:90px;text-align:right;">Nog te leveren</span>
+        <span style="width:130px;padding-left:16px;">Voortgang</span>
+    </div>
+    {% for i in inkoop_voortgang_lijst %}
+    <div style="padding:10px 0;border-bottom:1px solid var(--gray-50);font-size:13px;">
+        <div style="display:flex;align-items:center;">
+            <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ i.naam }}</span>
+            <span style="width:90px;text-align:right;font-family:var(--font-mono);">{{ "{:,.0f}".format(i.beschikbaar_jaar) }}t</span>
+            <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--brand-600);">{{ "{:,.0f}".format(i.ingekocht_dit_jaar) }}t</span>
+            <span style="width:90px;text-align:right;font-family:var(--font-mono);color:{{ '#d97706' if i.nog_te_leveren else 'var(--gray-400)' }};">{{ "{:,.0f}".format(i.nog_te_leveren) }}t</span>
+            <span style="width:130px;padding-left:16px;display:flex;align-items:center;gap:8px;">
+                <span style="flex:1;height:5px;background:var(--gray-100);border-radius:5px;overflow:hidden;"><span style="display:block;height:100%;background:var(--brand-600);width:{{ i.pct_ingekocht }}%;"></span></span>
+                <span style="font-size:11px;color:var(--gray-400);width:32px;text-align:right;">{{ i.pct_ingekocht }}%</span>
+            </span>
+        </div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:3px;">nog {{ "{:,.0f}".format(i.restant_jaarvolume) }}t beschikbaar dit jaar</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 
 {% if recente_orders_profiel %}
 <div class="info-kaart" style="margin-bottom:16px;">
@@ -8810,10 +9130,12 @@ select.klik-bewerken-veld { cursor:pointer; }
             <div class="veld-label">Telefoon</div>
             <input type="text" value="{{ bedrijf.telefoon or '' }}" data-veld="telefoon" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
         </div>
+        {% if not is_fabriek_profiel %}
         <div>
-            <div class="veld-label">Website</div>
-            <div style="font-size:13px;color:var(--gray-700);padding:3px 0;">{% if bedrijf.url %}<a href="{{ bedrijf.url }}" target="_blank" style="color:var(--brand-600);text-decoration:none;">{{ bedrijf.url }}</a>{% else %}—{% endif %}</div>
+            <div class="veld-label">Betalingstermijn</div>
+            <input type="text" value="{{ bedrijf.betalingstermijn or '' }}" data-veld="betalingstermijn" onblur="wijzigBedrijfVeld(this)" placeholder="bv. 30 dagen" class="klik-bewerken-veld">
         </div>
+        {% endif %}
     </div>
 </div>
 
@@ -8849,6 +9171,29 @@ select.klik-bewerken-veld { cursor:pointer; }
     </div>
 </div>
 
+{% if not is_fabriek_profiel %}
+<div class="info-kaart" style="margin-bottom:16px;">
+    <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:4px;">Financieel</div>
+    <div id="facturenSamenvatting" style="font-size:0.78rem;color:var(--gray-400);margin-bottom:12px;">Laden...</div>
+    <div id="facturenLijst"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;">
+        <input type="text" id="factuurReferentie" placeholder="Referentie / omschrijving" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;grid-column:span 3;">
+        <input type="text" id="factuurBedrag" placeholder="Bedrag (€)" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;">
+        <input type="date" id="factuurFactuurdatum" title="Factuurdatum" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;">
+        <input type="date" id="factuurVervaldatum" title="Vervaldatum" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12.5px;font-family:inherit;">
+    </div>
+    <button onclick="voegFactuurToe()" style="margin-top:8px;padding:6px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">+ Factuur toevoegen</button>
+</div>
+
+<div class="info-kaart" style="margin-bottom:16px;">
+    <div class="dg-kaart-titel" style="color:var(--gray-400);">Documenten</div>
+    <div id="documentenLijst" style="margin-bottom:10px;"></div>
+    <label style="display:inline-block;padding:6px 12px;background:var(--gray-100);color:var(--gray-700);border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">
+        📄 Document uploaden (PDF/Word)
+        <input type="file" id="documentInput" accept=".pdf,.doc,.docx" onchange="uploadDocumentProfiel()" style="display:none;">
+    </label>
+</div>
+{% endif %}
 
         {% if bedrijf_shipments %}
         <div class="info-kaart" style="margin-bottom:16px;">
@@ -9078,6 +9423,130 @@ async function toggleOpslaanProfiel(el) {
 }
 laadNotities();
 
+async function laadFacturen() {
+    const lijstDiv = document.getElementById("facturenLijst");
+    const samenvattingDiv = document.getElementById("facturenSamenvatting");
+    if (!lijstDiv) return;
+    lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Laden...</p>";
+    try {
+        const res = await fetch("/api/facturen?bedrijf=" + encodeURIComponent(BEDRIJF_NAAM));
+        const facturen = await res.json();
+        const badgeKleur = {"Open": "#eff6ff", "Te laat": "#fef2f2", "Betaald": "#f0fdf4"};
+        const tekstKleur = {"Open": "#1d4ed8", "Te laat": "#dc2626", "Betaald": "#16a34a"};
+
+        const openstaand = facturen.filter(f => f.status !== "Betaald");
+        const teLaat = facturen.filter(f => f.status === "Te laat");
+        const totaalOpenstaand = openstaand.reduce((som, f) => som + (parseFloat(String(f.bedrag).replace(",", ".")) || 0), 0);
+        samenvattingDiv.textContent = facturen.length
+            ? `${openstaand.length} openstaand (€${totaalOpenstaand.toLocaleString("nl-NL", {maximumFractionDigits:0})}) · ${teLaat.length} te laat`
+            : "Nog geen facturen.";
+
+        if (facturen.length === 0) {
+            lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Nog geen facturen toegevoegd.</p>";
+            return;
+        }
+        let html = "";
+        facturen.forEach(f => {
+            html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+                    <div>
+                        <span style="font-weight:600;color:#1e293b;">${f.referentie || "(geen referentie)"}</span>
+                        <span style="color:#94a3b8;"> · €${f.bedrag} · vervalt ${f.vervaldatum || "—"}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;background:${badgeKleur[f.status]};color:${tekstKleur[f.status]};">${f.status}</span>
+                        ${f.status !== "Betaald" ? `<button onclick="markeerFactuurBetaald('${f.id}')" title="Markeer als betaald" style="background:none;border:1px solid #e2e8f0;border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;color:#16a34a;">✓</button>` : ""}
+                        <button onclick="verwijderFactuurProfiel('${f.id}')" title="Verwijderen" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:12px;">✕</button>
+                    </div>
+                </div>`;
+        });
+        lijstDiv.innerHTML = html;
+    } catch (err) {
+        lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>Kon facturen niet laden.</p>";
+    }
+}
+
+async function voegFactuurToe() {
+    const referentie = document.getElementById("factuurReferentie").value.trim();
+    const bedrag = document.getElementById("factuurBedrag").value.trim();
+    const factuurdatum = document.getElementById("factuurFactuurdatum").value;
+    const vervaldatum = document.getElementById("factuurVervaldatum").value;
+    if (!bedrag || !vervaldatum) { alert("Bedrag en vervaldatum zijn verplicht."); return; }
+    await fetch("/api/facturen", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({bedrijf: BEDRIJF_NAAM, referentie: referentie, bedrag: bedrag, factuurdatum: factuurdatum, vervaldatum: vervaldatum})
+    });
+    document.getElementById("factuurReferentie").value = "";
+    document.getElementById("factuurBedrag").value = "";
+    document.getElementById("factuurFactuurdatum").value = "";
+    document.getElementById("factuurVervaldatum").value = "";
+    laadFacturen();
+}
+
+async function markeerFactuurBetaald(id) {
+    await fetch("/api/facturen/" + id + "/betaald", {method: "POST"});
+    laadFacturen();
+}
+
+async function verwijderFactuurProfiel(id) {
+    if (!confirm("Deze factuur verwijderen?")) return;
+    await fetch("/api/facturen", {method: "DELETE", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: id})});
+    laadFacturen();
+}
+
+async function laadDocumentenProfiel() {
+    const lijstDiv = document.getElementById("documentenLijst");
+    if (!lijstDiv) return;
+    lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Laden...</p>";
+    try {
+        const res = await fetch("/api/documenten?bedrijf=" + encodeURIComponent(BEDRIJF_NAAM));
+        const documenten = await res.json();
+        if (documenten.length === 0) {
+            lijstDiv.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Nog geen documenten geupload.</p>";
+            return;
+        }
+        let html = "";
+        documenten.forEach(d => {
+            html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+                    <span style="color:#1e293b;">📄 ${d.originele_naam}<br><small style="color:#94a3b8;">${d.timestamp} · ${d.geupload_door}</small></span>
+                    <span style="display:flex;gap:8px;align-items:center;">
+                        <a href="/documenten_uploads/${d.bestandsnaam}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">Download</a>
+                        <button onclick="verwijderDocumentProfiel('${d.bestandsnaam}')" title="Verwijderen" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:12px;">✕</button>
+                    </span>
+                </div>`;
+        });
+        lijstDiv.innerHTML = html;
+    } catch (err) {
+        lijstDiv.innerHTML = "<p style='font-size:13px;color:#ef4444;'>Kon documenten niet laden.</p>";
+    }
+}
+
+async function uploadDocumentProfiel() {
+    const input = document.getElementById("documentInput");
+    const bestand = input.files[0];
+    if (!bestand) return;
+    const formData = new FormData();
+    formData.append("bedrijf", BEDRIJF_NAAM);
+    formData.append("document", bestand);
+    const res = await fetch("/api/documenten", {method: "POST", body: formData});
+    const data = await res.json();
+    if (data.error) { alert(data.error); } else { laadDocumentenProfiel(); }
+    input.value = "";
+}
+
+async function verwijderDocumentProfiel(bestandsnaam) {
+    if (!confirm("Dit document verwijderen?")) return;
+    const res = await fetch("/api/documenten", {method: "DELETE", headers: {"Content-Type": "application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, bestandsnaam: bestandsnaam})});
+    const data = await res.json();
+    if (data.error) { alert(data.error); } else { laadDocumentenProfiel(); }
+}
+
+if (!document.getElementById("isFabriekProfiel")) {
+    laadFacturen();
+    laadDocumentenProfiel();
+}
+
 const FOTO_STAAT = {categorie: "Algemeen", submap: ""};
 const FOTO_CATEGORIEEN_LIJST = {{ (["Algemeen"] + materiaal_categorieen_lijst)|tojson }};
 
@@ -9222,6 +9691,44 @@ herbouwVolumeRijen();
             vol = parse_hoeveelheid_getal(waarde)
             materialen_volume_lijst.append({"naam": mat_naam, "volume": vol, "aandeel": round(vol / _totaal_volume * 100) if _totaal_volume else 0})
 
+    # --- Inkoop-voortgang dit jaar vs. jaarlijks beschikbaar volume (alleen leveranciers, echte shipment-data) ---
+    inkoop_voortgang_lijst = []
+    if not is_fabriek_profiel and isinstance(_volumes_dict, dict) and _volumes_dict:
+        _huidig_jaar = datetime.date.today().year
+        _ontvangen_statussen = ("Weighed", "Received", "Delivered")
+        _gepland_statussen = ("Planned", "Confirmed", "Loading", "Loaded", "In Transit", "Arrived")
+        for mat_naam, waarde in _volumes_dict.items():
+            beschikbaar_jaar = parse_hoeveelheid_getal(waarde)
+            if beschikbaar_jaar <= 0:
+                continue
+            ingekocht_dit_jaar = 0.0
+            nog_te_leveren = 0.0
+            for s in laad_shipments():
+                if s.get("origin_leverancier", "").strip().lower() != bedrijf["naam"].strip().lower():
+                    continue
+                if s.get("materiaal", "") != mat_naam:
+                    continue
+                if not s.get("datum"):
+                    continue
+                try:
+                    jaar_shipment = datetime.datetime.strptime(s["datum"], "%Y-%m-%d").date().year
+                except (ValueError, TypeError):
+                    continue
+                if jaar_shipment != _huidig_jaar:
+                    continue
+                if s.get("status") in _ontvangen_statussen:
+                    ingekocht_dit_jaar += shipment_hoeveelheid(s)
+                elif s.get("status") in _gepland_statussen:
+                    nog_te_leveren += shipment_hoeveelheid(s)
+            restant_jaarvolume = max(0.0, beschikbaar_jaar - ingekocht_dit_jaar)
+            inkoop_voortgang_lijst.append({
+                "naam": mat_naam, "beschikbaar_jaar": beschikbaar_jaar,
+                "ingekocht_dit_jaar": ingekocht_dit_jaar, "nog_te_leveren": nog_te_leveren,
+                "restant_jaarvolume": restant_jaarvolume,
+                "pct_ingekocht": round(min(100, ingekocht_dit_jaar / beschikbaar_jaar * 100)) if beschikbaar_jaar else 0,
+            })
+        inkoop_voortgang_lijst.sort(key=lambda x: -x["beschikbaar_jaar"])
+
     # --- Recente orders (echte data, laatste 5) + geleverd/openstaand obv gekoppelde shipments ---
     _alle_shipments_profiel = laad_shipments()
     recente_orders_profiel = []
@@ -9291,7 +9798,8 @@ herbouwVolumeRijen();
                                     is_fabriek_profiel=is_fabriek_profiel,
                                     open_orders_aantal=open_orders_aantal, open_orders_ton=open_orders_ton,
                                     laatst_contact_profiel=laatst_contact_profiel, afstand_alblasserdam=afstand_alblasserdam,
-                                    materialen_volume_lijst=materialen_volume_lijst, recente_orders_profiel=recente_orders_profiel,
+                                    materialen_volume_lijst=materialen_volume_lijst, inkoop_voortgang_lijst=inkoop_voortgang_lijst,
+                                    recente_orders_profiel=recente_orders_profiel,
                                     actieve_leveranciers=actieve_leveranciers,
                                     fabrieken_gedeelde_kwaliteiten=fabrieken_gedeelde_kwaliteiten, matchpoel_label=matchpoel_label,
                                     bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
