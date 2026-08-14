@@ -8205,11 +8205,17 @@ def leveranciers_pagina():
         land_nieuw = request.form.get("land", "").strip()
         regio_nieuw = request.form.get("regio", "").strip()
         materialen_nieuw = request.form.get("materialen", "").strip()
-        klanttype_nieuw = request.form.get("klanttype", "").strip()
+        volume_nieuw = request.form.get("volume", "").strip()
         contactpersoon_nieuw = request.form.get("contactpersoon", "").strip()
         telefoon_nieuw = request.form.get("telefoon", "").strip()
         adres_nieuw = request.form.get("adres", "").strip()
         status_nieuw = request.form.get("status", "").strip()
+        betalingstermijn_nieuw = request.form.get("betalingstermijn", "").strip()
+        bankgegevens_nieuw = request.form.get("bankgegevens", "").strip()
+        vat_nieuw = request.form.get("vat_nummer", "").strip()
+        email_log_nieuw = request.form.get("email_logistiek", "").strip()
+        email_fin_nieuw = request.form.get("email_finance", "").strip()
+        email_sales_nieuw = request.form.get("email_sales", "").strip()
 
         if not naam_nieuw:
             bericht_lev = ("fout", "Naam is verplicht.")
@@ -8220,9 +8226,11 @@ def leveranciers_pagina():
             huidige_gebruiker_lev = session.get("gebruikersnaam", "")
             ENF_BEDRIJVEN.append({
                 "naam": naam_nieuw, "land": land_nieuw, "regio": regio_nieuw,
-                "materialen": materialen_nieuw, "klanttype": klanttype_nieuw, "volume": "", "url": "",
+                "materialen": materialen_nieuw, "klanttype": "", "volume": volume_nieuw, "url": "",
                 "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
                 "adres": adres_nieuw, "telefoon": telefoon_nieuw, "contactpersoon": contactpersoon_nieuw,
+                "betalingstermijn": betalingstermijn_nieuw, "bankgegevens": bankgegevens_nieuw, "vat_nummer": vat_nieuw,
+                "email_logistiek": email_log_nieuw, "email_finance": email_fin_nieuw, "email_sales": email_sales_nieuw,
                 "bedrijf_id": TENANT_ID, "brontype": "Handmatig ingevoerd",
             })
             with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
@@ -8318,24 +8326,82 @@ def leveranciers_pagina():
 .klant-status-badge { font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
 .klant-status-tab { padding: 7px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; text-decoration: none; border: 1px solid var(--gray-200); background: #fff; color: var(--gray-600); }
 .klant-status-tab.actief { background: var(--brand-600); color: #fff; border-color: var(--brand-600); }
+.tvf-label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gray-400); margin-bottom: 4px; display: block; }
+.tvf-input { width: 100%; padding: 8px 10px; border: 1px solid var(--gray-200); border-radius: 6px; font-size: 13px; box-sizing: border-box; font-family: inherit; }
+.tvf-sectiekop { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-300); margin: 16px 0 10px; padding-top: 12px; border-top: 1px solid var(--gray-100); }
+.tvf-sectiekop:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;flex-wrap:wrap;gap:12px;padding-left:20px;">
     <div>
         <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Leveranciers</div>
     </div>
-    <div style="display:flex;gap:22px;">
+    <div style="display:flex;align-items:center;gap:22px;">
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ totaal_gevonden_lev }}</div></div>
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ alle_landen_lev|length }}</div></div>
+        <button type="button" onclick="toggleToevoegPaneel()" id="toevoegLevBtn" style="align-self:center;padding:9px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;">+ Nieuwe leverancier</button>
     </div>
 </div>
 <p style="color:var(--gray-400);margin:0 0 16px 20px;font-size:0.82rem;">Je eigen leveranciersbestand — alleen bedrijven met een toegekende status of accountmanager. Voor de volledige database: <a href="/" style="color:var(--brand-600);">Zoeken</a>.</p>
 
 {% if bericht_lev %}
-<div style="background:{{ '#f0fdf4' if bericht_lev[0] == 'succes' else '#fef2f2' }};color:{{ '#16a34a' if bericht_lev[0] == 'succes' else '#dc2626' }};padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13.5px;max-width:820px;">{{ bericht_lev[1] }}</div>
+<div style="background:{{ '#f0fdf4' if bericht_lev[0] == 'succes' else '#fef2f2' }};color:{{ '#16a34a' if bericht_lev[0] == 'succes' else '#dc2626' }};padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13.5px;margin-left:20px;max-width:820px;">{{ bericht_lev[1] }}</div>
 {% endif %}
 
-<form method="GET" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;">
+<div id="toevoegPaneel" style="display:none;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:820px;margin:0 20px 20px;">
+    <div class="dg-kaart-titel" style="margin-bottom:4px;">Nieuwe leverancier toevoegen</div>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:0;">Wordt automatisch aan jou toegewezen als accountmanager.</p>
+    <form method="POST">
+        <div class="tvf-sectiekop">Basisgegevens</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+            <div><span class="tvf-label">Bedrijfsnaam *</span><input type="text" name="naam" required class="tvf-input"></div>
+            <div><span class="tvf-label">Land</span><input type="text" name="land" class="tvf-input"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+            <div><span class="tvf-label">Stad/regio</span><input type="text" name="regio" class="tvf-input"></div>
+            <div><span class="tvf-label">Adres</span><input type="text" name="adres" class="tvf-input"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+            <div><span class="tvf-label">Materialen (bv. Paper, Plastic)</span><input type="text" name="materialen" class="tvf-input"></div>
+            <div><span class="tvf-label">Volume (t/jaar)</span><input type="text" name="volume" class="tvf-input"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div><span class="tvf-label">Status</span>
+                <select name="status" class="tvf-input">
+                    <option value="">Status kiezen (optioneel)</option>
+                    <option value="potentie">🟡 Potentie</option>
+                    <option value="in_proces">🔵 In Proces</option>
+                    <option value="klant">🟢 Klant</option>
+                </select>
+            </div>
+            <div><span class="tvf-label">Betalingstermijn</span><input type="text" name="betalingstermijn" placeholder="bv. 30 dagen" class="tvf-input"></div>
+        </div>
+
+        <div class="tvf-sectiekop">Contactpersoon</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div><span class="tvf-label">Naam contactpersoon</span><input type="text" name="contactpersoon" class="tvf-input"></div>
+            <div><span class="tvf-label">Telefoon</span><input type="text" name="telefoon" class="tvf-input"></div>
+        </div>
+
+        <div class="tvf-sectiekop">E-mail per afdeling</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+            <div><span class="tvf-label">Logistiek</span><input type="text" name="email_logistiek" class="tvf-input"></div>
+            <div><span class="tvf-label">Finance</span><input type="text" name="email_finance" class="tvf-input"></div>
+            <div><span class="tvf-label">Sales</span><input type="text" name="email_sales" class="tvf-input"></div>
+        </div>
+
+        <div class="tvf-sectiekop">Financieel</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+            <div><span class="tvf-label">Bankgegevens (IBAN)</span><input type="text" name="bankgegevens" class="tvf-input"></div>
+            <div><span class="tvf-label">VAT / BTW-nummer</span><input type="text" name="vat_nummer" class="tvf-input"></div>
+        </div>
+
+        <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Leverancier toevoegen</button>
+        <button type="button" onclick="toggleToevoegPaneel()" style="padding:9px 18px;background:none;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px;">Annuleren</button>
+    </form>
+</div>
+
+<form method="GET" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;margin-left:20px;">
     {% if filter_status_lev %}<input type="hidden" name="filter_status" value="{{ filter_status_lev }}">{% endif %}
     {% if filter_am_lev %}<input type="hidden" name="accountmanager" value="{{ filter_am_lev }}">{% endif %}
     <input type="text" name="zoekterm" value="{{ zoekterm_lev }}" placeholder="Leverancier of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
@@ -8346,7 +8412,7 @@ def leveranciers_pagina():
     <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">Search →</button>
 </form>
 
-<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;margin-left:20px;">
     <a href="/leveranciers" class="klant-status-tab {% if not filter_status_lev %}actief{% endif %}">Alle</a>
     <a href="/leveranciers?filter_status=klant" class="klant-status-tab {% if filter_status_lev == 'klant' %}actief{% endif %}">🟢 Klant ({{ aantal_per_status_lev.klant }})</a>
     <a href="/leveranciers?filter_status=in_proces" class="klant-status-tab {% if filter_status_lev == 'in_proces' %}actief{% endif %}">🔵 In Proces ({{ aantal_per_status_lev.in_proces }})</a>
@@ -8354,44 +8420,15 @@ def leveranciers_pagina():
     <a href="/leveranciers?filter_status=geen" class="klant-status-tab {% if filter_status_lev == 'geen' %}actief{% endif %}">⚪ Geen status</a>
 </div>
 
-<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;margin-left:20px;">
     <a href="/leveranciers?accountmanager=__mij__{% if filter_status_lev %}&filter_status={{ filter_status_lev }}{% endif %}" class="klant-status-tab {% if filter_am_lev == '__mij__' %}actief{% endif %}">🙋 Mijn leveranciers</a>
     <a href="/leveranciers{% if filter_status_lev %}?filter_status={{ filter_status_lev }}{% endif %}" class="klant-status-tab {% if not filter_am_lev %}actief{% endif %}">Hele bedrijf</a>
 </div>
 
-<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:20px;">
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:20px;margin-left:20px;">
     {% for af in actieve_filters_lev %}
     <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-600);color:#fff;border-radius:14px;padding:4px 11px;font-size:12px;font-weight:600;text-decoration:none;">{{ af.label }}<span style="font-weight:800;opacity:0.8;">✕</span></a>
     {% endfor %}
-</div>
-
-<div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px 18px;max-width:820px;margin-bottom:20px;">
-    <div class="dg-kaart-titel" style="margin-bottom:10px;">Leverancier handmatig toevoegen</div>
-    <form method="POST">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <input type="text" name="naam" placeholder="Bedrijfsnaam *" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-            <input type="text" name="land" placeholder="Land" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <input type="text" name="regio" placeholder="Stad/regio" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-            <input type="text" name="materialen" placeholder="Materialen (bv. Paper, Plastic)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <input type="text" name="contactpersoon" placeholder="Contactpersoon" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-            <input type="text" name="telefoon" placeholder="Telefoon" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <input type="text" name="adres" placeholder="Adres" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-            <select name="status" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-                <option value="">Status kiezen (optioneel)</option>
-                <option value="potentie">🟡 Potentie</option>
-                <option value="in_proces">🔵 In Proces</option>
-                <option value="klant">🟢 Klant</option>
-            </select>
-        </div>
-        <p style="font-size:11.5px;color:var(--gray-400);margin:0 0 10px;">Wordt automatisch aan jou toegewezen als accountmanager.</p>
-        <button type="submit" style="padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Leverancier toevoegen</button>
-    </form>
 </div>
 
 {% if leveranciers_lijst %}
@@ -8440,6 +8477,10 @@ def leveranciers_pagina():
 {% endif %}
 
 <script>
+function toggleToevoegPaneel() {
+    var paneel = document.getElementById("toevoegPaneel");
+    paneel.style.display = (paneel.style.display === "none") ? "block" : "none";
+}
 (function () {
     var lijst = document.getElementById("leveranciersLijst");
     if (!lijst) return;
@@ -8875,8 +8916,56 @@ function wijzigCertVervaldatum(input) {
     pagina = render_simple_page("Certifications", "certificeringen", inhoud)
     return render_template_string(pagina, cert_rijen=cert_rijen, kpis=kpis)
 
-@app.route("/klanten")
+@app.route("/klanten", methods=["GET", "POST"])
 def klanten_pagina():
+    bericht_klant = None
+
+    if request.method == "POST":
+        naam_nieuw = request.form.get("naam", "").strip()
+        land_nieuw = request.form.get("land", "").strip()
+        stad_nieuw = request.form.get("stad", "").strip()
+        materialen_nieuw = request.form.get("materialen", "").strip()
+        volume_nieuw = request.form.get("volume", "").strip()
+        contactpersoon_nieuw = request.form.get("contactpersoon", "").strip()
+        telefoon_nieuw = request.form.get("telefoon", "").strip()
+        adres_nieuw = request.form.get("adres", "").strip()
+        status_nieuw = request.form.get("status", "").strip()
+        betalingstermijn_nieuw = request.form.get("betalingstermijn", "").strip()
+        bankgegevens_nieuw = request.form.get("bankgegevens", "").strip()
+        vat_nieuw = request.form.get("vat_nummer", "").strip()
+        email_log_nieuw = request.form.get("email_logistiek", "").strip()
+        email_fin_nieuw = request.form.get("email_finance", "").strip()
+        email_sales_nieuw = request.form.get("email_sales", "").strip()
+
+        if not naam_nieuw:
+            bericht_klant = ("fout", "Naam is verplicht.")
+        elif any(f["naam"].strip().lower() == naam_nieuw.lower() and f.get("land","").strip().lower() == land_nieuw.lower() for f in PAPIERFABRIEKEN):
+            bericht_klant = ("fout", f"'{naam_nieuw}' ({land_nieuw or 'onbekend land'}) staat al in het systeem.")
+        else:
+            geo = geocode_adres(stad_nieuw, land_nieuw) if (stad_nieuw or land_nieuw) else None
+            huidige_gebruiker_klant = session.get("gebruikersnaam", "")
+            PAPIERFABRIEKEN.append({
+                "naam": naam_nieuw, "land": land_nieuw, "stad": stad_nieuw,
+                "materialen": materialen_nieuw, "volume": volume_nieuw,
+                "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
+                "adres": adres_nieuw, "telefoon": telefoon_nieuw, "contactpersoon": contactpersoon_nieuw,
+                "betalingstermijn": betalingstermijn_nieuw, "bankgegevens": bankgegevens_nieuw, "vat_nummer": vat_nieuw,
+                "email_logistiek": email_log_nieuw, "email_finance": email_fin_nieuw, "email_sales": email_sales_nieuw,
+            })
+            with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
+                json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+
+            if huidige_gebruiker_klant:
+                alle_am = laad_accountmanagers()
+                alle_am[naam_nieuw] = huidige_gebruiker_klant
+                bewaar_accountmanagers(alle_am)
+            if status_nieuw:
+                alle_status = laad_status()
+                alle_status[naam_nieuw] = status_nieuw
+                bewaar_status(alle_status)
+
+            bericht_klant = ("succes", f"'{naam_nieuw}' toegevoegd aan je klanten.")
+
     zoekterm_fab = request.args.get("zoekterm", "").strip().lower()
     land_fab = request.args.get("land", "")
     filter_status_klant = request.args.get("filter_status", "")
@@ -8925,19 +9014,81 @@ def klanten_pagina():
 .klant-status-badge { font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
 .klant-status-tab { padding: 7px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; text-decoration: none; border: 1px solid var(--gray-200); background: #fff; color: var(--gray-600); }
 .klant-status-tab.actief { background: var(--brand-600); color: #fff; border-color: var(--brand-600); }
+.tvf-label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gray-400); margin-bottom: 4px; display: block; }
+.tvf-input { width: 100%; padding: 8px 10px; border: 1px solid var(--gray-200); border-radius: 6px; font-size: 13px; box-sizing: border-box; font-family: inherit; }
+.tvf-sectiekop { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-300); margin: 16px 0 10px; padding-top: 12px; border-top: 1px solid var(--gray-100); }
+.tvf-sectiekop:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;padding-left:20px;">
     <div>
         <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Klanten</div>
     </div>
-    <div style="display:flex;gap:22px;">
+    <div style="display:flex;align-items:center;gap:22px;">
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ klanten_lijst|length }}</div></div>
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat_fab }}</div></div>
+        <button type="button" onclick="toggleToevoegPaneel()" id="toevoegKlantBtn" style="align-self:center;padding:9px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;">+ Nieuwe klant</button>
     </div>
 </div>
 
-<form method="GET" id="klantZoekForm" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;">
+{% if bericht_klant %}
+<div style="background:{{ '#f0fdf4' if bericht_klant[0] == 'succes' else '#fef2f2' }};color:{{ '#16a34a' if bericht_klant[0] == 'succes' else '#dc2626' }};padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13.5px;margin-left:20px;max-width:820px;">{{ bericht_klant[1] }}</div>
+{% endif %}
+
+<div id="toevoegPaneel" style="display:none;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:820px;margin:0 20px 20px;">
+    <div class="dg-kaart-titel" style="margin-bottom:4px;">Nieuwe klant toevoegen</div>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:0;">Wordt automatisch aan jou toegewezen als accountmanager.</p>
+    <form method="POST">
+        <div class="tvf-sectiekop">Basisgegevens</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+            <div><span class="tvf-label">Bedrijfsnaam *</span><input type="text" name="naam" required class="tvf-input"></div>
+            <div><span class="tvf-label">Land</span><input type="text" name="land" class="tvf-input"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+            <div><span class="tvf-label">Stad</span><input type="text" name="stad" class="tvf-input"></div>
+            <div><span class="tvf-label">Adres</span><input type="text" name="adres" class="tvf-input"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+            <div><span class="tvf-label">Materialen (bv. Paper, Plastic)</span><input type="text" name="materialen" class="tvf-input"></div>
+            <div><span class="tvf-label">Volume (t/jaar)</span><input type="text" name="volume" class="tvf-input"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div><span class="tvf-label">Status</span>
+                <select name="status" class="tvf-input">
+                    <option value="">Status kiezen (optioneel)</option>
+                    <option value="potentie">🟡 Potentie</option>
+                    <option value="in_proces">🔵 In Proces</option>
+                    <option value="klant">🟢 Klant</option>
+                </select>
+            </div>
+            <div><span class="tvf-label">Betalingstermijn</span><input type="text" name="betalingstermijn" placeholder="bv. 30 dagen" class="tvf-input"></div>
+        </div>
+
+        <div class="tvf-sectiekop">Contactpersoon</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div><span class="tvf-label">Naam contactpersoon</span><input type="text" name="contactpersoon" class="tvf-input"></div>
+            <div><span class="tvf-label">Telefoon</span><input type="text" name="telefoon" class="tvf-input"></div>
+        </div>
+
+        <div class="tvf-sectiekop">E-mail per afdeling</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+            <div><span class="tvf-label">Logistiek</span><input type="text" name="email_logistiek" class="tvf-input"></div>
+            <div><span class="tvf-label">Finance</span><input type="text" name="email_finance" class="tvf-input"></div>
+            <div><span class="tvf-label">Sales</span><input type="text" name="email_sales" class="tvf-input"></div>
+        </div>
+
+        <div class="tvf-sectiekop">Financieel</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+            <div><span class="tvf-label">Bankgegevens (IBAN)</span><input type="text" name="bankgegevens" class="tvf-input"></div>
+            <div><span class="tvf-label">VAT / BTW-nummer</span><input type="text" name="vat_nummer" class="tvf-input"></div>
+        </div>
+
+        <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Klant toevoegen</button>
+        <button type="button" onclick="toggleToevoegPaneel()" style="padding:9px 18px;background:none;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px;">Annuleren</button>
+    </form>
+</div>
+
+<form method="GET" id="klantZoekForm" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;margin-left:20px;">
     {% if filter_status_klant %}<input type="hidden" name="filter_status" value="{{ filter_status_klant }}">{% endif %}
     <input type="text" name="zoekterm" value="{{ zoekterm_fab }}" placeholder="Klant of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
     <select name="land" onchange="this.form.submit()" style="width:150px;border:none;border-left:1px solid var(--gray-100);padding:0 14px;font-size:14px;cursor:pointer;">
@@ -8947,7 +9098,7 @@ def klanten_pagina():
     <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">Search →</button>
 </form>
 
-<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;margin-left:20px;">
     <a href="/klanten" class="klant-status-tab {% if not filter_status_klant %}actief{% endif %}">Alle</a>
     <a href="/klanten?filter_status=klant" class="klant-status-tab {% if filter_status_klant == 'klant' %}actief{% endif %}">🟢 Klant ({{ aantal_per_status.klant }})</a>
     <a href="/klanten?filter_status=in_proces" class="klant-status-tab {% if filter_status_klant == 'in_proces' %}actief{% endif %}">🔵 In Proces ({{ aantal_per_status.in_proces }})</a>
@@ -8955,7 +9106,7 @@ def klanten_pagina():
     <a href="/klanten?filter_status=geen" class="klant-status-tab {% if filter_status_klant == 'geen' %}actief{% endif %}">⚪ Geen status</a>
 </div>
 
-<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;">
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;margin-left:20px;">
     {% for af in actieve_filters_fab %}
     <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-600);color:#fff;border-radius:14px;padding:4px 11px;font-size:12px;font-weight:600;text-decoration:none;">{{ af.label }}<span style="font-weight:800;opacity:0.8;">✕</span></a>
     {% endfor %}
@@ -8997,6 +9148,10 @@ def klanten_pagina():
 {% endif %}
 
 <script>
+function toggleToevoegPaneel() {
+    var paneel = document.getElementById("toevoegPaneel");
+    paneel.style.display = (paneel.style.display === "none") ? "block" : "none";
+}
 (function () {
     var lijst = document.getElementById("klantenLijst");
     if (!lijst) return;
@@ -9025,7 +9180,8 @@ def klanten_pagina():
     return render_template_string(pagina, klanten_lijst=klanten_lijst,
                                     zoekterm_fab=zoekterm_fab, land_fab=land_fab, actieve_filters_fab=actieve_filters_fab,
                                     alle_landen_fab=alle_landen_fab, landen_in_resultaat_fab=landen_in_resultaat_fab,
-                                    filter_status_klant=filter_status_klant, aantal_per_status=aantal_per_status)
+                                    filter_status_klant=filter_status_klant, aantal_per_status=aantal_per_status,
+                                    bericht_klant=bericht_klant)
 
 @app.route("/fabriek/<naam>")
 def fabriek_detail(naam):
@@ -9521,17 +9677,14 @@ select.klik-bewerken-veld { cursor:pointer; }
             <div class="veld-label">Telefoon</div>
             <input type="text" value="{{ bedrijf.telefoon or '' }}" data-veld="telefoon" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
         </div>
-        {% if not is_fabriek_profiel %}
         <div>
             <div class="veld-label">Betalingstermijn</div>
             <input type="text" value="{{ bedrijf.betalingstermijn or '' }}" data-veld="betalingstermijn" onblur="wijzigBedrijfVeld(this)" placeholder="bv. 30 dagen" class="klik-bewerken-veld">
         </div>
-        {% endif %}
     </div>
     <div style="margin-top:10px;font-size:13px;">
         <span id="echteWebsiteWrap" style="display:none;">🌐 <a id="echteWebsiteLink" href="#" target="_blank" style="color:var(--brand-600);font-weight:600;text-decoration:none;"></a></span>
     </div>
-    {% if not is_fabriek_profiel %}
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100);">
         <button type="button" onclick="toggleMeerInfo()" id="meerInfoToggleBtn" style="font-size:12px;font-weight:600;color:var(--brand-600);background:none;border:none;cursor:pointer;padding:0;">+ Meer informatie (bank, VAT, contact per afdeling)</button>
         <div id="meerInfoPaneel" style="display:none;margin-top:12px;">
@@ -9559,7 +9712,6 @@ select.klik-bewerken-veld { cursor:pointer; }
             </div>
         </div>
     </div>
-    {% endif %}
 </div>
 
 <div class="info-kaart" style="margin-bottom:16px;">
