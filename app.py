@@ -173,6 +173,19 @@ def bewaar_documenten(data):
     with open(DOCUMENTEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+UITNODIGINGEN_FILE = datapad("uitnodigingen.json")
+
+def laad_uitnodigingen():
+    try:
+        with open(UITNODIGINGEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_uitnodigingen(data):
+    with open(UITNODIGINGEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 def laad_marktprijzen():
     try:
         with open(MARKTPRIJZEN_FILE, "r", encoding="utf-8") as f:
@@ -551,9 +564,331 @@ from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "verander-dit-later-in-iets-geheims")
+
+# ============================================================
+# GEDEELD FORMULIER-FRAGMENT: bedrijfsprofiel (uitgebreid, naar
+# voorbeeld van het externe Zoho-formulier: algemeen, financieel,
+# facturatie). Wordt gebruikt door zowel de interne "zelf invullen"
+# -pagina als het publieke uitnodigingsformulier.
+# ============================================================
+def uitgebreid_bedrijfsformulier_html():
+    return """
+<style>
+.ubf-sectiekop { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--brand-600); margin:22px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--gray-200); }
+.ubf-sectiekop:first-of-type { margin-top:0; }
+.ubf-label { font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-400); margin-bottom:4px; display:block; }
+.ubf-input { width:100%; padding:9px 11px; border:1px solid var(--gray-200); border-radius:6px; font-size:13.5px; box-sizing:border-box; font-family:inherit; }
+.ubf-rij2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:14px; }
+.ubf-rij3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:14px; }
+</style>
+
+<div class="ubf-sectiekop">Algemene bedrijfsgegevens</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">Bedrijfsnaam *</span><input type="text" name="naam" value="{{ waarden.naam|default('',true) }}" required class="ubf-input"></div>
+    <div><span class="ubf-label">Land</span><input type="text" name="land" value="{{ waarden.land|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">Adres</span><input type="text" name="adres" value="{{ waarden.adres|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">Postcode</span><input type="text" name="postcode" value="{{ waarden.postcode|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">Stad/regio</span><input type="text" name="stad" value="{{ waarden.stad|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">KvK-nummer</span><input type="text" name="kvk_nummer" value="{{ waarden.kvk_nummer|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">Algemeen e-mailadres</span><input type="text" name="email_algemeen" value="{{ waarden.email_algemeen|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">Telefoonnummer</span><input type="text" name="telefoon" value="{{ waarden.telefoon|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">Contactpersoon (algemeen)</span><input type="text" name="contactpersoon" value="{{ waarden.contactpersoon|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">Materialen (bv. Paper, Plastic)</span><input type="text" name="materialen" value="{{ waarden.materialen|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">Volume (t/jaar)</span><input type="text" name="volume" value="{{ waarden.volume|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">Betalingstermijn</span><input type="text" name="betalingstermijn" value="{{ waarden.betalingstermijn|default('',true) }}" placeholder="bv. 30 dagen" class="ubf-input"></div>
+</div>
+
+<div class="ubf-sectiekop">Financiële gegevens</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">Naam bank</span><input type="text" name="bank_naam" value="{{ waarden.bank_naam|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">Begunstigde</span><input type="text" name="begunstigde" value="{{ waarden.begunstigde|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">Bankadres</span><input type="text" name="bank_adres" value="{{ waarden.bank_adres|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">SWIFT / BIC-code</span><input type="text" name="swift_bic" value="{{ waarden.swift_bic|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij3">
+    <div><span class="ubf-label">IBAN (EUR)</span><input type="text" name="iban_eur" value="{{ waarden.iban_eur|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">IBAN (USD)</span><input type="text" name="iban_usd" value="{{ waarden.iban_usd|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">IBAN (GBP)</span><input type="text" name="iban_gbp" value="{{ waarden.iban_gbp|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">VAT / BTW-nummer</span><input type="text" name="vat_nummer" value="{{ waarden.vat_nummer|default('',true) }}" class="ubf-input"></div>
+    <div></div>
+</div>
+
+<div class="ubf-sectiekop">Facturatie</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">E-mail voor facturatie</span><input type="text" name="factuur_email" value="{{ waarden.factuur_email|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">Contactpersoon facturatie</span><input type="text" name="factuur_contactpersoon" value="{{ waarden.factuur_contactpersoon|default('',true) }}" class="ubf-input"></div>
+</div>
+<div class="ubf-rij2">
+    <div><span class="ubf-label">E-mail vragen over betalingen</span><input type="text" name="vragen_betalingen_email" value="{{ waarden.vragen_betalingen_email|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">E-mail sales-facturatie</span><input type="text" name="sales_facturatie_email" value="{{ waarden.sales_facturatie_email|default('',true) }}" class="ubf-input"></div>
+</div>
+
+<div class="ubf-sectiekop">Contact per afdeling</div>
+<div class="ubf-rij3">
+    <div><span class="ubf-label">E-mail logistiek</span><input type="text" name="email_logistiek" value="{{ waarden.email_logistiek|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">E-mail finance</span><input type="text" name="email_finance" value="{{ waarden.email_finance|default('',true) }}" class="ubf-input"></div>
+    <div><span class="ubf-label">E-mail sales</span><input type="text" name="email_sales" value="{{ waarden.email_sales|default('',true) }}" class="ubf-input"></div>
+</div>
+
+<div class="ubf-sectiekop">Overig</div>
+<div style="margin-bottom:14px;">
+    <span class="ubf-label">Overige informatie</span>
+    <textarea name="overige_informatie" rows="3" class="ubf-input" style="resize:vertical;">{{ waarden.overige_informatie|default('',true) }}</textarea>
+</div>
+    """
+
+def verwerk_bedrijf_toevoegen(form, type_bedrijf, huidige_gebruiker=""):
+    """Verwerkt het uitgebreide bedrijfsformulier (gedeeld door de interne 'zelf invullen'-pagina
+    en het publieke uitnodigingsformulier). Geeft (succes: bool, boodschap: str, bedrijf_naam: str) terug."""
+    naam_nieuw = form.get("naam", "").strip()
+    land_nieuw = form.get("land", "").strip()
+    stad_nieuw = form.get("stad", "").strip()
+
+    if not naam_nieuw:
+        return False, "Bedrijfsnaam is verplicht.", ""
+
+    doellijst = ENF_BEDRIJVEN if type_bedrijf == "leverancier" else PAPIERFABRIEKEN
+    if any(b["naam"].strip().lower() == naam_nieuw.lower() and b.get("land","").strip().lower() == land_nieuw.lower() for b in doellijst):
+        return False, f"'{naam_nieuw}' ({land_nieuw or 'onbekend land'}) staat al in het systeem.", ""
+
+    velden_tekst = {}
+    for veldnaam in ("adres", "postcode", "materialen", "volume", "email_algemeen", "telefoon", "kvk_nummer",
+                      "contactpersoon", "betalingstermijn", "bank_naam", "begunstigde", "bank_adres", "swift_bic",
+                      "iban_eur", "iban_usd", "iban_gbp", "vat_nummer", "factuur_email", "factuur_contactpersoon",
+                      "vragen_betalingen_email", "sales_facturatie_email", "email_logistiek", "email_finance",
+                      "email_sales", "overige_informatie"):
+        velden_tekst[veldnaam] = form.get(veldnaam, "").strip()
+
+    status_nieuw = form.get("status", "").strip()
+    geo = geocode_adres(stad_nieuw, land_nieuw) if (stad_nieuw or land_nieuw) else None
+
+    if type_bedrijf == "leverancier":
+        nieuw_record = {
+            "naam": naam_nieuw, "land": land_nieuw, "regio": stad_nieuw,
+            "klanttype": "", "url": "", "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
+            "bedrijf_id": TENANT_ID, "brontype": "Handmatig ingevoerd",
+            **velden_tekst,
+        }
+    else:
+        nieuw_record = {
+            "naam": naam_nieuw, "land": land_nieuw, "stad": stad_nieuw,
+            "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
+            **velden_tekst,
+        }
+    doellijst.append(nieuw_record)
+    bestandsnaam = "bedrijven.json" if type_bedrijf == "leverancier" else "papierfabrieken.json"
+    with open(datapad(bestandsnaam), "w", encoding="utf-8") as f:
+        json.dump(doellijst, f, ensure_ascii=False, indent=2)
+
+    if huidige_gebruiker:
+        alle_am = laad_accountmanagers()
+        alle_am[naam_nieuw] = huidige_gebruiker
+        bewaar_accountmanagers(alle_am)
+    if status_nieuw:
+        alle_status = laad_status()
+        alle_status[naam_nieuw] = status_nieuw
+        bewaar_status(alle_status)
+
+    label = "leveranciers" if type_bedrijf == "leverancier" else "klanten"
+    return True, f"'{naam_nieuw}' toegevoegd aan je {label}.", naam_nieuw
+
+@app.route("/bedrijf-toevoegen", methods=["GET", "POST"])
+def bedrijf_toevoegen_pagina():
+    type_bedrijf = request.args.get("type", "leverancier")
+    if type_bedrijf not in ("leverancier", "klant"):
+        type_bedrijf = "leverancier"
+    terug_url = "/leveranciers" if type_bedrijf == "leverancier" else "/klanten"
+    label = "leverancier" if type_bedrijf == "leverancier" else "klant"
+
+    bericht = None
+    uitnodiging_link = None
+
+    if request.method == "POST":
+        actie = request.form.get("actie", "zelf")
+        if actie == "zelf":
+            huidige_gebruiker = session.get("gebruikersnaam", "")
+            succes, tekst, _ = verwerk_bedrijf_toevoegen(request.form, type_bedrijf, huidige_gebruiker)
+            if succes:
+                return redirect(terug_url + "?toegevoegd=1")
+            bericht = ("fout", tekst)
+        elif actie == "uitnodigen":
+            email_uitn = request.form.get("uitnodiging_email", "").strip()
+            bedrijfsnaam_uitn = request.form.get("uitnodiging_bedrijfsnaam", "").strip()
+            naam_uitn = request.form.get("uitnodiging_naam", "").strip()
+            if not (email_uitn and bedrijfsnaam_uitn and naam_uitn):
+                bericht = ("fout", "E-mail, bedrijfsnaam en naam zijn alle drie verplicht om een uitnodiging te versturen.")
+            else:
+                token = uuid.uuid4().hex
+                alle_uitnodigingen = laad_uitnodigingen()
+                alle_uitnodigingen[token] = {
+                    "type": type_bedrijf, "email": email_uitn, "bedrijfsnaam": bedrijfsnaam_uitn, "naam": naam_uitn,
+                    "verzonden_door": session.get("gebruikersnaam", ""),
+                    "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+                    "ingevuld": False, "ingevuld_op": "",
+                }
+                bewaar_uitnodigingen(alle_uitnodigingen)
+                uitnodiging_link = url_for("profiel_invullen", token=token, _external=True)
+                bericht = ("succes", f"Uitnodigingslink aangemaakt voor {bedrijfsnaam_uitn}.")
+
+    inhoud = """
+<div style="padding-left:20px;max-width:820px;">
+    <a href="{{ terug_url }}" style="color:var(--gray-400);text-decoration:none;font-size:0.85rem;">← Terug naar {{ 'Leveranciers' if type_bedrijf == 'leverancier' else 'Klanten' }}</a>
+    <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);margin:8px 0 20px;">Nieuwe {{ label }} toevoegen</div>
+
+    <div style="display:flex;gap:8px;margin-bottom:20px;">
+        <button type="button" onclick="wisselModus('zelf')" id="tabZelfBtn" class="tvf-modus-tab actief">Zelf invullen</button>
+        <button type="button" onclick="wisselModus('uitnodigen')" id="tabUitnodigenBtn" class="tvf-modus-tab">Formulier versturen</button>
+    </div>
+
+    {% if bericht %}
+    <div style="background:{{ '#f0fdf4' if bericht[0] == 'succes' else '#fef2f2' }};color:{{ '#16a34a' if bericht[0] == 'succes' else '#dc2626' }};padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13.5px;">{{ bericht[1] }}</div>
+    {% endif %}
+    {% if uitnodiging_link %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px 18px;margin-bottom:20px;">
+        <div class="ubf-label">Uitnodigingslink</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" readonly value="{{ uitnodiging_link }}" id="uitnodigingLinkVeld" style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;background:var(--gray-50);">
+            <button type="button" onclick="kopieerLink()" style="padding:8px 14px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Kopieer</button>
+        </div>
+        <a id="mailtoLink" href="#" style="display:inline-block;margin-top:10px;padding:8px 16px;background:var(--brand-600);color:#fff;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;">✉ Open in e-mailprogramma</a>
+    </div>
+    {% endif %}
+
+    <style>
+    .tvf-modus-tab { padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; border:1px solid var(--gray-200); background:#fff; color:var(--gray-600); cursor:pointer; }
+    .tvf-modus-tab.actief { background:var(--brand-600); color:#fff; border-color:var(--brand-600); }
+    </style>
+
+    <div id="modusZelf">
+        <form method="POST">
+            <input type="hidden" name="actie" value="zelf">
+            {{ formulier_html|safe }}
+            <button type="submit" style="padding:10px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13.5px;">+ {{ label|capitalize }} toevoegen</button>
+        </form>
+    </div>
+
+    <div id="modusUitnodigen" style="display:none;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;">
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">De {{ label }} ontvangt een link naar een openbaar formulier en vult zijn eigen bedrijfsgegevens in. Vul de volgende 3 dingen in om de link aan te maken:</p>
+        <form method="POST">
+            <input type="hidden" name="actie" value="uitnodigen">
+            <div class="ubf-rij3">
+                <div><span class="ubf-label">E-mailadres *</span><input type="email" name="uitnodiging_email" required class="ubf-input"></div>
+                <div><span class="ubf-label">Bedrijfsnaam *</span><input type="text" name="uitnodiging_bedrijfsnaam" required class="ubf-input"></div>
+                <div><span class="ubf-label">Naam contactpersoon *</span><input type="text" name="uitnodiging_naam" required class="ubf-input"></div>
+            </div>
+            <button type="submit" style="padding:10px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13.5px;">Link aanmaken</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function wisselModus(modus) {
+    document.getElementById("modusZelf").style.display = modus === "zelf" ? "block" : "none";
+    document.getElementById("modusUitnodigen").style.display = modus === "uitnodigen" ? "block" : "none";
+    document.getElementById("tabZelfBtn").classList.toggle("actief", modus === "zelf");
+    document.getElementById("tabUitnodigenBtn").classList.toggle("actief", modus === "uitnodigen");
+}
+function kopieerLink() {
+    var veld = document.getElementById("uitnodigingLinkVeld");
+    veld.select();
+    document.execCommand("copy");
+}
+{% if uitnodiging_link %}
+(function() {
+    var onderwerp = encodeURIComponent("Vul jullie bedrijfsprofiel in bij Peute");
+    var body = encodeURIComponent("Beste,\\n\\nKun je onderstaande link openen om jullie bedrijfsgegevens bij ons in te vullen?\\n\\n{{ uitnodiging_link }}\\n\\nMet vriendelijke groet,\\nPeute Papierrecycling");
+    document.getElementById("mailtoLink").href = "mailto:{{ uitnodiging_email_js }}?subject=" + onderwerp + "&body=" + body;
+})();
+{% endif %}
+</script>
+    """
+    pagina = render_simple_page(f"Nieuwe {label}", "leveranciers" if type_bedrijf == "leverancier" else "klanten", inhoud)
+    return render_template_string(pagina, terug_url=terug_url, type_bedrijf=type_bedrijf, label=label,
+                                    bericht=bericht, uitnodiging_link=uitnodiging_link,
+                                    uitnodiging_email_js=request.form.get("uitnodiging_email", "") if request.method == "POST" else "",
+                                    formulier_html=uitgebreid_bedrijfsformulier_html(), waarden={})
+
+PROFIEL_INVULLEN_HTML_KOP = """
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bedrijfsprofiel invullen — Peute Papierrecycling</title>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --brand-50:#eef6f6; --brand-100:#d9ecec; --brand-200:#b3d9da; --brand-300:#7fb9bb;
+            --brand-400:#3f9295; --brand-500:#14767b; --brand-600:#0d5c62; --brand-700:#0a4a4f;
+            --gray-50:#f8fafc; --gray-100:#f1f5f9; --gray-200:#e2e8f0; --gray-300:#cbd5e1;
+            --gray-400:#94a3b8; --gray-500:#64748b; --gray-600:#475569; --gray-700:#334155;
+            --gray-800:#1e293b; --gray-900:#0f172a; --font:"Libre Franklin",sans-serif;
+        }
+        * { box-sizing:border-box; }
+        body { font-family:var(--font); background:var(--gray-50); margin:0; padding:40px 20px; }
+        .pi-kaart { max-width:820px; margin:0 auto; background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:32px 36px; }
+        .pi-logo { font-size:1.3rem; font-weight:800; color:var(--gray-900); margin-bottom:4px; }
+        .pi-logo em { color:var(--brand-600); font-style:normal; }
+        .pi-sub { font-size:0.85rem; color:var(--gray-400); margin-bottom:28px; }
+    </style>
+</head>
+<body>
+<div class="pi-kaart">
+    <div class="pi-logo">Peute <em>Papierrecycling</em></div>
+"""
+
+@app.route("/profiel-invullen/<token>", methods=["GET", "POST"])
+def profiel_invullen(token):
+    alle_uitnodigingen = laad_uitnodigingen()
+    uitnodiging = alle_uitnodigingen.get(token)
+
+    if not uitnodiging:
+        return PROFIEL_INVULLEN_HTML_KOP + '<div class="pi-sub">Deze link is niet (meer) geldig. Neem contact op met Peute Papierrecycling voor een nieuwe link.</div></div></body></html>', 404
+
+    if uitnodiging.get("ingevuld"):
+        return PROFIEL_INVULLEN_HTML_KOP + '<div class="pi-sub">Dit formulier is al ingevuld. Bedankt! Neem contact op met Peute Papierrecycling als er iets moet worden aangepast.</div></div></body></html>'
+
+    bericht = None
+    if request.method == "POST":
+        succes, tekst, _ = verwerk_bedrijf_toevoegen(request.form, uitnodiging["type"], "")
+        if succes:
+            uitnodiging["ingevuld"] = True
+            uitnodiging["ingevuld_op"] = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+            bewaar_uitnodigingen(alle_uitnodigingen)
+            return PROFIEL_INVULLEN_HTML_KOP + '<div class="pi-sub">Bedankt! Jullie bedrijfsgegevens zijn ontvangen.</div></div></body></html>'
+        bericht = ("fout", tekst)
+
+    inhoud = PROFIEL_INVULLEN_HTML_KOP + """
+    <div class="pi-sub">Kunt u onderstaand formulier invullen zodat wij jullie gegevens correct hebben staan?</div>
+    {% if bericht %}<div style="background:#fef2f2;color:#dc2626;padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13.5px;">{{ bericht[1] }}</div>{% endif %}
+    <form method="POST">
+        """ + uitgebreid_bedrijfsformulier_html() + """
+        <button type="submit" style="padding:11px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;">Versturen</button>
+    </form>
+</div>
+</body>
+</html>
+    """
+    waarden = {"naam": uitnodiging.get("bedrijfsnaam", ""), "contactpersoon": uitnodiging.get("naam", ""), "email_algemeen": uitnodiging.get("email", "")}
+    return render_template_string(inhoud, bericht=bericht, waarden=waarden)
+
 @app.before_request
 def vereis_login():
-    toegestaan = ["login", "static", "forwarder_upload"]
+    toegestaan = ["login", "static", "forwarder_upload", "profiel_invullen"]
     if request.endpoint not in toegestaan and not session.get("ingelogd"):
         return redirect(url_for("login"))
 
@@ -5074,7 +5409,9 @@ def set_accountmanager():
 
     return jsonify({"accountmanager": nieuwe_am})
 
-BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten", "certificeringen", "betalingstermijn", "bankgegevens", "vat_nummer", "email_logistiek", "email_finance", "email_sales"}
+BEWERKBARE_BEDRIJFSVELDEN = {"brontype", "klanttype", "materialen", "contactpersoon", "volume", "adres", "telefoon", "kwaliteiten", "certificeringen", "betalingstermijn", "bankgegevens", "vat_nummer", "email_logistiek", "email_finance", "email_sales",
+                              "email_algemeen", "kvk_nummer", "postcode", "stad", "bank_naam", "begunstigde", "bank_adres", "iban_eur", "iban_usd", "iban_gbp", "swift_bic",
+                              "factuur_email", "factuur_contactpersoon", "vragen_betalingen_email", "sales_facturatie_email", "overige_informatie"}
 
 @app.route("/api/bedrijf-veld", methods=["POST"])
 def set_bedrijf_veld():
@@ -8196,56 +8533,9 @@ def contacten():
     return render_template_string(pagina, contacten_lijst=contacten_lijst, zoekterm=zoekterm, gekozen_am=gekozen_am,
                                     alle_accountmanagers=alle_accountmanagers, bedrijfnamen_lijst=sorted(_bedrijven_land_lookup.keys())[:500])
 
-@app.route("/leveranciers", methods=["GET", "POST"])
+@app.route("/leveranciers")
 def leveranciers_pagina():
-    bericht_lev = None
-
-    if request.method == "POST":
-        naam_nieuw = request.form.get("naam", "").strip()
-        land_nieuw = request.form.get("land", "").strip()
-        regio_nieuw = request.form.get("regio", "").strip()
-        materialen_nieuw = request.form.get("materialen", "").strip()
-        volume_nieuw = request.form.get("volume", "").strip()
-        contactpersoon_nieuw = request.form.get("contactpersoon", "").strip()
-        telefoon_nieuw = request.form.get("telefoon", "").strip()
-        adres_nieuw = request.form.get("adres", "").strip()
-        status_nieuw = request.form.get("status", "").strip()
-        betalingstermijn_nieuw = request.form.get("betalingstermijn", "").strip()
-        bankgegevens_nieuw = request.form.get("bankgegevens", "").strip()
-        vat_nieuw = request.form.get("vat_nummer", "").strip()
-        email_log_nieuw = request.form.get("email_logistiek", "").strip()
-        email_fin_nieuw = request.form.get("email_finance", "").strip()
-        email_sales_nieuw = request.form.get("email_sales", "").strip()
-
-        if not naam_nieuw:
-            bericht_lev = ("fout", "Naam is verplicht.")
-        elif any(b["naam"].strip().lower() == naam_nieuw.lower() and b.get("land","").strip().lower() == land_nieuw.lower() for b in ENF_BEDRIJVEN):
-            bericht_lev = ("fout", f"'{naam_nieuw}' ({land_nieuw or 'onbekend land'}) staat al in het systeem.")
-        else:
-            geo = geocode_adres(regio_nieuw, land_nieuw) if (regio_nieuw or land_nieuw) else None
-            huidige_gebruiker_lev = session.get("gebruikersnaam", "")
-            ENF_BEDRIJVEN.append({
-                "naam": naam_nieuw, "land": land_nieuw, "regio": regio_nieuw,
-                "materialen": materialen_nieuw, "klanttype": "", "volume": volume_nieuw, "url": "",
-                "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
-                "adres": adres_nieuw, "telefoon": telefoon_nieuw, "contactpersoon": contactpersoon_nieuw,
-                "betalingstermijn": betalingstermijn_nieuw, "bankgegevens": bankgegevens_nieuw, "vat_nummer": vat_nieuw,
-                "email_logistiek": email_log_nieuw, "email_finance": email_fin_nieuw, "email_sales": email_sales_nieuw,
-                "bedrijf_id": TENANT_ID, "brontype": "Handmatig ingevoerd",
-            })
-            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
-
-            if huidige_gebruiker_lev:
-                alle_am = laad_accountmanagers()
-                alle_am[naam_nieuw] = huidige_gebruiker_lev
-                bewaar_accountmanagers(alle_am)
-            if status_nieuw:
-                alle_status = laad_status()
-                alle_status[naam_nieuw] = status_nieuw
-                bewaar_status(alle_status)
-
-            bericht_lev = ("succes", f"'{naam_nieuw}' toegevoegd aan je leveranciers.")
+    bericht_lev = ("succes", "Leverancier toegevoegd.") if request.args.get("toegevoegd") else None
 
     zoekterm_lev = request.args.get("zoekterm", "").strip().lower()
     land_lev = request.args.get("land", "")
@@ -8339,7 +8629,7 @@ def leveranciers_pagina():
     <div style="display:flex;align-items:center;gap:22px;">
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ totaal_gevonden_lev }}</div></div>
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ alle_landen_lev|length }}</div></div>
-        <button type="button" onclick="toggleToevoegPaneel()" id="toevoegLevBtn" style="align-self:center;padding:9px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;">+ Nieuwe leverancier</button>
+        <a href="/bedrijf-toevoegen?type=leverancier" id="toevoegLevBtn" style="align-self:center;padding:9px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;text-decoration:none;">+ Nieuwe leverancier</a>
     </div>
 </div>
 <p style="color:var(--gray-400);margin:0 0 16px 20px;font-size:0.82rem;">Je eigen leveranciersbestand — alleen bedrijven met een toegekende status of accountmanager. Voor de volledige database: <a href="/" style="color:var(--brand-600);">Zoeken</a>.</p>
@@ -8348,58 +8638,6 @@ def leveranciers_pagina():
 <div style="background:{{ '#f0fdf4' if bericht_lev[0] == 'succes' else '#fef2f2' }};color:{{ '#16a34a' if bericht_lev[0] == 'succes' else '#dc2626' }};padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13.5px;margin-left:20px;max-width:820px;">{{ bericht_lev[1] }}</div>
 {% endif %}
 
-<div id="toevoegPaneel" style="display:none;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:820px;margin:0 20px 20px;">
-    <div class="dg-kaart-titel" style="margin-bottom:4px;">Nieuwe leverancier toevoegen</div>
-    <p style="font-size:12px;color:var(--gray-400);margin-bottom:0;">Wordt automatisch aan jou toegewezen als accountmanager.</p>
-    <form method="POST">
-        <div class="tvf-sectiekop">Basisgegevens</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
-            <div><span class="tvf-label">Bedrijfsnaam *</span><input type="text" name="naam" required class="tvf-input"></div>
-            <div><span class="tvf-label">Land</span><input type="text" name="land" class="tvf-input"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
-            <div><span class="tvf-label">Stad/regio</span><input type="text" name="regio" class="tvf-input"></div>
-            <div><span class="tvf-label">Adres</span><input type="text" name="adres" class="tvf-input"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
-            <div><span class="tvf-label">Materialen (bv. Paper, Plastic)</span><input type="text" name="materialen" class="tvf-input"></div>
-            <div><span class="tvf-label">Volume (t/jaar)</span><input type="text" name="volume" class="tvf-input"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-            <div><span class="tvf-label">Status</span>
-                <select name="status" class="tvf-input">
-                    <option value="">Status kiezen (optioneel)</option>
-                    <option value="potentie">🟡 Potentie</option>
-                    <option value="in_proces">🔵 In Proces</option>
-                    <option value="klant">🟢 Klant</option>
-                </select>
-            </div>
-            <div><span class="tvf-label">Betalingstermijn</span><input type="text" name="betalingstermijn" placeholder="bv. 30 dagen" class="tvf-input"></div>
-        </div>
-
-        <div class="tvf-sectiekop">Contactpersoon</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-            <div><span class="tvf-label">Naam contactpersoon</span><input type="text" name="contactpersoon" class="tvf-input"></div>
-            <div><span class="tvf-label">Telefoon</span><input type="text" name="telefoon" class="tvf-input"></div>
-        </div>
-
-        <div class="tvf-sectiekop">E-mail per afdeling</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
-            <div><span class="tvf-label">Logistiek</span><input type="text" name="email_logistiek" class="tvf-input"></div>
-            <div><span class="tvf-label">Finance</span><input type="text" name="email_finance" class="tvf-input"></div>
-            <div><span class="tvf-label">Sales</span><input type="text" name="email_sales" class="tvf-input"></div>
-        </div>
-
-        <div class="tvf-sectiekop">Financieel</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
-            <div><span class="tvf-label">Bankgegevens (IBAN)</span><input type="text" name="bankgegevens" class="tvf-input"></div>
-            <div><span class="tvf-label">VAT / BTW-nummer</span><input type="text" name="vat_nummer" class="tvf-input"></div>
-        </div>
-
-        <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Leverancier toevoegen</button>
-        <button type="button" onclick="toggleToevoegPaneel()" style="padding:9px 18px;background:none;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px;">Annuleren</button>
-    </form>
-</div>
 
 <form method="GET" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;margin-left:20px;">
     {% if filter_status_lev %}<input type="hidden" name="filter_status" value="{{ filter_status_lev }}">{% endif %}
@@ -8477,10 +8715,6 @@ def leveranciers_pagina():
 {% endif %}
 
 <script>
-function toggleToevoegPaneel() {
-    var paneel = document.getElementById("toevoegPaneel");
-    paneel.style.display = (paneel.style.display === "none") ? "block" : "none";
-}
 (function () {
     var lijst = document.getElementById("leveranciersLijst");
     if (!lijst) return;
@@ -8916,55 +9150,9 @@ function wijzigCertVervaldatum(input) {
     pagina = render_simple_page("Certifications", "certificeringen", inhoud)
     return render_template_string(pagina, cert_rijen=cert_rijen, kpis=kpis)
 
-@app.route("/klanten", methods=["GET", "POST"])
+@app.route("/klanten")
 def klanten_pagina():
-    bericht_klant = None
-
-    if request.method == "POST":
-        naam_nieuw = request.form.get("naam", "").strip()
-        land_nieuw = request.form.get("land", "").strip()
-        stad_nieuw = request.form.get("stad", "").strip()
-        materialen_nieuw = request.form.get("materialen", "").strip()
-        volume_nieuw = request.form.get("volume", "").strip()
-        contactpersoon_nieuw = request.form.get("contactpersoon", "").strip()
-        telefoon_nieuw = request.form.get("telefoon", "").strip()
-        adres_nieuw = request.form.get("adres", "").strip()
-        status_nieuw = request.form.get("status", "").strip()
-        betalingstermijn_nieuw = request.form.get("betalingstermijn", "").strip()
-        bankgegevens_nieuw = request.form.get("bankgegevens", "").strip()
-        vat_nieuw = request.form.get("vat_nummer", "").strip()
-        email_log_nieuw = request.form.get("email_logistiek", "").strip()
-        email_fin_nieuw = request.form.get("email_finance", "").strip()
-        email_sales_nieuw = request.form.get("email_sales", "").strip()
-
-        if not naam_nieuw:
-            bericht_klant = ("fout", "Naam is verplicht.")
-        elif any(f["naam"].strip().lower() == naam_nieuw.lower() and f.get("land","").strip().lower() == land_nieuw.lower() for f in PAPIERFABRIEKEN):
-            bericht_klant = ("fout", f"'{naam_nieuw}' ({land_nieuw or 'onbekend land'}) staat al in het systeem.")
-        else:
-            geo = geocode_adres(stad_nieuw, land_nieuw) if (stad_nieuw or land_nieuw) else None
-            huidige_gebruiker_klant = session.get("gebruikersnaam", "")
-            PAPIERFABRIEKEN.append({
-                "naam": naam_nieuw, "land": land_nieuw, "stad": stad_nieuw,
-                "materialen": materialen_nieuw, "volume": volume_nieuw,
-                "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
-                "adres": adres_nieuw, "telefoon": telefoon_nieuw, "contactpersoon": contactpersoon_nieuw,
-                "betalingstermijn": betalingstermijn_nieuw, "bankgegevens": bankgegevens_nieuw, "vat_nummer": vat_nieuw,
-                "email_logistiek": email_log_nieuw, "email_finance": email_fin_nieuw, "email_sales": email_sales_nieuw,
-            })
-            with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
-                json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
-
-            if huidige_gebruiker_klant:
-                alle_am = laad_accountmanagers()
-                alle_am[naam_nieuw] = huidige_gebruiker_klant
-                bewaar_accountmanagers(alle_am)
-            if status_nieuw:
-                alle_status = laad_status()
-                alle_status[naam_nieuw] = status_nieuw
-                bewaar_status(alle_status)
-
-            bericht_klant = ("succes", f"'{naam_nieuw}' toegevoegd aan je klanten.")
+    bericht_klant = ("succes", "Klant toegevoegd.") if request.args.get("toegevoegd") else None
 
     zoekterm_fab = request.args.get("zoekterm", "").strip().lower()
     land_fab = request.args.get("land", "")
@@ -9027,7 +9215,7 @@ def klanten_pagina():
     <div style="display:flex;align-items:center;gap:22px;">
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ klanten_lijst|length }}</div></div>
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat_fab }}</div></div>
-        <button type="button" onclick="toggleToevoegPaneel()" id="toevoegKlantBtn" style="align-self:center;padding:9px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;">+ Nieuwe klant</button>
+        <a href="/bedrijf-toevoegen?type=klant" id="toevoegKlantBtn" style="align-self:center;padding:9px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;text-decoration:none;">+ Nieuwe klant</a>
     </div>
 </div>
 
@@ -9035,58 +9223,6 @@ def klanten_pagina():
 <div style="background:{{ '#f0fdf4' if bericht_klant[0] == 'succes' else '#fef2f2' }};color:{{ '#16a34a' if bericht_klant[0] == 'succes' else '#dc2626' }};padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13.5px;margin-left:20px;max-width:820px;">{{ bericht_klant[1] }}</div>
 {% endif %}
 
-<div id="toevoegPaneel" style="display:none;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:820px;margin:0 20px 20px;">
-    <div class="dg-kaart-titel" style="margin-bottom:4px;">Nieuwe klant toevoegen</div>
-    <p style="font-size:12px;color:var(--gray-400);margin-bottom:0;">Wordt automatisch aan jou toegewezen als accountmanager.</p>
-    <form method="POST">
-        <div class="tvf-sectiekop">Basisgegevens</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
-            <div><span class="tvf-label">Bedrijfsnaam *</span><input type="text" name="naam" required class="tvf-input"></div>
-            <div><span class="tvf-label">Land</span><input type="text" name="land" class="tvf-input"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
-            <div><span class="tvf-label">Stad</span><input type="text" name="stad" class="tvf-input"></div>
-            <div><span class="tvf-label">Adres</span><input type="text" name="adres" class="tvf-input"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
-            <div><span class="tvf-label">Materialen (bv. Paper, Plastic)</span><input type="text" name="materialen" class="tvf-input"></div>
-            <div><span class="tvf-label">Volume (t/jaar)</span><input type="text" name="volume" class="tvf-input"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-            <div><span class="tvf-label">Status</span>
-                <select name="status" class="tvf-input">
-                    <option value="">Status kiezen (optioneel)</option>
-                    <option value="potentie">🟡 Potentie</option>
-                    <option value="in_proces">🔵 In Proces</option>
-                    <option value="klant">🟢 Klant</option>
-                </select>
-            </div>
-            <div><span class="tvf-label">Betalingstermijn</span><input type="text" name="betalingstermijn" placeholder="bv. 30 dagen" class="tvf-input"></div>
-        </div>
-
-        <div class="tvf-sectiekop">Contactpersoon</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-            <div><span class="tvf-label">Naam contactpersoon</span><input type="text" name="contactpersoon" class="tvf-input"></div>
-            <div><span class="tvf-label">Telefoon</span><input type="text" name="telefoon" class="tvf-input"></div>
-        </div>
-
-        <div class="tvf-sectiekop">E-mail per afdeling</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
-            <div><span class="tvf-label">Logistiek</span><input type="text" name="email_logistiek" class="tvf-input"></div>
-            <div><span class="tvf-label">Finance</span><input type="text" name="email_finance" class="tvf-input"></div>
-            <div><span class="tvf-label">Sales</span><input type="text" name="email_sales" class="tvf-input"></div>
-        </div>
-
-        <div class="tvf-sectiekop">Financieel</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
-            <div><span class="tvf-label">Bankgegevens (IBAN)</span><input type="text" name="bankgegevens" class="tvf-input"></div>
-            <div><span class="tvf-label">VAT / BTW-nummer</span><input type="text" name="vat_nummer" class="tvf-input"></div>
-        </div>
-
-        <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Klant toevoegen</button>
-        <button type="button" onclick="toggleToevoegPaneel()" style="padding:9px 18px;background:none;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px;">Annuleren</button>
-    </form>
-</div>
 
 <form method="GET" id="klantZoekForm" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;margin-left:20px;">
     {% if filter_status_klant %}<input type="hidden" name="filter_status" value="{{ filter_status_klant }}">{% endif %}
@@ -9148,10 +9284,6 @@ def klanten_pagina():
 {% endif %}
 
 <script>
-function toggleToevoegPaneel() {
-    var paneel = document.getElementById("toevoegPaneel");
-    paneel.style.display = (paneel.style.display === "none") ? "block" : "none";
-}
 (function () {
     var lijst = document.getElementById("klantenLijst");
     if (!lijst) return;
@@ -9688,28 +9820,45 @@ select.klik-bewerken-veld { cursor:pointer; }
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100);">
         <button type="button" onclick="toggleMeerInfo()" id="meerInfoToggleBtn" style="font-size:12px;font-weight:600;color:var(--brand-600);background:none;border:none;cursor:pointer;padding:0;">+ Meer informatie (bank, VAT, contact per afdeling)</button>
         <div id="meerInfoPaneel" style="display:none;margin-top:12px;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;">
-                <div>
-                    <div class="veld-label">Bankgegevens (IBAN)</div>
-                    <input type="text" value="{{ bedrijf.bankgegevens or '' }}" data-veld="bankgegevens" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
-                </div>
-                <div>
-                    <div class="veld-label">VAT / BTW-nummer</div>
-                    <input type="text" value="{{ bedrijf.vat_nummer or '' }}" data-veld="vat_nummer" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
-                </div>
-                <div>
-                    <div class="veld-label">E-mail logistiek</div>
-                    <input type="text" value="{{ bedrijf.email_logistiek or '' }}" data-veld="email_logistiek" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
-                </div>
-                <div>
-                    <div class="veld-label">E-mail finance</div>
-                    <input type="text" value="{{ bedrijf.email_finance or '' }}" data-veld="email_finance" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
-                </div>
-                <div>
-                    <div class="veld-label">E-mail sales</div>
-                    <input type="text" value="{{ bedrijf.email_sales or '' }}" data-veld="email_sales" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
-                </div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Algemeen</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;margin-bottom:16px;">
+                <div><div class="veld-label">Postcode</div><input type="text" value="{{ bedrijf.postcode or '' }}" data-veld="postcode" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">Stad</div><input type="text" value="{{ bedrijf.stad or bedrijf.regio or '' }}" data-veld="stad" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">Algemeen e-mailadres</div><input type="text" value="{{ bedrijf.email_algemeen or '' }}" data-veld="email_algemeen" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">KvK-nummer</div><input type="text" value="{{ bedrijf.kvk_nummer or '' }}" data-veld="kvk_nummer" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
             </div>
+
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Financieel</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;margin-bottom:16px;">
+                <div><div class="veld-label">Naam bank</div><input type="text" value="{{ bedrijf.bank_naam or '' }}" data-veld="bank_naam" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">Begunstigde</div><input type="text" value="{{ bedrijf.begunstigde or '' }}" data-veld="begunstigde" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">Bankadres</div><input type="text" value="{{ bedrijf.bank_adres or '' }}" data-veld="bank_adres" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">SWIFT / BIC-code</div><input type="text" value="{{ bedrijf.swift_bic or '' }}" data-veld="swift_bic" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">IBAN (EUR)</div><input type="text" value="{{ bedrijf.iban_eur or '' }}" data-veld="iban_eur" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">IBAN (USD)</div><input type="text" value="{{ bedrijf.iban_usd or '' }}" data-veld="iban_usd" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">IBAN (GBP)</div><input type="text" value="{{ bedrijf.iban_gbp or '' }}" data-veld="iban_gbp" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">VAT / BTW-nummer</div><input type="text" value="{{ bedrijf.vat_nummer or '' }}" data-veld="vat_nummer" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">Bankgegevens (overig)</div><input type="text" value="{{ bedrijf.bankgegevens or '' }}" data-veld="bankgegevens" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+            </div>
+
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Facturatie</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;margin-bottom:16px;">
+                <div><div class="veld-label">E-mail voor facturatie</div><input type="text" value="{{ bedrijf.factuur_email or '' }}" data-veld="factuur_email" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">Contactpersoon facturatie</div><input type="text" value="{{ bedrijf.factuur_contactpersoon or '' }}" data-veld="factuur_contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">E-mail vragen over betalingen</div><input type="text" value="{{ bedrijf.vragen_betalingen_email or '' }}" data-veld="vragen_betalingen_email" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">E-mail sales-facturatie</div><input type="text" value="{{ bedrijf.sales_facturatie_email or '' }}" data-veld="sales_facturatie_email" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+            </div>
+
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Contact per afdeling</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;margin-bottom:16px;">
+                <div><div class="veld-label">E-mail logistiek</div><input type="text" value="{{ bedrijf.email_logistiek or '' }}" data-veld="email_logistiek" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">E-mail finance</div><input type="text" value="{{ bedrijf.email_finance or '' }}" data-veld="email_finance" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+                <div><div class="veld-label">E-mail sales</div><input type="text" value="{{ bedrijf.email_sales or '' }}" data-veld="email_sales" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
+            </div>
+
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Overig</div>
+            <div class="veld-label">Overige informatie</div>
+            <textarea data-veld="overige_informatie" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld" style="min-height:56px;resize:vertical;">{{ bedrijf.overige_informatie or '' }}</textarea>
         </div>
     </div>
 </div>
