@@ -5506,327 +5506,544 @@ def dashboard():
     aantal_geen = sum(1 for s in status_alle.values() if s == "geen_interesse")
     status_totaal = max(aantal_klant + aantal_potentie + aantal_proces + aantal_geen, 1)
 
-    per_materiaal = {}
-    per_continent = {}
-    per_continent_materiaal = {}
-    for b in ENF_BEDRIJVEN:
-        continent = bepaal_continent(b.get("land",""))
-        per_continent[continent] = per_continent.get(continent, 0) + 1
-        per_continent_materiaal.setdefault(continent, {})
-        for m in [x.strip() for x in b.get("materialen", "").split(",") if x.strip()]:
-            per_materiaal[m] = per_materiaal.get(m, 0) + 1
-            per_continent_materiaal[continent][m] = per_continent_materiaal[continent].get(m, 0) + 1
+    # ---------- Ingekocht per maand (echte data: inbound shipments) ----------
+    vandaag_maand = datetime.date.today().replace(day=1)
+    maand_labels = []
+    maand_sleutels = []
+    cursor = vandaag_maand
+    for _ in range(12):
+        maand_sleutels.append((cursor.year, cursor.month))
+        maand_labels.append(cursor.strftime("%b").lower())
+        if cursor.month == 1:
+            cursor = cursor.replace(year=cursor.year - 1, month=12)
+        else:
+            cursor = cursor.replace(month=cursor.month - 1)
+    maand_sleutels.reverse()
+    maand_labels.reverse()
+    inkoop_per_maand = {sleutel: 0.0 for sleutel in maand_sleutels}
+    alle_shipments_dash = laad_shipments()
+    for s in alle_shipments_dash:
+        if s.get("status") == "Cancelled" or not s.get("datum"):
+            continue
+        if bepaal_shipment_flow_type(s) != "inbound":
+            continue
+        try:
+            dt = datetime.datetime.strptime(s["datum"], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+        sleutel = (dt.year, dt.month)
+        if sleutel in inkoop_per_maand:
+            inkoop_per_maand[sleutel] += shipment_hoeveelheid(s)
+    inkoop_serie = [inkoop_per_maand[s] for s in maand_sleutels]
+    max_inkoop_maand = max(inkoop_serie) if any(inkoop_serie) else 1
 
-    top_materialen = sorted(per_materiaal.items(), key=lambda x: -x[1])[:5]
-    max_materiaal = max([a for _, a in top_materialen], default=1)
+    # ---------- Inkoop per kwaliteit (echte data: goedgekeurde inbound-transacties) ----------
+    inkoop_per_kwaliteit = {}
+    for t in laad_voorraad():
+        if t.get("type") not in ("in", "inbound"):
+            continue
+        if t.get("keuringsstatus", "goedgekeurd") != "goedgekeurd":
+            continue
+        naam = t.get("materiaal", "")
+        if not naam:
+            continue
+        inkoop_per_kwaliteit[naam] = inkoop_per_kwaliteit.get(naam, 0.0) + parse_hoeveelheid_getal(t.get("hoeveelheid", ""))
+    inkoop_kwaliteit_lijst = sorted(inkoop_per_kwaliteit.items(), key=lambda x: -x[1])[:8]
+    max_inkoop_kwaliteit = max([a for _, a in inkoop_kwaliteit_lijst], default=1) or 1
 
-    # Donut-chart data: top 4 materialen + "Overig"
-    donut_bron = sorted(per_materiaal.items(), key=lambda x: -x[1])
-    donut_top4 = donut_bron[:4]
-    donut_overig = sum(a for _, a in donut_bron[4:])
-    donut_totaal = max(sum(a for _, a in donut_top4) + donut_overig, 1)
-    donut_kleuren = ["#fbbf24", "#14767b", "#0d5c62", "#0a4a4f", "#5c4326"]
-    donut_segmenten = []
-    cursor = 0
-    for i, (naam, aantal) in enumerate(donut_top4 + ([("Overig", donut_overig)] if donut_overig else [])):
-        pct = aantal / donut_totaal * 100
-        donut_segmenten.append({"naam": naam, "aantal": aantal, "pct": round(pct,1), "van": round(cursor,2), "tot": round(cursor+pct,2), "kleur": donut_kleuren[i % len(donut_kleuren)]})
-        cursor += pct
+    # ---------- Orders / sales (echte data) ----------
+    orders_alle_dash = laad_orders()
+    verkoop_orders_dash = [o for o in orders_alle_dash if o.get("ordertype", "verkoop") != "inkoop"]
+    gewonnen_verkoop_dash = [o for o in verkoop_orders_dash if o.get("status") == "Gewonnen"]
+    open_of_onderhandeling_dash = [o for o in orders_alle_dash if o.get("status") in ("Open", "Onderhandeling")]
 
-    # Regionaal intelligence: top 3 continenten
-    top_continenten = sorted(per_continent.items(), key=lambda x: -x[1])[:3]
-    regio_kaarten = []
-    for naam, aantal in top_continenten:
-        top_mat = sorted(per_continent_materiaal.get(naam, {}).items(), key=lambda x: -x[1])[:3]
-        activiteit = "Hoog" if aantal > status_totaal else ("Gemiddeld" if aantal > status_totaal/3 else "Laag")
-        regio_kaarten.append({"naam": naam, "aantal": aantal, "materialen": [m for m,_ in top_mat], "activiteit": activiteit})
+    def _prijs_getal(o):
+        try:
+            return float(str(o.get("prijs", "")).replace(",", "").replace("€", "").strip())
+        except (ValueError, TypeError):
+            return 0.0
 
-    volume_klant = 0
-    for b in ENF_BEDRIJVEN:
-        if status_alle.get(b["naam"]) == "klant":
+    omzet_totaal = sum(_prijs_getal(o) for o in gewonnen_verkoop_dash)
+    ton_verkocht_totaal = sum(parse_hoeveelheid_getal(o.get("hoeveelheid", "")) for o in gewonnen_verkoop_dash)
+    verwachte_omzet = sum(_prijs_getal(o) for o in verkoop_orders_dash if o.get("status") in ("Open", "Onderhandeling"))
+    lopende_orders_aantal = len(open_of_onderhandeling_dash)
+
+    _vandaag_dash = datetime.date.today()
+    geplande_orders_lijst = []
+    for o in open_of_onderhandeling_dash:
+        if not o.get("verwachte_datum"):
+            continue
+        try:
+            d = datetime.datetime.strptime(o["verwachte_datum"], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+        if d >= _vandaag_dash:
+            geplande_orders_lijst.append(o)
+    geplande_orders_aantal = len(geplande_orders_lijst)
+
+    # Sales pipeline: verdeling van alle orders over de statussen
+    pipeline_tellingen = []
+    for st in ("Open", "Onderhandeling", "Gewonnen", "Verloren"):
+        aantal = sum(1 for o in orders_alle_dash if o.get("status") == st)
+        pipeline_tellingen.append({"status": st, "aantal": aantal})
+    max_pipeline = max([p["aantal"] for p in pipeline_tellingen], default=1) or 1
+
+    # ---------- Team-prestatie (echte data) ----------
+    accountmanagers_alle_dash = laad_accountmanagers()
+    _teamnamen_dash = sorted(set(laad_users().keys()) | set(accountmanagers_alle_dash.values()) | {o.get("verantwoordelijke", "") for o in orders_alle_dash if o.get("verantwoordelijke")})
+    team_prestaties_dash = []
+    for naam in _teamnamen_dash:
+        if not naam:
+            continue
+        aantal_bedrijven_am = sum(1 for am in accountmanagers_alle_dash.values() if am == naam)
+        orders_van_am = [o for o in orders_alle_dash if o.get("verantwoordelijke") == naam]
+        waarde_am = sum(_prijs_getal(o) for o in orders_van_am if o.get("status") == "Gewonnen")
+        if aantal_bedrijven_am == 0 and not orders_van_am:
+            continue
+        team_prestaties_dash.append({"naam": naam, "bedrijven": aantal_bedrijven_am, "orders": len(orders_van_am), "waarde": waarde_am})
+    team_prestaties_dash.sort(key=lambda t: -t["waarde"])
+    team_prestaties_dash = team_prestaties_dash[:6]
+    max_team_waarde = max([t["waarde"] for t in team_prestaties_dash], default=1) or 1
+
+    # ---------- Progressie met bedrijven (status-funnel, echte data) ----------
+    progressie_funnel = [
+        {"label": "Nieuwe leads", "aantal": len(ENF_BEDRIJVEN) - status_totaal + max(0, status_totaal - (aantal_klant + aantal_potentie + aantal_proces + aantal_geen))},
+        {"label": "Potentie", "aantal": aantal_potentie},
+        {"label": "In proces", "aantal": aantal_proces},
+        {"label": "Klant", "aantal": aantal_klant},
+    ]
+    # Nieuwe leads = bedrijven zonder enige status
+    progressie_funnel[0]["aantal"] = sum(1 for b in ENF_BEDRIJVEN if not status_alle.get(b["naam"]))
+    max_funnel = max([f["aantal"] for f in progressie_funnel], default=1) or 1
+
+    # ---------- Topklanten & klanten zonder recent contact (echte data) ----------
+    _notities_alle_dash = laad_notities()
+
+    def _laatste_contact_dagen(naam_bedrijf):
+        notities_van = _notities_alle_dash.get(naam_bedrijf, [])
+        laatste = None
+        for n in notities_van:
             try:
-                volume_klant += float(str(b.get("volume","0")).replace(",",""))
-            except:
-                pass
-
-    alle_meldingen = laad_meldingen()
-    openstaand = [m for m in alle_meldingen if not m.get("gelezen")]
-    openstaand = sorted(openstaand, key=lambda x: x.get("timestamp",""), reverse=True)[:8]
-
-    kaart_bedrijven = [
-        {"naam": b["naam"], "lat": b["lat"], "lon": b["lon"], "status": status_alle.get(b["naam"], "")}
-        for b in ENF_BEDRIJVEN if b.get("lat") and b.get("lon")
-    ][:1500]
-
-    # Vraagt om aandacht: echte data, niks verzonnen (verlopen orders + verlopen certificeringen)
-    vandaag_dash = datetime.date.today()
-    aandacht_items = []
-    for o in laad_orders():
-        if o.get("status") in ("Open", "Onderhandeling") and o.get("verwachte_datum"):
-            try:
-                verwacht = datetime.datetime.strptime(o["verwachte_datum"], "%Y-%m-%d").date()
-                if verwacht < vandaag_dash:
-                    aandacht_items.append({"titel": f"Order verlopen: {o['bedrijf']}", "sub": f"{o.get('materiaal','')} · verwacht was {o['verwachte_datum']}", "url": f"/orders"})
+                dt = datetime.datetime.strptime(n.get("timestamp", ""), "%d-%m-%Y %H:%M").date()
+                if laatste is None or dt > laatste:
+                    laatste = dt
             except (ValueError, TypeError):
-                pass
+                continue
+        if laatste is None:
+            return None
+        return (_vandaag_dash - laatste).days
+
+    klanten_dash = [b for b in ENF_BEDRIJVEN if status_alle.get(b["naam"]) == "klant"]
+    topklanten = sorted(klanten_dash, key=lambda b: -parse_hoeveelheid_getal(b.get("volume", "")))[:5]
+    klanten_zonder_contact = []
+    for b in klanten_dash:
+        dagen = _laatste_contact_dagen(b["naam"])
+        if dagen is None or dagen > 30:
+            klanten_zonder_contact.append({"naam": b["naam"], "dagen": dagen})
+    klanten_zonder_contact.sort(key=lambda x: (x["dagen"] is not None, -(x["dagen"] or 0)))
+    klanten_zonder_contact = klanten_zonder_contact[:5]
+
+    nieuwe_leads_lijst = sorted(
+        [b for b in ENF_BEDRIJVEN if not status_alle.get(b["naam"])],
+        key=lambda b: -parse_hoeveelheid_getal(b.get("volume", ""))
+    )[:5]
+
+    # ---------- Marktprijzen & transportkosten (echte data, samengevat) ----------
+    marktprijzen_alle = laad_marktprijzen()
+    marktprijzen_recent = sorted(marktprijzen_alle, key=lambda p: p.get("datum", ""), reverse=True)[:5]
+
+    transport_data_dash = laad_transport_data()
+    aantal_forwarders = len(transport_data_dash)
+    aantal_transport_steden = sum(len(v) for v in transport_data_dash.values())
+
+    # ---------- Vraagt om aandacht ----------
+    leads_zonder_am_dash = [b for b in ENF_BEDRIJVEN if not accountmanagers_alle_dash.get(b["naam"])]
+    leads_zonder_am_groot = sum(1 for b in leads_zonder_am_dash if parse_hoeveelheid_getal(b.get("volume", "")) > 10000)
+    bedrijven_zonder_kwaliteiten = sum(1 for b in ENF_BEDRIJVEN if b.get("materialen") and not b.get("kwaliteiten"))
+
     _vervaldatums_dash = laad_cert_vervaldatums()
+    aantal_cert_verlopen = 0
     for b in ENF_BEDRIJVEN:
-        for c in [x.strip() for x in b.get("certificeringen","").split(",") if x.strip()]:
+        for c in [x.strip() for x in b.get("certificeringen", "").split(",") if x.strip()]:
             geldig_tot = _vervaldatums_dash.get(_cert_sleutel(b["naam"], c), "")
             if geldig_tot:
                 try:
-                    if datetime.datetime.strptime(geldig_tot, "%Y-%m-%d").date() < vandaag_dash:
-                        aandacht_items.append({"titel": f"Certificaat verlopen: {b['naam']}", "sub": f"{c} · verliep {geldig_tot}", "url": f"/bedrijf/{b['naam']}"})
+                    if datetime.datetime.strptime(geldig_tot, "%Y-%m-%d").date() < _vandaag_dash:
+                        aantal_cert_verlopen += 1
                 except (ValueError, TypeError):
                     pass
-    aandacht_items = aandacht_items[:8]
+
+    orders_verlopen = 0
+    for o in open_of_onderhandeling_dash:
+        if o.get("verwachte_datum"):
+            try:
+                if datetime.datetime.strptime(o["verwachte_datum"], "%Y-%m-%d").date() < _vandaag_dash:
+                    orders_verlopen += 1
+            except (ValueError, TypeError):
+                pass
+
+    aandacht_items = []
+    if leads_zonder_am_dash:
+        sub = f"waarvan {leads_zonder_am_groot} boven 10.000 t/j" if leads_zonder_am_groot else ""
+        aandacht_items.append({"titel": f"{len(leads_zonder_am_dash)} leads zonder accountmanager", "sub": sub, "url": "/?accountmanager="})
+    if bedrijven_zonder_kwaliteiten:
+        aandacht_items.append({"titel": f"{bedrijven_zonder_kwaliteiten} bedrijven zonder kwaliteiten", "sub": "blokkeert matching met fabrieken", "url": "/"})
+    if aantal_cert_verlopen:
+        aandacht_items.append({"titel": f"{aantal_cert_verlopen} certificeringen verlopen", "sub": "controle nodig", "url": "/certificeringen"})
+    if orders_verlopen:
+        aandacht_items.append({"titel": f"{orders_verlopen} orders over de verwachte datum", "sub": "nog niet afgerond", "url": "/orders"})
+
+    # ---------- Activiteit van het team ----------
+    activiteit = []
+    for bedrijf_naam, lijst in _notities_alle_dash.items():
+        for n in lijst:
+            if n.get("type") != "team":
+                continue
+            activiteit.append({
+                "gebruiker": n.get("gebruikersnaam", "?"), "tekst": "Notitie toegevoegd", "sub": bedrijf_naam,
+                "tijd_sorteer": n.get("timestamp", ""),
+            })
+    for m in laad_meldingen():
+        if m.get("van"):
+            activiteit.append({
+                "gebruiker": m["van"], "tekst": m.get("tekst", "")[:60], "sub": m.get("bedrijf", ""),
+                "tijd_sorteer": m.get("timestamp", ""),
+            })
+    activiteit.sort(key=lambda x: x["tijd_sorteer"], reverse=True)
+    activiteit = activiteit[:6]
+
+    volume_klant = 0.0
+    for b in ENF_BEDRIJVEN:
+        if status_alle.get(b["naam"]) == "klant":
+            volume_klant += parse_hoeveelheid_getal(b.get("volume", ""))
+
+    gebruikersnaam_dash = session.get("gebruikersnaam", "")
+
+    # ---------- Placeholders: metrics zonder datamodel — nooit fabriceren, altijd eerlijk "—" ----------
+    placeholders = [
+        {"label": "Marge", "sub": "kostprijs-veld ontbreekt nog"},
+        {"label": "Marge per ton", "sub": "kostprijs-veld ontbreekt nog"},
+        {"label": "Target / voortgang", "sub": "geen targets ingesteld"},
+        {"label": "Openstaande betalingen", "sub": "geen betaalstatus op orders"},
+        {"label": "Betalingsachterstanden", "sub": "geen vervaldatum op facturen"},
+        {"label": "Openstaande offertes", "sub": "geen offerte-stadium"},
+        {"label": "Openstaande claims", "sub": "geen claims-model"},
+        {"label": "Taken voor vandaag", "sub": "geen takenlijst"},
+        {"label": "Follow-ups", "sub": "geen follow-up-systeem"},
+    ]
 
     inhoud = """
-<div class="dash-donker-wrap">
 <style>
-.dash-donker-wrap {
-    background: var(--gray-50);
-    margin:-32px -40px; padding:32px 40px; min-height:calc(100vh - 64px); color:var(--gray-800);
-}
-.dash-donker-wrap .page-title { color:var(--gray-900); font-weight:800; letter-spacing:-0.5px; }
-.dg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:16px; margin-bottom:24px; }
-.dg-kaart {
-    background: #fff;
-    border: 1px solid var(--gray-200);
-    border-radius: 18px;
-    padding: 22px;
-    box-shadow: var(--shadow-sm);
-    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-.dg-kaart:hover { transform: translateY(-2px); border-color: var(--brand-300); box-shadow: var(--shadow-md); }
-.dg-icoon { font-size:1.3rem; margin-bottom:10px; opacity:0.9; }
-.dg-getal { font-size:2.1rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(90deg,var(--brand-600),var(--brand-500)); -webkit-background-clip:text; background-clip:text; color:transparent; }
-.dg-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:1.2px; margin-top:6px; font-weight:600; }
-.dg-kaart-titel { font-size:0.78rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:18px; font-weight:700; display:flex; align-items:center; gap:8px; }
-.dg-bar-rij { display:flex; align-items:center; gap:10px; margin-bottom:13px; font-size:0.82rem; }
-.dg-bar-label { width:110px; color:var(--gray-600); flex-shrink:0; }
-.dg-bar-track { flex:1; background:var(--gray-100); border-radius:6px; height:9px; overflow:hidden; }
-.dg-bar-fill { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); height:100%; border-radius:6px; }
-.dg-bar-getal { width:34px; text-align:right; color:var(--brand-700); font-weight:700; }
-#dashKaart { height:280px; border-radius:14px; overflow:hidden; border:1px solid var(--gray-200); }
-.dg-activiteit-item { padding:11px 0; border-bottom:1px solid var(--gray-100); font-size:0.83rem; color:var(--gray-700); }
-.dg-activiteit-item:last-child { border-bottom:none; }
-.dg-activiteit-item small { color:var(--gray-400); display:block; margin-top:3px; }
-.dg-lege { color:var(--gray-400); font-size:0.83rem; }
-.dg-rij-2 { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px; }
-.dg-rij-2 > div { flex:1; min-width:280px; }
-.att-item { padding:12px 0; border-bottom:1px solid var(--gray-100); display:flex; align-items:flex-start; gap:10px; text-decoration:none; color:inherit; }
-.att-item:last-child { border-bottom:none; }
-.att-item:hover { background:#f9fbfc; }
-.att-dot { width:6px; height:6px; border-radius:50%; background:#dc2626; margin-top:6px; flex:none; }
-.att-titel { font-size:0.82rem; font-weight:600; color:var(--gray-800); }
-.att-sub { font-size:0.75rem; color:var(--gray-400); margin-top:2px; }
+.db-topbar { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
+.db-groet { font-size:1.5rem; font-weight:700; color:var(--gray-900); }
+.db-substaat { font-size:0.82rem; color:var(--gray-400); margin-top:2px; }
+.db-acties { display:flex; gap:8px; }
+.db-btn { font-size:0.8rem; font-weight:600; padding:8px 16px; border-radius:6px; text-decoration:none; cursor:pointer; border:1px solid var(--gray-200); background:#fff; color:var(--gray-700); }
+.db-btn-primair { background:var(--brand-600); color:#fff; border-color:var(--brand-600); }
+
+.db-kpi-rij { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:8px; }
+.db-kpi { padding:18px 22px; border-right:1px solid var(--gray-200); }
+.db-kpi:last-child { border-right:none; }
+.db-kpi-label { font-size:0.68rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-400); margin-bottom:8px; }
+.db-kpi-getal { font-size:28px; font-weight:700; color:var(--gray-900); letter-spacing:-0.02em; }
+.db-kpi-sub { font-size:0.76rem; color:var(--gray-400); margin-top:4px; }
+.db-kpi-rij + .db-kpi-rij { border-top:none; margin-bottom:28px; }
+
+.db-rij { display:flex; gap:28px; margin-bottom:28px; align-items:flex-start; }
+.db-kol { flex:1; min-width:0; }
+.db-sectie-titel { font-size:0.95rem; font-weight:600; color:var(--gray-900); margin-bottom:18px; display:flex; justify-content:space-between; align-items:baseline; }
+.db-sectie-titel small { font-size:0.72rem; font-weight:500; color:var(--gray-400); }
+
+.db-bars { display:flex; align-items:flex-end; gap:10px; height:150px; padding-top:8px; }
+.db-bar-kol { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
+.db-bar { width:100%; max-width:34px; background:var(--brand-600); border-radius:3px 3px 0 0; }
+.db-bar-label { font-size:0.68rem; color:var(--gray-400); margin-top:8px; }
+
+.db-hbar-rij { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--gray-100); font-size:0.82rem; }
+.db-hbar-rij:last-child { border-bottom:none; }
+.db-hbar-naam { width:120px; flex-shrink:0; color:var(--gray-700); }
+.db-hbar-track { flex:1; height:7px; background:var(--gray-100); border-radius:4px; overflow:hidden; }
+.db-hbar-fill { height:100%; background:var(--brand-600); border-radius:4px; }
+.db-hbar-getal { width:64px; text-align:right; color:var(--gray-500); font-family:var(--font-mono); font-size:0.78rem; }
+
+.db-att-item { display:flex; gap:10px; align-items:flex-start; padding:11px 0; border-bottom:1px solid var(--gray-100); text-decoration:none; }
+.db-att-item:last-child { border-bottom:none; }
+.db-att-dot { width:6px; height:6px; border-radius:50%; background:var(--brand-600); margin-top:6px; flex-shrink:0; }
+.db-att-titel { font-size:0.82rem; font-weight:600; color:var(--gray-900); }
+.db-att-sub { font-size:0.74rem; color:var(--gray-400); margin-top:2px; }
+
+.db-act-item { padding:9px 0; border-bottom:1px solid var(--gray-100); font-size:0.8rem; display:flex; gap:8px; }
+.db-act-item:last-child { border-bottom:none; }
+.db-act-naam { font-weight:600; color:var(--gray-900); flex-shrink:0; }
+.db-act-tekst { color:var(--gray-600); }
+.db-act-sub { color:var(--gray-400); display:block; font-size:0.74rem; margin-top:1px; }
+
+.db-lijst-item { padding:9px 0; border-bottom:1px solid var(--gray-100); font-size:0.82rem; display:flex; justify-content:space-between; gap:8px; text-decoration:none; color:inherit; }
+.db-lijst-item:last-child { border-bottom:none; }
+.db-lijst-naam { color:var(--gray-800); font-weight:600; }
+.db-lijst-sub { color:var(--gray-400); font-size:0.74rem; }
+.db-lijst-getal { color:var(--gray-500); font-family:var(--font-mono); font-size:0.78rem; white-space:nowrap; }
+
+.db-leeg { color:var(--gray-400); font-size:0.82rem; padding:8px 0; }
+
+.db-ph-titel { font-size:0.95rem; font-weight:600; color:var(--gray-900); margin-bottom:4px; }
+.db-ph-sub { font-size:0.78rem; color:var(--gray-400); margin-bottom:16px; }
+.db-ph-grid { display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--gray-200); border-left:1px solid var(--gray-200); margin-bottom:28px; }
+.db-ph-tegel { padding:16px 18px; border-right:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); }
+.db-ph-tegel-label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--gray-400); margin-bottom:6px; }
+.db-ph-tegel-waarde { font-size:20px; font-weight:700; color:var(--gray-300); }
+.db-ph-tegel-sub { font-size:0.7rem; color:var(--gray-300); margin-top:3px; }
 </style>
 
-<div class="page-title">Dashboard</div>
-{% if groei_pct is none %}
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.82rem;">📈 Groeitracking is vandaag gestart — kom over een paar dagen terug voor een echt groeicijfer.</p>
-{% endif %}
+<div class="db-topbar">
+    <div>
+        <div class="db-groet">Goedemorgen, {{ gebruikersnaam_dash or "daar" }}</div>
+        <div class="db-substaat">Stand van zaken, week {{ huidige_week }} · bijgewerkt vanochtend {{ bijgewerkt_tijd }}</div>
+    </div>
+    <div class="db-acties">
+        <a href="/dashboard" class="db-btn">Deze maand</a>
+        <a href="/export-csv" class="db-btn db-btn-primair">Rapport delen</a>
+    </div>
+</div>
 
-{% if aandacht_items %}
-<div class="dg-kaart" style="margin-bottom:20px;">
-    <div class="dg-kaart-titel">⚠ Vraagt om aandacht</div>
-    {% for a in aandacht_items %}
-    <a class="att-item" href="{{ a.url }}">
-        <span class="att-dot"></span>
-        <span><span class="att-titel">{{ a.titel }}</span><br><span class="att-sub">{{ a.sub }}</span></span>
-    </a>
+<div class="db-kpi-rij">
+    <div class="db-kpi">
+        <div class="db-kpi-label">Bedrijven in database</div>
+        <div class="db-kpi-getal">{{ "{:,}".format(totaal).replace(",", ".") }}</div>
+        <div class="db-kpi-sub">{% if groei_pct is not none %}{{ '+' if groei_pct >= 0 else '' }}{{ groei_pct }}% sinds {{ groei_periode }}{% else %}nog geen groeicijfer{% endif %}</div>
+    </div>
+    <div class="db-kpi">
+        <div class="db-kpi-label">Gedekt volume</div>
+        <div class="db-kpi-getal">{{ volume_totaal_label }}</div>
+        <div class="db-kpi-sub">per jaar, opgegeven</div>
+    </div>
+    <div class="db-kpi">
+        <div class="db-kpi-label">Actieve leads</div>
+        <div class="db-kpi-getal">{{ status_totaal_leads }}</div>
+        <div class="db-kpi-sub">{{ leads_zonder_am_dash|length }} zonder accountmanager</div>
+    </div>
+    <div class="db-kpi">
+        <div class="db-kpi-label">Geplande orders</div>
+        <div class="db-kpi-getal">{{ geplande_orders_aantal }}</div>
+        <div class="db-kpi-sub">met een verwachte datum</div>
+    </div>
+</div>
+<div class="db-kpi-rij">
+    <div class="db-kpi">
+        <div class="db-kpi-label">Omzet (gewonnen)</div>
+        <div class="db-kpi-getal">€{{ "{:,.0f}".format(omzet_totaal).replace(",", ".") }}</div>
+        <div class="db-kpi-sub">uit gewonnen verkooporders</div>
+    </div>
+    <div class="db-kpi">
+        <div class="db-kpi-label">Ton verkocht</div>
+        <div class="db-kpi-getal">{{ "{:,.0f}".format(ton_verkocht_totaal).replace(",", ".") }}</div>
+        <div class="db-kpi-sub">uit gewonnen verkooporders</div>
+    </div>
+    <div class="db-kpi">
+        <div class="db-kpi-label">Verwachte omzet</div>
+        <div class="db-kpi-getal">€{{ "{:,.0f}".format(verwachte_omzet).replace(",", ".") }}</div>
+        <div class="db-kpi-sub">open + onderhandeling</div>
+    </div>
+    <div class="db-kpi">
+        <div class="db-kpi-label">Lopende orders</div>
+        <div class="db-kpi-getal">{{ lopende_orders_aantal }}</div>
+        <div class="db-kpi-sub">open of in onderhandeling</div>
+    </div>
+</div>
+
+<div class="db-rij">
+    <div class="db-kol" style="flex:1.6;">
+        <div class="db-sectie-titel">Ingekocht per maand <small>ton, laatste 12 maanden</small></div>
+        {% if inkoop_serie and inkoop_serie|sum > 0 %}
+        <div class="db-bars">
+            {% for label in maand_labels %}
+            <div class="db-bar-kol">
+                <div class="db-bar" style="height:{{ ((inkoop_serie[loop.index0] / max_inkoop_maand * 100)|round(1)) if max_inkoop_maand else 0 }}%;"></div>
+                <div class="db-bar-label">{{ label }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen inkoop-shipments om een trend te tonen.</div>
+        {% endif %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Sales pipeline</div>
+        {% for p in pipeline_tellingen %}
+        <div class="db-hbar-rij">
+            <span class="db-hbar-naam">{{ p.status }}</span>
+            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (p.aantal/max_pipeline*100)|round(1) }}%;"></span></span>
+            <span class="db-hbar-getal">{{ p.aantal }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="db-rij">
+    <div class="db-kol">
+        <div class="db-sectie-titel">Inkoop per kwaliteit <small>ton, goedgekeurd</small></div>
+        {% for k in inkoop_kwaliteit_lijst %}
+        <div class="db-hbar-rij">
+            <span class="db-hbar-naam">{{ k[0] }}</span>
+            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (k[1]/max_inkoop_kwaliteit*100)|round(1) }}%;"></span></span>
+            <span class="db-hbar-getal">{{ "{:,.0f}".format(k[1]).replace(",", ".") }}t</span>
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen goedgekeurde inkoop.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Team-prestatie</div>
+        {% for t in team_prestaties_dash %}
+        <div class="db-hbar-rij">
+            <span class="db-hbar-naam">{{ t.naam }}</span>
+            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (t.waarde/max_team_waarde*100)|round(1) }}%;"></span></span>
+            <span class="db-hbar-getal">€{{ "{:,.0f}".format(t.waarde).replace(",", ".") }}</span>
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen accountmanagers of orders toegewezen.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Vraagt om aandacht</div>
+        {% if aandacht_items %}
+        {% for a in aandacht_items %}
+        <a class="db-att-item" href="{{ a.url }}">
+            <span class="db-att-dot"></span>
+            <span><span class="db-att-titel">{{ a.titel }}</span>{% if a.sub %}<br><span class="db-att-sub">{{ a.sub }}</span>{% endif %}</span>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="db-leeg">Niets dat aandacht vraagt.</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="db-rij">
+    <div class="db-kol">
+        <div class="db-sectie-titel">Progressie met bedrijven</div>
+        {% for f in progressie_funnel %}
+        <div class="db-hbar-rij">
+            <span class="db-hbar-naam">{{ f.label }}</span>
+            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (f.aantal/max_funnel*100)|round(1) }}%;"></span></span>
+            <span class="db-hbar-getal">{{ f.aantal }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Topklanten</div>
+        {% for b in topklanten %}
+        <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
+            <span><span class="db-lijst-naam">{{ b.naam }}</span><br><span class="db-lijst-sub">{{ b.land }}</span></span>
+            <span class="db-lijst-getal">{{ b.volume }} t/j</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Nog geen klanten.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Klanten zonder recent contact <small>&gt;30 dagen</small></div>
+        {% for k in klanten_zonder_contact %}
+        <a class="db-lijst-item" href="/bedrijf/{{ k.naam|urlencode }}">
+            <span class="db-lijst-naam">{{ k.naam }}</span>
+            <span class="db-lijst-getal">{% if k.dagen is not none %}{{ k.dagen }} dagen{% else %}nooit contact{% endif %}</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Alle klanten recent gesproken.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="db-rij">
+    <div class="db-kol">
+        <div class="db-sectie-titel">Nieuwe leads</div>
+        {% for b in nieuwe_leads_lijst %}
+        <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
+            <span><span class="db-lijst-naam">{{ b.naam }}</span><br><span class="db-lijst-sub">{{ b.land }}</span></span>
+            <span class="db-lijst-getal">{{ b.volume|default("—", true) }} t/j</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Geen nieuwe leads zonder status.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Marktprijzen</div>
+        {% for p in marktprijzen_recent %}
+        <div class="db-lijst-item">
+            <span class="db-lijst-naam">{{ p.materiaal }}</span>
+            <span class="db-lijst-getal">€{{ "{:,.2f}".format(p.prijs_per_ton) }}/t</span>
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen marktprijzen ingevoerd.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Transportkosten</div>
+        {% if aantal_forwarders %}
+        <div class="db-lijst-item"><span class="db-lijst-naam">Forwarders</span><span class="db-lijst-getal">{{ aantal_forwarders }}</span></div>
+        <div class="db-lijst-item"><span class="db-lijst-naam">Steden gedekt</span><span class="db-lijst-getal">{{ aantal_transport_steden }}</span></div>
+        {% else %}
+        <div class="db-leeg">Nog geen transportprijzen geimporteerd.</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="db-ph-titel">Nog te koppelen</div>
+<div class="db-ph-sub">Deze onderdelen staan klaar in het dashboard maar hebben nog geen datamodel — geen verzonnen cijfers, wel alvast de plek.</div>
+<div class="db-ph-grid">
+    {% for p in placeholders %}
+    <div class="db-ph-tegel">
+        <div class="db-ph-tegel-label">{{ p.label }}</div>
+        <div class="db-ph-tegel-waarde">—</div>
+        <div class="db-ph-tegel-sub">{{ p.sub }}</div>
+    </div>
     {% endfor %}
 </div>
+
+<div class="db-sectie-titel">Activiteit van het team</div>
+{% if activiteit %}
+{% for a in activiteit %}
+<div class="db-act-item">
+    <span class="db-act-naam">{{ a.gebruiker }}</span>
+    <span class="db-act-tekst">{{ a.tekst }}<span class="db-act-sub">{{ a.sub }}</span></span>
+</div>
+{% endfor %}
+{% else %}
+<div class="db-leeg">Nog geen teamactiviteit.</div>
 {% endif %}
-
-<div class="dg-grid">
-    <div class="dg-kaart"><div class="dg-icoon">🏢</div><div class="dg-getal">{{ totaal }}</div><div class="dg-label">Bedrijven</div>{% if groei_pct is not none %}<div style="font-size:0.72rem;font-weight:700;margin-top:4px;color:{{ 'var(--green-600)' if groei_pct >= 0 else 'var(--red-500)' }};">{{ '+' if groei_pct >= 0 else '' }}{{ groei_pct }}% sinds {{ groei_periode }}</div>{% endif %}</div>
-    <div class="dg-kaart"><div class="dg-icoon">🌍</div><div class="dg-getal">{{ landen|length }}</div><div class="dg-label">Landen</div></div>
-    <div class="dg-kaart"><div class="dg-icoon">📦</div><div class="dg-getal">{{ volume_klant|int }}</div><div class="dg-label">t/j bij klanten</div></div>
-    <div class="dg-kaart"><div class="dg-icoon">🟢</div><div class="dg-getal">{{ klant }}</div><div class="dg-label">Klant</div></div>
-    <div class="dg-kaart"><div class="dg-icoon">🟡</div><div class="dg-getal">{{ potentie }}</div><div class="dg-label">Potentie</div></div>
-    <div class="dg-kaart"><div class="dg-icoon">🔵</div><div class="dg-getal">{{ proces }}</div><div class="dg-label">In proces</div></div>
-</div>
-
-<div class="dg-rij-2">
-    <div class="dg-kaart">
-        <div class="dg-kaart-titel">Status verdeling</div>
-        <div class="dg-bar-rij"><span class="dg-bar-label">🟢 Klant</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (klant/status_totaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ klant }}</span></div>
-        <div class="dg-bar-rij"><span class="dg-bar-label">🟡 Potentie</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (potentie/status_totaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ potentie }}</span></div>
-        <div class="dg-bar-rij"><span class="dg-bar-label">🔵 In proces</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (proces/status_totaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ proces }}</span></div>
-        <div class="dg-bar-rij"><span class="dg-bar-label">⚪ Geen interesse</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (geen/status_totaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ geen }}</span></div>
-    </div>
-    <div class="dg-kaart">
-        <div class="dg-kaart-titel">Top materialen</div>
-        {% for mat, aantal in top_materialen %}
-        <div class="dg-bar-rij"><span class="dg-bar-label">{{ mat }}</span><div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (aantal/max_materiaal*100)|round(1) }}%"></div></div><span class="dg-bar-getal">{{ aantal }}</span></div>
-        {% else %}
-        <div class="dg-lege">Nog geen materiaaldata.</div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="dg-rij-2">
-    <div class="dg-kaart" style="flex:1.4;">
-        <div class="dg-kaart-titel">Bedrijven wereldwijd</div>
-        <div id="dashKaart"></div>
-    </div>
-    <div class="dg-kaart">
-        <div class="dg-kaart-titel">Openstaande meldingen</div>
-        {% for m in openstaand %}
-        <div class="dg-activiteit-item">{{ m.tekst }}<small>{{ m.bedrijf }} · van {{ m.van }} · {{ m.timestamp }}</small></div>
-        {% else %}
-        <div class="dg-lege">Geen openstaande meldingen.</div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="dg-rij-2">
-    <div class="dg-kaart">
-        <div class="dg-kaart-titel">Materiaalverdeling</div>
-        <div style="display:flex;align-items:center;gap:20px;">
-            <div style="width:130px;height:130px;border-radius:50%;flex-shrink:0;
-                background:conic-gradient({% for s in donut_segmenten %}{{ s.kleur }} {{ s.van }}% {{ s.tot }}%{% if not loop.last %}, {% endif %}{% endfor %});
-                box-shadow:0 0 0 1px var(--gray-200), inset 0 0 0 22px #fff;"></div>
-            <div style="flex:1;">
-                {% for s in donut_segmenten %}
-                <div style="display:flex;align-items:center;gap:8px;font-size:0.78rem;margin-bottom:8px;color:var(--gray-700);">
-                    <span style="width:10px;height:10px;border-radius:3px;background:{{ s.kleur }};flex-shrink:0;"></span>
-                    {{ s.naam }} <span style="margin-left:auto;color:var(--brand-700);font-weight:700;">{{ s.pct }}%</span>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    <div class="dg-kaart">
-        <div class="dg-kaart-titel">Regionale intelligence</div>
-        {% for r in regio_kaarten %}
-        <div style="padding:12px 0;{% if not loop.last %}border-bottom:1px solid var(--gray-100);{% endif %}">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;">
-                <span style="font-weight:700;color:var(--gray-900);">{{ r.naam }}</span>
-                <span style="color:var(--brand-700);font-weight:700;">{{ r.aantal }} bedrijven</span>
-            </div>
-            <div style="font-size:0.76rem;color:var(--gray-400);margin-top:4px;">
-                Top materialen: {{ r.materialen|join(", ") if r.materialen else "—" }}
-            </div>
-            <div style="font-size:0.76rem;margin-top:2px;">
-                Marktactiviteit:
-                <span style="color:{% if r.activiteit=='Hoog' %}var(--green-600){% elif r.activiteit=='Gemiddeld' %}var(--brand-600){% else %}var(--gray-400){% endif %};font-weight:700;">{{ r.activiteit }}</span>
-            </div>
-        </div>
-        {% else %}
-        <div class="dg-lege">Nog geen regiodata.</div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="dg-kaart">
-    <div class="dg-kaart-titel">Openstaande orders</div>
-    {% if openstaande_orders %}
-        {% for o in openstaande_orders %}
-        <div class="dg-activiteit-item">
-            <b>{{ o.bedrijf }}</b>{% if o.materiaal %} · {{ o.materiaal }}{% endif %}{% if o.prijs %} · €{{ o.prijs }}{% endif %}
-            <small>{{ o.status }} · {{ o.verantwoordelijke }}</small>
-        </div>
-        {% endfor %}
-        <a href="/orders" style="display:block;margin-top:10px;font-size:0.8rem;color:var(--brand-600);text-decoration:none;font-weight:600;">Alle orders bekijken →</a>
-    {% else %}
-    <div class="dg-lege">Nog geen openstaande orders. <a href="/orders" style="color:var(--brand-600);">Voeg er een toe →</a></div>
-    {% endif %}
-</div>
-
-<div class="dg-kaart">
-    <div class="dg-kaart-titel">Teamprestaties</div>
-    {% if team_prestaties %}
-        {% for t in team_prestaties %}
-        <div class="dg-activiteit-item">
-            <b>{{ t.naam }}</b>
-            <small>{{ t.bedrijven }} bedrijven toegewezen · {{ t.orders }} orders · €{{ "{:,.0f}".format(t.waarde) }}</small>
-        </div>
-        {% endfor %}
-    {% else %}
-    <div class="dg-lege">Nog geen accountmanagers of orders toegewezen.</div>
-    {% endif %}
-</div>
-
-<div class="dg-kaart">
-    <div class="dg-kaart-titel">📦 Voorraad Alblasserdam</div>
-    {% set vrd_fysiek = vrd.fysiek_per_materiaal.values() | sum %}
-    {% set vrd_transit = vrd.transit_per_materiaal.values() | sum %}
-    {% set vrd_verkocht = vrd.gereserveerd_per_materiaal.values() | sum %}
-    {% set vrd_direct = vrd.direct_flow_per_materiaal.values() | sum %}
-    {% if vrd_fysiek or vrd_transit or vrd_direct %}
-        <div class="dg-activiteit-item"><b>{{ "{:,.1f}".format(vrd_fysiek) }} ton</b><small>Fysieke voorraad</small></div>
-        <div class="dg-activiteit-item"><b>{{ "{:,.1f}".format(vrd_fysiek - vrd_verkocht) }} ton</b><small>Vrij beschikbaar</small></div>
-        <div class="dg-activiteit-item"><b>{{ "{:,.1f}".format(vrd_transit) }} ton</b><small>Onderweg (in transit)</small></div>
-        <a href="/voorraad" style="display:block;margin-top:10px;font-size:0.8rem;color:var(--brand-600);text-decoration:none;font-weight:600;">Volledig voorraadoverzicht →</a>
-    {% else %}
-    <div class="dg-lege">Nog geen voorraaddata. <a href="/voorraad" style="color:var(--brand-600);">Ga naar Voorraad →</a></div>
-    {% endif %}
-</div>
-
-</div>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<style>
-.marker-cluster-small { background-color: rgba(179,217,218,0.7); }
-.marker-cluster-small div { background-color: rgba(63,146,149,0.85); color: #fff; }
-.marker-cluster-medium { background-color: rgba(63,146,149,0.6); }
-.marker-cluster-medium div { background-color: rgba(20,118,123,0.9); color: #fff; }
-.marker-cluster-large { background-color: rgba(10,74,79,0.6); }
-.marker-cluster-large div { background-color: rgba(10,74,79,0.95); color: #fff; }
-.marker-cluster div { font-weight: 700; font-family: 'Libre Franklin', -apple-system, sans-serif; }
-</style>
-<script>
-var dKaart = L.map("dashKaart", {zoomControl:false, attributionControl:false}).setView([30,10], 2);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {attribution:"© OpenStreetMap, © CARTO"}).addTo(dKaart);
-var kleurPerStatus = {"klant":"#22c55e","potentie":"#fbbf24","in_proces":"#3b82f6","geen_interesse":"#6b7280","":"#f0a83c"};
-var dCluster = L.markerClusterGroup({
-    iconCreateFunction: function(cluster) {
-        return L.divIcon({
-            html: '<div style="background:#f0a83c;color:#1b1309;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fbbf24;box-shadow:0 0 10px rgba(240,168,60,0.5);">' + cluster.getChildCount() + '</div>',
-            className: '', iconSize: [34, 34]
-        });
-    }
-});
-{{ kaart_bedrijven|tojson }}.forEach(function(b){
-    dCluster.addLayer(L.circleMarker([b.lat, b.lon], {radius:4, color: kleurPerStatus[b.status] || "#f0a83c", fillColor: kleurPerStatus[b.status] || "#f0a83c", fillOpacity:0.9, weight:1}));
-});
-dKaart.addLayer(dCluster);
-</script>
     """
     pagina = render_simple_page("Dashboard", "dashboard", inhoud)
-    accountmanagers_alle = laad_accountmanagers()
-    orders_alle = laad_orders()
-    _teamnamen = sorted(set(laad_users().keys()) | set(accountmanagers_alle.values()) | {o.get("verantwoordelijke","") for o in orders_alle if o.get("verantwoordelijke")})
-    team_prestaties = []
-    for naam in _teamnamen:
-        if not naam:
-            continue
-        aantal_bedrijven = sum(1 for am in accountmanagers_alle.values() if am == naam)
-        orders_van_gebruiker = [o for o in orders_alle if o.get("verantwoordelijke") == naam]
-        waarde = sum(float(o["prijs"]) for o in orders_van_gebruiker if o.get("prijs","").replace(".","",1).isdigit())
-        if aantal_bedrijven == 0 and len(orders_van_gebruiker) == 0:
-            continue
-        team_prestaties.append({"naam": naam, "bedrijven": aantal_bedrijven, "orders": len(orders_van_gebruiker), "waarde": waarde})
-    team_prestaties.sort(key=lambda t: -t["waarde"])
+
+    _volume_som_dash = sum(parse_hoeveelheid_getal(b.get("volume","")) for b in ENF_BEDRIJVEN)
+    if _volume_som_dash >= 1_000_000:
+        volume_totaal_label = f"{_volume_som_dash/1_000_000:.1f} Mt".replace(".", ",")
+    elif _volume_som_dash >= 1000:
+        volume_totaal_label = f"{_volume_som_dash/1000:.1f}k t".replace(".", ",")
+    else:
+        volume_totaal_label = f"{_volume_som_dash:.0f} t"
 
     return render_template_string(pagina,
-        totaal=len(ENF_BEDRIJVEN), landen=LANDEN, fabrieken=len(PAPIERFABRIEKEN),
-        klant=aantal_klant, potentie=aantal_potentie, proces=aantal_proces, geen=aantal_geen,
-        status_totaal=status_totaal, top_materialen=top_materialen, max_materiaal=max_materiaal,
-        volume_klant=volume_klant, openstaand=openstaand, kaart_bedrijven=kaart_bedrijven,
-        donut_segmenten=donut_segmenten, regio_kaarten=regio_kaarten,
-        groei_pct=groei_pct, groei_periode=groei_periode,
-        openstaande_orders=sorted([o for o in laad_orders() if o["status"] in ("Open", "Onderhandeling")], key=lambda o: o.get("aangemaakt",""), reverse=True)[:5],
-        team_prestaties=team_prestaties,
-        vrd=bereken_voorraad_status(), aandacht_items=aandacht_items)
-
+        gebruikersnaam_dash=gebruikersnaam_dash,
+        huidige_week=_vandaag_dash.isocalendar()[1],
+        bijgewerkt_tijd=datetime.datetime.now().strftime("%H:%M"),
+        totaal=len(ENF_BEDRIJVEN), groei_pct=groei_pct, groei_periode=groei_periode,
+        volume_totaal_label=volume_totaal_label,
+        status_totaal_leads=len(ENF_BEDRIJVEN), leads_zonder_am_dash=leads_zonder_am_dash,
+        geplande_orders_aantal=geplande_orders_aantal,
+        omzet_totaal=omzet_totaal, ton_verkocht_totaal=ton_verkocht_totaal,
+        verwachte_omzet=verwachte_omzet, lopende_orders_aantal=lopende_orders_aantal,
+        maand_labels=maand_labels, inkoop_serie=inkoop_serie, max_inkoop_maand=max_inkoop_maand,
+        pipeline_tellingen=pipeline_tellingen, max_pipeline=max_pipeline,
+        inkoop_kwaliteit_lijst=inkoop_kwaliteit_lijst, max_inkoop_kwaliteit=max_inkoop_kwaliteit,
+        team_prestaties_dash=team_prestaties_dash, max_team_waarde=max_team_waarde,
+        aandacht_items=aandacht_items,
+        progressie_funnel=progressie_funnel, max_funnel=max_funnel,
+        topklanten=topklanten, klanten_zonder_contact=klanten_zonder_contact,
+        nieuwe_leads_lijst=nieuwe_leads_lijst,
+        marktprijzen_recent=marktprijzen_recent,
+        aantal_forwarders=aantal_forwarders, aantal_transport_steden=aantal_transport_steden,
+        placeholders=placeholders,
+        activiteit=activiteit)
 @app.route("/inzichten")
 def inzichten():
     per_land = {}
