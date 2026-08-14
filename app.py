@@ -2801,6 +2801,7 @@ def sidebar_html(actief):
         ("inzichten", "/inzichten", "IZ", "Inzichten"),
         ("materialen", "/materialen", "MT", "Materials"),
         ("klanten", "/klanten", "KL", "Klanten"),
+        ("leveranciers", "/leveranciers", "LV", "Leveranciers"),
         ("certificeringen", "/certificeringen", "CF", "Certifications"),
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
@@ -2808,7 +2809,6 @@ def sidebar_html(actief):
         ("facturen", "/facturen", "FA", "Facturen"),
         ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
         ("voorraad", "/voorraad", "VR", "Voorraad"),
-        ("opslagen", "/opslagen", "OP", "Opslagen"),
         ("notities", "/notities-overzicht", "NT", "Notities"),
         ("instellingen", "/instellingen", "IN", "Instellingen"),
     ]
@@ -3612,6 +3612,7 @@ HTML = '''
         <a href="/inzichten" class="sidebar-link"><span class="icoon">IZ</span> Inzichten</a>
         <a href="/materialen" class="sidebar-link"><span class="icoon">MT</span> Materials</a>
         <a href="/klanten" class="sidebar-link"><span class="icoon">KL</span> Klanten</a>
+        <a href="/leveranciers" class="sidebar-link"><span class="icoon">LV</span> Leveranciers</a>
         <a href="/certificeringen" class="sidebar-link"><span class="icoon">CF</span> Certifications</a>
         <a href="/contacten" class="sidebar-link"><span class="icoon">CT</span> Contacten</a>
         <a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">OR</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>
@@ -3619,7 +3620,6 @@ HTML = '''
         <a href="/facturen" class="sidebar-link"><span class="icoon">FA</span> Facturen</a>
         <a href="/marktprijzen" class="sidebar-link"><span class="icoon">MP</span> Marktprijzen</a>
         <a href="/voorraad" class="sidebar-link"><span class="icoon">VR</span> Voorraad</a>
-        <a href="/opslagen" class="sidebar-link"><span class="icoon">OP</span> Opslagen</a>
         <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">NT</span> Notities</a>
         <a href="/instellingen" class="sidebar-link"><span class="icoon">IN</span> Instellingen</a>
     </nav>
@@ -8196,34 +8196,181 @@ def contacten():
     return render_template_string(pagina, contacten_lijst=contacten_lijst, zoekterm=zoekterm, gekozen_am=gekozen_am,
                                     alle_accountmanagers=alle_accountmanagers, bedrijfnamen_lijst=sorted(_bedrijven_land_lookup.keys())[:500])
 
-@app.route("/opslagen")
-def opslagen():
-    opgeslagen_namen = set(laad_opgeslagen())
-    lijst = [b for b in ENF_BEDRIJVEN if b["naam"] in opgeslagen_namen]
-    _accountmanagers_opslagen = laad_accountmanagers()
-    for b in lijst:
-        b["accountmanager"] = _accountmanagers_opslagen.get(b["naam"], "")
+@app.route("/leveranciers")
+def leveranciers_pagina():
+    zoekterm_lev = request.args.get("zoekterm", "").strip().lower()
+    land_lev = request.args.get("land", "")
+    filter_status_lev = request.args.get("filter_status", "")
+    pagina_nr = request.args.get("pagina", "1")
+    try:
+        pagina_nr = max(1, int(pagina_nr))
+    except (TypeError, ValueError):
+        pagina_nr = 1
+
+    status_alle_lev = laad_status()
+
+    leveranciers_lijst = ENF_BEDRIJVEN
+    if zoekterm_lev:
+        leveranciers_lijst = [b for b in leveranciers_lijst if zoekterm_lev in b.get("naam","").lower() or zoekterm_lev in b.get("regio","").lower()]
+    if land_lev:
+        leveranciers_lijst = [b for b in leveranciers_lijst if b.get("land","").strip().lower() == land_lev.strip().lower()]
+    if filter_status_lev:
+        if filter_status_lev == "geen":
+            leveranciers_lijst = [b for b in leveranciers_lijst if not status_alle_lev.get(b["naam"])]
+        else:
+            leveranciers_lijst = [b for b in leveranciers_lijst if status_alle_lev.get(b["naam"]) == filter_status_lev]
+
+    totaal_gevonden_lev = len(leveranciers_lijst)
+    PAGINA_GROOTTE_LEV = 200
+    totaal_paginas_lev = max(1, (totaal_gevonden_lev + PAGINA_GROOTTE_LEV - 1) // PAGINA_GROOTTE_LEV)
+    pagina_nr = min(pagina_nr, totaal_paginas_lev)
+    start_lev = (pagina_nr - 1) * PAGINA_GROOTTE_LEV
+    leveranciers_lijst = sorted(leveranciers_lijst, key=lambda b: b.get("naam",""))[start_lev:start_lev + PAGINA_GROOTTE_LEV]
+    for b in leveranciers_lijst:
+        b["status"] = status_alle_lev.get(b["naam"], "")
+
+    alle_landen_lev = sorted({b.get("land","") for b in ENF_BEDRIJVEN if b.get("land","")})
+
+    aantal_per_status_lev = {
+        "klant": sum(1 for b in ENF_BEDRIJVEN if status_alle_lev.get(b["naam"]) == "klant"),
+        "in_proces": sum(1 for b in ENF_BEDRIJVEN if status_alle_lev.get(b["naam"]) == "in_proces"),
+        "potentie": sum(1 for b in ENF_BEDRIJVEN if status_alle_lev.get(b["naam"]) == "potentie"),
+    }
+
+    actieve_filters_lev = []
+    if land_lev:
+        actieve_filters_lev.append({"label": f"Land: {land_lev}", "url": f"/leveranciers?zoekterm={zoekterm_lev}"})
+    if filter_status_lev:
+        _status_labels_lev = {"klant": "Status: Klant", "in_proces": "Status: In Proces", "potentie": "Status: Potentie", "geen_interesse": "Status: Geen Interesse", "geen": "Status: Geen status"}
+        actieve_filters_lev.append({"label": _status_labels_lev.get(filter_status_lev, filter_status_lev), "url": f"/leveranciers?zoekterm={zoekterm_lev}&land={land_lev}"})
+
+    def maak_pagina_url_lev(p):
+        params = {"zoekterm": zoekterm_lev, "land": land_lev, "filter_status": filter_status_lev, "pagina": p}
+        params = {k: v for k, v in params.items() if v}
+        return "/leveranciers?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
 
     inhoud = """
-    <div class="page-title">Opgeslagen bedrijven</div>
-    {% if lijst %}
-    <div class="mat-grid">
-        {% for b in lijst %}
-        <a href="/bedrijf/{{ b.naam|urlencode }}" class="mat-kaart" style="padding:16px 20px;">
-            <div class="mat-naam" style="margin-bottom:2px;">⭐ {{ b.naam }}</div>
-            <div class="mat-sub" style="margin-bottom:8px;">📍 {{ b.regio }}, {{ b.land }}{% if b.accountmanager %} · 👤 {{ b.accountmanager }}{% endif %}</div>
-            <div class="company-tags" style="padding-left:0;">
-                {% if b.materialen %}{% for m in b.materialen.split(",")[:3] %}<span class="tag tag-green">{{ m.strip() }}</span>{% endfor %}{% endif %}
-            </div>
+<style>
+.data-thead, .data-row { display: flex; align-items: center; padding: 0 var(--space-4); }
+.data-thead { padding-top: 10px; padding-bottom: 10px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8792; }
+.data-thead span[data-sort] { cursor: pointer; user-select: none; }
+.data-thead span[data-sort]:hover { color: var(--brand-600); }
+.data-row { padding-top: 9px; padding-bottom: 9px; border-bottom: 1px solid var(--gray-100); font-size: 13px; text-decoration: none; color: inherit; }
+.data-row:hover { background: #f9fbfc; }
+.data-row .zacht { color: #4b5563; font-size: 12.5px; }
+.klant-status-badge { font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
+.klant-status-tab { padding: 7px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; text-decoration: none; border: 1px solid var(--gray-200); background: #fff; color: var(--gray-600); }
+.klant-status-tab.actief { background: var(--brand-600); color: #fff; border-color: var(--brand-600); }
+</style>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;padding-left:20px;">
+    <div>
+        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Leveranciers</div>
+    </div>
+    <div style="display:flex;gap:22px;">
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ totaal_gevonden_lev }}</div></div>
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ alle_landen_lev|length }}</div></div>
+    </div>
+</div>
+
+<form method="GET" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;">
+    {% if filter_status_lev %}<input type="hidden" name="filter_status" value="{{ filter_status_lev }}">{% endif %}
+    <input type="text" name="zoekterm" value="{{ zoekterm_lev }}" placeholder="Leverancier of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
+    <select name="land" onchange="this.form.submit()" style="width:150px;border:none;border-left:1px solid var(--gray-100);padding:0 14px;font-size:14px;cursor:pointer;">
+        <option value="">Alle landen</option>
+        {% for l in alle_landen_lev %}<option value="{{ l }}" {% if land_lev == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">Search →</button>
+</form>
+
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <a href="/leveranciers" class="klant-status-tab {% if not filter_status_lev %}actief{% endif %}">Alle</a>
+    <a href="/leveranciers?filter_status=klant" class="klant-status-tab {% if filter_status_lev == 'klant' %}actief{% endif %}">🟢 Klant ({{ aantal_per_status_lev.klant }})</a>
+    <a href="/leveranciers?filter_status=in_proces" class="klant-status-tab {% if filter_status_lev == 'in_proces' %}actief{% endif %}">🔵 In Proces ({{ aantal_per_status_lev.in_proces }})</a>
+    <a href="/leveranciers?filter_status=potentie" class="klant-status-tab {% if filter_status_lev == 'potentie' %}actief{% endif %}">🟡 Potentie ({{ aantal_per_status_lev.potentie }})</a>
+    <a href="/leveranciers?filter_status=geen" class="klant-status-tab {% if filter_status_lev == 'geen' %}actief{% endif %}">⚪ Geen status</a>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;">
+    {% for af in actieve_filters_lev %}
+    <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-600);color:#fff;border-radius:14px;padding:4px 11px;font-size:12px;font-weight:600;text-decoration:none;">{{ af.label }}<span style="font-weight:800;opacity:0.8;">✕</span></a>
+    {% endfor %}
+</div>
+
+{% if leveranciers_lijst %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="results-list" id="leveranciersLijst">
+        <div class="data-thead">
+            <span style="flex:1.6;" data-sort="naam">Leverancier</span>
+            <span style="flex:1;" data-sort="locatie">Locatie</span>
+            <span style="flex:1.4;" data-sort="materialen">Materialen</span>
+            <span style="width:120px;" data-sort="status">Status</span>
+            <span style="width:100px;text-align:right;"></span>
+        </div>
+        {% for b in leveranciers_lijst %}
+        <a class="data-row" href="/bedrijf/{{ b.naam|urlencode }}"
+           data-naam="{{ b.naam|e }}" data-locatie="{{ b.regio|default('',true)|e }}, {{ b.land|default('',true)|e }}" data-materialen="{{ b.materialen|default('',true)|e }}"
+           data-status="{{ b.status|default('',true)|e }}">
+            <span style="flex:1.6;font-weight:600;color:var(--gray-800);">{{ b.naam }}</span>
+            <span style="flex:1;" class="zacht">{{ b.regio }}, {{ b.land }}</span>
+            <span style="flex:1.4;" class="zacht">{{ b.materialen|default('—',true) }}</span>
+            <span style="width:120px;">
+                {% if b.status == "klant" %}<span class="klant-status-badge" style="background:#f0fdf4;color:#16a34a;">🟢 Klant</span>
+                {% elif b.status == "in_proces" %}<span class="klant-status-badge" style="background:#eff6ff;color:#1d4ed8;">🔵 In Proces</span>
+                {% elif b.status == "potentie" %}<span class="klant-status-badge" style="background:#fffbeb;color:#d97706;">🟡 Potentie</span>
+                {% elif b.status == "geen_interesse" %}<span class="klant-status-badge" style="background:var(--gray-100);color:var(--gray-500);">⚪ Geen interesse</span>
+                {% else %}<span class="zacht">—</span>{% endif %}
+            </span>
+            <span style="width:100px;text-align:right;">
+                <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Profiel →</span>
+            </span>
         </a>
         {% endfor %}
     </div>
-    {% else %}
-    <div class="lege-staat">Nog geen bedrijven opgeslagen. Klik op het sterretje bij een bedrijf om het hier te laten verschijnen.</div>
-    {% endif %}
+</div>
+{% if totaal_paginas_lev > 1 %}
+<div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:14px;flex-wrap:wrap;">
+    {% if pagina_nr > 1 %}<a href="{{ maak_pagina_url_lev(pagina_nr - 1) }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--gray-600);font-size:13px;">←</a>{% endif %}
+    <span style="padding:6px 10px;border-radius:6px;background:var(--brand-600);color:#fff;font-weight:700;font-size:13px;">{{ pagina_nr }}</span>
+    <span style="font-size:12px;color:var(--gray-400);">van {{ totaal_paginas_lev }}</span>
+    {% if pagina_nr < totaal_paginas_lev %}<a href="{{ maak_pagina_url_lev(pagina_nr + 1) }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--gray-600);font-size:13px;">→</a>{% endif %}
+</div>
+{% endif %}
+{% else %}
+<div class="lege-staat">Geen leveranciers gevonden voor deze filters.</div>
+{% endif %}
+
+<script>
+(function () {
+    var lijst = document.getElementById("leveranciersLijst");
+    if (!lijst) return;
+    var koppen = lijst.querySelectorAll(".data-thead [data-sort]");
+    var richting = "desc", sleutel = null;
+    koppen.forEach(function (kop) {
+        kop.addEventListener("click", function () {
+            var k = kop.dataset.sort;
+            richting = (sleutel === k && richting === "desc") ? "asc" : "desc";
+            sleutel = k;
+            koppen.forEach(function (x) { x.textContent = x.textContent.replace(/ [\u2191\u2193]$/, ""); });
+            kop.textContent += richting === "desc" ? " \u2193" : " \u2191";
+            var rijen = Array.prototype.slice.call(lijst.querySelectorAll(".data-row"));
+            rijen.sort(function (a, b) {
+                var va = a.dataset[k] || "", vb = b.dataset[k] || "";
+                var r = va.localeCompare(vb, "nl");
+                return richting === "asc" ? r : -r;
+            });
+            rijen.forEach(function (r) { lijst.appendChild(r); });
+        });
+    });
+})();
+</script>
     """
-    pagina = render_simple_page("Opgeslagen", "opslagen", inhoud)
-    return render_template_string(pagina, lijst=lijst)
+    pagina = render_simple_page("Leveranciers", "leveranciers", inhoud)
+    return render_template_string(pagina, leveranciers_lijst=leveranciers_lijst, totaal_gevonden_lev=totaal_gevonden_lev,
+                                    zoekterm_lev=zoekterm_lev, land_lev=land_lev, alle_landen_lev=alle_landen_lev,
+                                    filter_status_lev=filter_status_lev, aantal_per_status_lev=aantal_per_status_lev,
+                                    actieve_filters_lev=actieve_filters_lev, pagina_nr=pagina_nr, totaal_paginas_lev=totaal_paginas_lev,
+                                    maak_pagina_url_lev=maak_pagina_url_lev)
 
 @app.route("/notities-overzicht")
 def notities_overzicht():
