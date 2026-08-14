@@ -8196,11 +8196,53 @@ def contacten():
     return render_template_string(pagina, contacten_lijst=contacten_lijst, zoekterm=zoekterm, gekozen_am=gekozen_am,
                                     alle_accountmanagers=alle_accountmanagers, bedrijfnamen_lijst=sorted(_bedrijven_land_lookup.keys())[:500])
 
-@app.route("/leveranciers")
+@app.route("/leveranciers", methods=["GET", "POST"])
 def leveranciers_pagina():
+    bericht_lev = None
+
+    if request.method == "POST":
+        naam_nieuw = request.form.get("naam", "").strip()
+        land_nieuw = request.form.get("land", "").strip()
+        regio_nieuw = request.form.get("regio", "").strip()
+        materialen_nieuw = request.form.get("materialen", "").strip()
+        klanttype_nieuw = request.form.get("klanttype", "").strip()
+        contactpersoon_nieuw = request.form.get("contactpersoon", "").strip()
+        telefoon_nieuw = request.form.get("telefoon", "").strip()
+        adres_nieuw = request.form.get("adres", "").strip()
+        status_nieuw = request.form.get("status", "").strip()
+
+        if not naam_nieuw:
+            bericht_lev = ("fout", "Naam is verplicht.")
+        elif any(b["naam"].strip().lower() == naam_nieuw.lower() and b.get("land","").strip().lower() == land_nieuw.lower() for b in ENF_BEDRIJVEN):
+            bericht_lev = ("fout", f"'{naam_nieuw}' ({land_nieuw or 'onbekend land'}) staat al in het systeem.")
+        else:
+            geo = geocode_adres(regio_nieuw, land_nieuw) if (regio_nieuw or land_nieuw) else None
+            huidige_gebruiker_lev = session.get("gebruikersnaam", "")
+            ENF_BEDRIJVEN.append({
+                "naam": naam_nieuw, "land": land_nieuw, "regio": regio_nieuw,
+                "materialen": materialen_nieuw, "klanttype": klanttype_nieuw, "volume": "", "url": "",
+                "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
+                "adres": adres_nieuw, "telefoon": telefoon_nieuw, "contactpersoon": contactpersoon_nieuw,
+                "bedrijf_id": TENANT_ID, "brontype": "Handmatig ingevoerd",
+            })
+            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
+            if huidige_gebruiker_lev:
+                alle_am = laad_accountmanagers()
+                alle_am[naam_nieuw] = huidige_gebruiker_lev
+                bewaar_accountmanagers(alle_am)
+            if status_nieuw:
+                alle_status = laad_status()
+                alle_status[naam_nieuw] = status_nieuw
+                bewaar_status(alle_status)
+
+            bericht_lev = ("succes", f"'{naam_nieuw}' toegevoegd aan je leveranciers.")
+
     zoekterm_lev = request.args.get("zoekterm", "").strip().lower()
     land_lev = request.args.get("land", "")
     filter_status_lev = request.args.get("filter_status", "")
+    filter_am_lev = request.args.get("accountmanager", "")
     pagina_nr = request.args.get("pagina", "1")
     try:
         pagina_nr = max(1, int(pagina_nr))
@@ -8208,8 +8250,13 @@ def leveranciers_pagina():
         pagina_nr = 1
 
     status_alle_lev = laad_status()
+    accountmanagers_alle_lev = laad_accountmanagers()
+    huidige_gebruiker_lev = session.get("gebruikersnaam", "")
 
-    leveranciers_lijst = ENF_BEDRIJVEN
+    # Alleen bedrijven die daadwerkelijk zijn toegekend/ingevuld: een status OF een accountmanager.
+    # Dit is bewust GEEN kopie van Zoeken (dat doorzoekt de volledige, ongefilterde database).
+    leveranciers_lijst = [b for b in ENF_BEDRIJVEN if status_alle_lev.get(b["naam"]) or accountmanagers_alle_lev.get(b["naam"])]
+
     if zoekterm_lev:
         leveranciers_lijst = [b for b in leveranciers_lijst if zoekterm_lev in b.get("naam","").lower() or zoekterm_lev in b.get("regio","").lower()]
     if land_lev:
@@ -8219,6 +8266,10 @@ def leveranciers_pagina():
             leveranciers_lijst = [b for b in leveranciers_lijst if not status_alle_lev.get(b["naam"])]
         else:
             leveranciers_lijst = [b for b in leveranciers_lijst if status_alle_lev.get(b["naam"]) == filter_status_lev]
+    if filter_am_lev == "__mij__":
+        leveranciers_lijst = [b for b in leveranciers_lijst if accountmanagers_alle_lev.get(b["naam"]) == huidige_gebruiker_lev]
+    elif filter_am_lev:
+        leveranciers_lijst = [b for b in leveranciers_lijst if accountmanagers_alle_lev.get(b["naam"]) == filter_am_lev]
 
     totaal_gevonden_lev = len(leveranciers_lijst)
     PAGINA_GROOTTE_LEV = 200
@@ -8228,13 +8279,16 @@ def leveranciers_pagina():
     leveranciers_lijst = sorted(leveranciers_lijst, key=lambda b: b.get("naam",""))[start_lev:start_lev + PAGINA_GROOTTE_LEV]
     for b in leveranciers_lijst:
         b["status"] = status_alle_lev.get(b["naam"], "")
+        b["accountmanager"] = accountmanagers_alle_lev.get(b["naam"], "")
 
     alle_landen_lev = sorted({b.get("land","") for b in ENF_BEDRIJVEN if b.get("land","")})
+    alle_gebruikersnamen_lev = sorted(laad_users().keys())
 
+    _relatiepool = [b for b in ENF_BEDRIJVEN if status_alle_lev.get(b["naam"]) or accountmanagers_alle_lev.get(b["naam"])]
     aantal_per_status_lev = {
-        "klant": sum(1 for b in ENF_BEDRIJVEN if status_alle_lev.get(b["naam"]) == "klant"),
-        "in_proces": sum(1 for b in ENF_BEDRIJVEN if status_alle_lev.get(b["naam"]) == "in_proces"),
-        "potentie": sum(1 for b in ENF_BEDRIJVEN if status_alle_lev.get(b["naam"]) == "potentie"),
+        "klant": sum(1 for b in _relatiepool if status_alle_lev.get(b["naam"]) == "klant"),
+        "in_proces": sum(1 for b in _relatiepool if status_alle_lev.get(b["naam"]) == "in_proces"),
+        "potentie": sum(1 for b in _relatiepool if status_alle_lev.get(b["naam"]) == "potentie"),
     }
 
     actieve_filters_lev = []
@@ -8243,9 +8297,12 @@ def leveranciers_pagina():
     if filter_status_lev:
         _status_labels_lev = {"klant": "Status: Klant", "in_proces": "Status: In Proces", "potentie": "Status: Potentie", "geen_interesse": "Status: Geen Interesse", "geen": "Status: Geen status"}
         actieve_filters_lev.append({"label": _status_labels_lev.get(filter_status_lev, filter_status_lev), "url": f"/leveranciers?zoekterm={zoekterm_lev}&land={land_lev}"})
+    if filter_am_lev:
+        _am_label_lev = "Accountmanager: Mijn leveranciers" if filter_am_lev == "__mij__" else f"Accountmanager: {filter_am_lev}"
+        actieve_filters_lev.append({"label": _am_label_lev, "url": f"/leveranciers?zoekterm={zoekterm_lev}&land={land_lev}&filter_status={filter_status_lev}"})
 
     def maak_pagina_url_lev(p):
-        params = {"zoekterm": zoekterm_lev, "land": land_lev, "filter_status": filter_status_lev, "pagina": p}
+        params = {"zoekterm": zoekterm_lev, "land": land_lev, "filter_status": filter_status_lev, "accountmanager": filter_am_lev, "pagina": p}
         params = {k: v for k, v in params.items() if v}
         return "/leveranciers?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
 
@@ -8263,7 +8320,7 @@ def leveranciers_pagina():
 .klant-status-tab.actief { background: var(--brand-600); color: #fff; border-color: var(--brand-600); }
 </style>
 
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;padding-left:20px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;flex-wrap:wrap;gap:12px;padding-left:20px;">
     <div>
         <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Leveranciers</div>
     </div>
@@ -8272,9 +8329,15 @@ def leveranciers_pagina():
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ alle_landen_lev|length }}</div></div>
     </div>
 </div>
+<p style="color:var(--gray-400);margin:0 0 16px 20px;font-size:0.82rem;">Je eigen leveranciersbestand — alleen bedrijven met een toegekende status of accountmanager. Voor de volledige database: <a href="/" style="color:var(--brand-600);">Zoeken</a>.</p>
+
+{% if bericht_lev %}
+<div style="background:{{ '#f0fdf4' if bericht_lev[0] == 'succes' else '#fef2f2' }};color:{{ '#16a34a' if bericht_lev[0] == 'succes' else '#dc2626' }};padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13.5px;max-width:820px;">{{ bericht_lev[1] }}</div>
+{% endif %}
 
 <form method="GET" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;">
     {% if filter_status_lev %}<input type="hidden" name="filter_status" value="{{ filter_status_lev }}">{% endif %}
+    {% if filter_am_lev %}<input type="hidden" name="accountmanager" value="{{ filter_am_lev }}">{% endif %}
     <input type="text" name="zoekterm" value="{{ zoekterm_lev }}" placeholder="Leverancier of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
     <select name="land" onchange="this.form.submit()" style="width:150px;border:none;border-left:1px solid var(--gray-100);padding:0 14px;font-size:14px;cursor:pointer;">
         <option value="">Alle landen</option>
@@ -8283,7 +8346,7 @@ def leveranciers_pagina():
     <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">Search →</button>
 </form>
 
-<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
     <a href="/leveranciers" class="klant-status-tab {% if not filter_status_lev %}actief{% endif %}">Alle</a>
     <a href="/leveranciers?filter_status=klant" class="klant-status-tab {% if filter_status_lev == 'klant' %}actief{% endif %}">🟢 Klant ({{ aantal_per_status_lev.klant }})</a>
     <a href="/leveranciers?filter_status=in_proces" class="klant-status-tab {% if filter_status_lev == 'in_proces' %}actief{% endif %}">🔵 In Proces ({{ aantal_per_status_lev.in_proces }})</a>
@@ -8291,37 +8354,73 @@ def leveranciers_pagina():
     <a href="/leveranciers?filter_status=geen" class="klant-status-tab {% if filter_status_lev == 'geen' %}actief{% endif %}">⚪ Geen status</a>
 </div>
 
-<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;">
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+    <a href="/leveranciers?accountmanager=__mij__{% if filter_status_lev %}&filter_status={{ filter_status_lev }}{% endif %}" class="klant-status-tab {% if filter_am_lev == '__mij__' %}actief{% endif %}">🙋 Mijn leveranciers</a>
+    <a href="/leveranciers{% if filter_status_lev %}?filter_status={{ filter_status_lev }}{% endif %}" class="klant-status-tab {% if not filter_am_lev %}actief{% endif %}">Hele bedrijf</a>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:20px;">
     {% for af in actieve_filters_lev %}
     <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-600);color:#fff;border-radius:14px;padding:4px 11px;font-size:12px;font-weight:600;text-decoration:none;">{{ af.label }}<span style="font-weight:800;opacity:0.8;">✕</span></a>
     {% endfor %}
+</div>
+
+<div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px 18px;max-width:820px;margin-bottom:20px;">
+    <div class="dg-kaart-titel" style="margin-bottom:10px;">Leverancier handmatig toevoegen</div>
+    <form method="POST">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <input type="text" name="naam" placeholder="Bedrijfsnaam *" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <input type="text" name="land" placeholder="Land" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <input type="text" name="regio" placeholder="Stad/regio" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <input type="text" name="materialen" placeholder="Materialen (bv. Paper, Plastic)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <input type="text" name="contactpersoon" placeholder="Contactpersoon" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <input type="text" name="telefoon" placeholder="Telefoon" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <input type="text" name="adres" placeholder="Adres" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <select name="status" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+                <option value="">Status kiezen (optioneel)</option>
+                <option value="potentie">🟡 Potentie</option>
+                <option value="in_proces">🔵 In Proces</option>
+                <option value="klant">🟢 Klant</option>
+            </select>
+        </div>
+        <p style="font-size:11.5px;color:var(--gray-400);margin:0 0 10px;">Wordt automatisch aan jou toegewezen als accountmanager.</p>
+        <button type="submit" style="padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Leverancier toevoegen</button>
+    </form>
 </div>
 
 {% if leveranciers_lijst %}
 <div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
     <div class="results-list" id="leveranciersLijst">
         <div class="data-thead">
-            <span style="flex:1.6;" data-sort="naam">Leverancier</span>
+            <span style="flex:1.4;" data-sort="naam">Leverancier</span>
             <span style="flex:1;" data-sort="locatie">Locatie</span>
-            <span style="flex:1.4;" data-sort="materialen">Materialen</span>
-            <span style="width:120px;" data-sort="status">Status</span>
-            <span style="width:100px;text-align:right;"></span>
+            <span style="flex:1.2;" data-sort="materialen">Materialen</span>
+            <span style="width:110px;" data-sort="status">Status</span>
+            <span style="width:110px;" data-sort="accountmanager">Accountmgr.</span>
+            <span style="width:90px;text-align:right;"></span>
         </div>
         {% for b in leveranciers_lijst %}
         <a class="data-row" href="/bedrijf/{{ b.naam|urlencode }}"
            data-naam="{{ b.naam|e }}" data-locatie="{{ b.regio|default('',true)|e }}, {{ b.land|default('',true)|e }}" data-materialen="{{ b.materialen|default('',true)|e }}"
-           data-status="{{ b.status|default('',true)|e }}">
-            <span style="flex:1.6;font-weight:600;color:var(--gray-800);">{{ b.naam }}</span>
+           data-status="{{ b.status|default('',true)|e }}" data-accountmanager="{{ b.accountmanager|default('',true)|e }}">
+            <span style="flex:1.4;font-weight:600;color:var(--gray-800);">{{ b.naam }}</span>
             <span style="flex:1;" class="zacht">{{ b.regio }}, {{ b.land }}</span>
-            <span style="flex:1.4;" class="zacht">{{ b.materialen|default('—',true) }}</span>
-            <span style="width:120px;">
+            <span style="flex:1.2;" class="zacht">{{ b.materialen|default('—',true) }}</span>
+            <span style="width:110px;">
                 {% if b.status == "klant" %}<span class="klant-status-badge" style="background:#f0fdf4;color:#16a34a;">🟢 Klant</span>
                 {% elif b.status == "in_proces" %}<span class="klant-status-badge" style="background:#eff6ff;color:#1d4ed8;">🔵 In Proces</span>
                 {% elif b.status == "potentie" %}<span class="klant-status-badge" style="background:#fffbeb;color:#d97706;">🟡 Potentie</span>
                 {% elif b.status == "geen_interesse" %}<span class="klant-status-badge" style="background:var(--gray-100);color:var(--gray-500);">⚪ Geen interesse</span>
                 {% else %}<span class="zacht">—</span>{% endif %}
             </span>
-            <span style="width:100px;text-align:right;">
+            <span style="width:110px;" class="zacht">{{ b.accountmanager|default('—',true) }}</span>
+            <span style="width:90px;text-align:right;">
                 <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Profiel →</span>
             </span>
         </a>
@@ -8337,7 +8436,7 @@ def leveranciers_pagina():
 </div>
 {% endif %}
 {% else %}
-<div class="lege-staat">Geen leveranciers gevonden voor deze filters.</div>
+<div class="lege-staat">Nog geen leveranciers met een status of accountmanager. Ken een status toe via Zoeken, of voeg er hierboven een handmatig toe.</div>
 {% endif %}
 
 <script>
@@ -8368,9 +8467,10 @@ def leveranciers_pagina():
     pagina = render_simple_page("Leveranciers", "leveranciers", inhoud)
     return render_template_string(pagina, leveranciers_lijst=leveranciers_lijst, totaal_gevonden_lev=totaal_gevonden_lev,
                                     zoekterm_lev=zoekterm_lev, land_lev=land_lev, alle_landen_lev=alle_landen_lev,
-                                    filter_status_lev=filter_status_lev, aantal_per_status_lev=aantal_per_status_lev,
+                                    filter_status_lev=filter_status_lev, filter_am_lev=filter_am_lev,
+                                    aantal_per_status_lev=aantal_per_status_lev, alle_gebruikersnamen_lev=alle_gebruikersnamen_lev,
                                     actieve_filters_lev=actieve_filters_lev, pagina_nr=pagina_nr, totaal_paginas_lev=totaal_paginas_lev,
-                                    maak_pagina_url_lev=maak_pagina_url_lev)
+                                    maak_pagina_url_lev=maak_pagina_url_lev, bericht_lev=bericht_lev)
 
 @app.route("/notities-overzicht")
 def notities_overzicht():
