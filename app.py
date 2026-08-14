@@ -4088,12 +4088,12 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
         <div id="equipmentResults" style="margin-top:12px;"></div>`;
 
     const notities = `
-        <div id="notitiesLijst" style="margin-bottom:12px;"></div>
-        <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
-        <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-            <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
-            <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
-            <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
+        <div id="notitiesLijst" style="margin-bottom:14px;"></div>
+        <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:56px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-family:inherit;font-size:13px;color:var(--gray-700);resize:vertical;box-sizing:border-box;"></textarea>
+        <div style="display:flex;align-items:center;gap:16px;margin-top:10px;">
+            <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="team" checked> Team</label>
+            <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="prive"> Privé</label>
+            <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">Toevoegen</button>
         </div>`;
 
     const contactDetails = `
@@ -4240,12 +4240,19 @@ async function laadNotities() {
         }
         let html = "";
         notities.forEach(n => {
-            const badge = n.type === "team" ? "🟢 Team" : "🔒 Privé";
+            const badgeAchtergrond = n.type === "team" ? "var(--brand-50)" : "var(--gray-100)";
+            const badgeKleur = n.type === "team" ? "var(--brand-600)" : "var(--gray-500)";
+            const badge = n.type === "team" ? "Team" : "Privé";
             html += `
-                <div style="background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;position:relative;">
-                    <div style="color:#334155;padding-right:16px;">${n.tekst}</div>
-                    <div style="color:#94a3b8;font-size:11px;margin-top:4px;">${badge} · ${n.timestamp}</div>
-                    <button onclick="verwijderNotitieDrawer('${n.id}')" title="Verwijderen" style="position:absolute;top:6px;right:6px;background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:12px;">✕</button>
+                <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:13px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                        <div style="color:var(--gray-700);">${n.tekst}</div>
+                        <button onclick="verwijderNotitieDrawer('${n.id}')" title="Verwijderen" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:12px;flex-shrink:0;">✕</button>
+                    </div>
+                    <div style="margin-top:5px;display:flex;align-items:center;gap:7px;">
+                        <span style="font-size:10px;font-weight:700;padding:1px 8px;border-radius:8px;background:${badgeAchtergrond};color:${badgeKleur};">${badge}</span>
+                        <span style="color:var(--gray-400);font-size:11px;">${n.timestamp}</span>
+                    </div>
                 </div>`;
         });
         lijstDiv.innerHTML = html;
@@ -9431,6 +9438,7 @@ select.klik-bewerken-veld { cursor:pointer; }
         </div>
         {% endif %}
 
+        {% if is_fabriek_profiel %}
         <div class="info-kaart" style="margin-top:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Leveranciers die leveren</div>
             {% if actieve_leveranciers %}
@@ -9447,15 +9455,33 @@ select.klik-bewerken-veld { cursor:pointer; }
             <div style="font-size:13px;color:var(--gray-400);">Nog geen leveranties geregistreerd (via Voorraad-shipments).</div>
             {% endif %}
         </div>
+        {% else %}
+        <div class="info-kaart" style="margin-top:16px;">
+            <div class="dg-kaart-titel" style="color:var(--gray-400);">Waar het naartoe gaat</div>
+            {% if bestemmingen_lijst %}
+            {% for b in bestemmingen_lijst %}
+            <div style="padding:10px 0;border-bottom:1px solid var(--gray-50);">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                    <b style="font-size:13px;color:var(--gray-800);">{{ b.naam or "Onbekende bestemming" }}{% if b.naam and b.land %}, {% endif %}{{ b.land }}</b>
+                    {% if b.totaal_volume %}<span style="font-size:11.5px;color:var(--brand-600);font-family:var(--font-mono);">{{ "{:,.0f}".format(b.totaal_volume) }} t</span>{% endif %}
+                </div>
+                <div style="font-size:11.5px;color:var(--gray-400);margin-top:2px;">{{ b.aantal_shipments }} shipment{{ 's' if b.aantal_shipments != 1 else '' }}{% if b.laatste_datum %} · laatst {{ b.laatste_datum }}{% endif %}</div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div style="font-size:13px;color:var(--gray-400);">Nog geen vervolg-bestemmingen bekend — koppel een vervolg-shipment via Logistiek zodra dit materiaal wordt doorverscheept.</div>
+            {% endif %}
+        </div>
+        {% endif %}
 
         <div class="info-kaart" style="margin-top:16px;">
             <div class="dg-kaart-titel" style="color:var(--gray-400);">Notities</div>
-            <div id="notitiesLijst" style="margin-bottom:12px;"></div>
-            <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:60px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box;"></textarea>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-                <label style="font-size:13px;"><input type="radio" name="notitieType" value="team" checked> Team</label>
-                <label style="font-size:13px;"><input type="radio" name="notitieType" value="prive"> Privé</label>
-                <button onclick="voegNotitieToeProfiel()" style="margin-left:auto;padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Toevoegen</button>
+            <div id="notitiesLijst" style="margin-bottom:14px;"></div>
+            <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:56px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-family:inherit;font-size:13px;color:var(--gray-700);resize:vertical;box-sizing:border-box;"></textarea>
+            <div style="display:flex;align-items:center;gap:16px;margin-top:10px;">
+                <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="team" checked> Team</label>
+                <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="prive"> Privé</label>
+                <button onclick="voegNotitieToeProfiel()" style="margin-left:auto;padding:6px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">Toevoegen</button>
             </div>
         </div>
     </div>
@@ -9509,11 +9535,22 @@ async function laadNotities() {
     const res = await fetch("/api/notities?bedrijf=" + encodeURIComponent(BEDRIJF_NAAM));
     const notities = await res.json();
     const div = document.getElementById("notitiesLijst");
-    if (notities.length === 0) { div.innerHTML = "<p style='font-size:13px;color:#94a3b8;'>Nog geen notities.</p>"; return; }
+    if (notities.length === 0) { div.innerHTML = "<p style='font-size:13px;color:var(--gray-400);'>Nog geen notities.</p>"; return; }
     let html = "";
     notities.forEach(n => {
-        const badge = n.type === "team" ? "🟢 Team" : "🔒 Privé";
-        html += `<div style="background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px;position:relative;"><div style="color:#334155;padding-right:16px;">${n.tekst}</div><div style="color:#94a3b8;font-size:11px;margin-top:4px;">${badge} · ${n.timestamp}</div><button onclick="verwijderNotitieProfiel('${n.id}')" title="Verwijderen" style="position:absolute;top:6px;right:6px;background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:12px;">✕</button></div>`;
+        const badgeAchtergrond = n.type === "team" ? "var(--brand-50)" : "var(--gray-100)";
+        const badgeKleur = n.type === "team" ? "var(--brand-600)" : "var(--gray-500)";
+        const badge = n.type === "team" ? "Team" : "Privé";
+        html += `<div style="padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:13px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                <div style="color:var(--gray-700);">${n.tekst}</div>
+                <button onclick="verwijderNotitieProfiel('${n.id}')" title="Verwijderen" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:12px;flex-shrink:0;">✕</button>
+            </div>
+            <div style="margin-top:5px;display:flex;align-items:center;gap:7px;">
+                <span style="font-size:10px;font-weight:700;padding:1px 8px;border-radius:8px;background:${badgeAchtergrond};color:${badgeKleur};">${badge}</span>
+                <span style="color:var(--gray-400);font-size:11px;">${n.timestamp}</span>
+            </div>
+        </div>`;
     });
     div.innerHTML = html;
 }
@@ -9947,13 +9984,37 @@ herbouwVolumeRijen();
             _entry["laatste_datum"] = s.get("datum","")
     actieve_leveranciers = sorted(_leveren_aan_dict.values(), key=lambda x: -x["totaal_volume"])
 
+    # --- Voor leveranciers: waar hun materiaal uiteindelijk naartoe gaat (via gekoppelde vervolg-shipments) ---
+    bestemmingen_lijst = []
+    if not is_fabriek_profiel:
+        _inbound_ids_van_leverancier = {
+            s.get("id") for s in laad_shipments()
+            if s.get("origin_leverancier", "").strip().lower() == _bedrijf_naam_laag
+        }
+        _bestemmingen_dict = {}
+        for s in laad_shipments():
+            if s.get("gekoppelde_shipment_id") not in _inbound_ids_van_leverancier:
+                continue
+            sleutel = (s.get("destination_land", ""), s.get("destination_naam", ""))
+            if sleutel not in _bestemmingen_dict:
+                _bestemmingen_dict[sleutel] = {
+                    "land": s.get("destination_land", ""), "naam": s.get("destination_naam", ""),
+                    "aantal_shipments": 0, "totaal_volume": 0.0, "laatste_datum": "",
+                }
+            _entry2 = _bestemmingen_dict[sleutel]
+            _entry2["aantal_shipments"] += 1
+            _entry2["totaal_volume"] += shipment_hoeveelheid(s)
+            if s.get("datum", "") > _entry2["laatste_datum"]:
+                _entry2["laatste_datum"] = s.get("datum", "")
+        bestemmingen_lijst = sorted(_bestemmingen_dict.values(), key=lambda x: -x["totaal_volume"])
+
     return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd,
                                     is_fabriek_profiel=is_fabriek_profiel,
                                     open_orders_aantal=open_orders_aantal, open_orders_ton=open_orders_ton,
                                     laatst_contact_profiel=laatst_contact_profiel, afstand_alblasserdam=afstand_alblasserdam,
                                     materialen_volume_lijst=materialen_volume_lijst, inkoop_voortgang_lijst=inkoop_voortgang_lijst,
                                     recente_orders_profiel=recente_orders_profiel,
-                                    actieve_leveranciers=actieve_leveranciers,
+                                    actieve_leveranciers=actieve_leveranciers, bestemmingen_lijst=bestemmingen_lijst,
                                     fabrieken_gedeelde_kwaliteiten=fabrieken_gedeelde_kwaliteiten, matchpoel_label=matchpoel_label,
                                     bedrijf_orders=[o for o in laad_orders() if o.get("bedrijf","").strip().lower() == bedrijf["naam"].strip().lower()],
                                     orderkleuren=ORDER_KLEUREN,
@@ -9961,7 +10022,7 @@ herbouwVolumeRijen();
                                     alle_gebruikersnamen=sorted(laad_users().keys()),
                                     gebruikersnaam=session.get("gebruikersnaam", ""),
                                     bedrijf_shipments=_bedrijf_shipments,
-                                    materiaal_categorieen_lijst=sorted(laad_materiaal_taxonomie().keys()),
+                                    materiaal_categorieen_lijst=[k.strip() for k in (bedrijf.get("kwaliteiten","") or "").split(",") if k.strip()],
                                     materiaal_taxonomie=laad_materiaal_taxonomie())
 
 FOUTPAGINA_HTML = '''
