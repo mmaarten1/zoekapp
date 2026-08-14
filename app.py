@@ -2800,7 +2800,7 @@ def sidebar_html(actief):
         ("dashboard", "/dashboard", "DB", "Dashboard"),
         ("inzichten", "/inzichten", "IZ", "Inzichten"),
         ("materialen", "/materialen", "MT", "Materials"),
-        ("fabrieken", "/fabrieken", "FB", "Fabrieken"),
+        ("klanten", "/klanten", "KL", "Klanten"),
         ("certificeringen", "/certificeringen", "CF", "Certifications"),
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
@@ -3611,10 +3611,12 @@ HTML = '''
         <a href="/dashboard" class="sidebar-link"><span class="icoon">DB</span> Dashboard</a>
         <a href="/inzichten" class="sidebar-link"><span class="icoon">IZ</span> Inzichten</a>
         <a href="/materialen" class="sidebar-link"><span class="icoon">MT</span> Materials</a>
-        <a href="/fabrieken" class="sidebar-link"><span class="icoon">FB</span> Fabrieken</a>
+        <a href="/klanten" class="sidebar-link"><span class="icoon">KL</span> Klanten</a>
         <a href="/certificeringen" class="sidebar-link"><span class="icoon">CF</span> Certifications</a>
         <a href="/contacten" class="sidebar-link"><span class="icoon">CT</span> Contacten</a>
         <a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">OR</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>
+        <a href="/logistiek" class="sidebar-link"><span class="icoon">LG</span> Logistiek</a>
+        <a href="/facturen" class="sidebar-link"><span class="icoon">FA</span> Facturen</a>
         <a href="/marktprijzen" class="sidebar-link"><span class="icoon">MP</span> Marktprijzen</a>
         <a href="/voorraad" class="sidebar-link"><span class="icoon">VR</span> Voorraad</a>
         <a href="/opslagen" class="sidebar-link"><span class="icoon">OP</span> Opslagen</a>
@@ -8626,41 +8628,45 @@ function wijzigCertVervaldatum(input) {
     pagina = render_simple_page("Certifications", "certificeringen", inhoud)
     return render_template_string(pagina, cert_rijen=cert_rijen, kpis=kpis)
 
-@app.route("/fabrieken")
-def fabrieken_pagina():
+@app.route("/klanten")
+def klanten_pagina():
     zoekterm_fab = request.args.get("zoekterm", "").strip().lower()
     land_fab = request.args.get("land", "")
+    filter_status_klant = request.args.get("filter_status", "")
 
-    fabrieken_lijst = list(PAPIERFABRIEKEN)
+    status_alle_klant = laad_status()
+
+    klanten_lijst = list(PAPIERFABRIEKEN)
     if zoekterm_fab:
-        fabrieken_lijst = [f for f in fabrieken_lijst if zoekterm_fab in f.get("naam","").lower() or zoekterm_fab in f.get("stad","").lower()]
+        klanten_lijst = [f for f in klanten_lijst if zoekterm_fab in f.get("naam","").lower() or zoekterm_fab in f.get("stad","").lower()]
     if land_fab:
-        fabrieken_lijst = [f for f in fabrieken_lijst if f.get("land","") == land_fab]
-    fabrieken_lijst.sort(key=lambda f: f.get("naam",""))
-    fabrieken_met_coords = [f for f in fabrieken_lijst if f.get("lat") and f.get("lon")]
+        klanten_lijst = [f for f in klanten_lijst if f.get("land","") == land_fab]
+    for f in klanten_lijst:
+        f["status"] = status_alle_klant.get(f["naam"], "")
+    if filter_status_klant:
+        if filter_status_klant == "geen":
+            klanten_lijst = [f for f in klanten_lijst if not f["status"]]
+        else:
+            klanten_lijst = [f for f in klanten_lijst if f["status"] == filter_status_klant]
+    klanten_lijst.sort(key=lambda f: f.get("naam",""))
 
     alle_landen_fab = sorted({f.get("land","") for f in PAPIERFABRIEKEN if f.get("land","")})
-    landen_in_resultaat_fab = len({f.get("land","") for f in fabrieken_lijst if f.get("land","")})
+    landen_in_resultaat_fab = len({f.get("land","") for f in klanten_lijst if f.get("land","")})
+
+    aantal_per_status = {
+        "klant": sum(1 for f in PAPIERFABRIEKEN if status_alle_klant.get(f["naam"]) == "klant"),
+        "in_proces": sum(1 for f in PAPIERFABRIEKEN if status_alle_klant.get(f["naam"]) == "in_proces"),
+        "potentie": sum(1 for f in PAPIERFABRIEKEN if status_alle_klant.get(f["naam"]) == "potentie"),
+    }
 
     actieve_filters_fab = []
     if land_fab:
-        actieve_filters_fab.append({"label": f"Land: {land_fab}", "url": f"/fabrieken?zoekterm={zoekterm_fab}"})
+        actieve_filters_fab.append({"label": f"Land: {land_fab}", "url": f"/klanten?zoekterm={zoekterm_fab}"})
+    if filter_status_klant:
+        _status_labels_klant = {"klant": "Status: Klant", "in_proces": "Status: In Proces", "potentie": "Status: Potentie", "geen_interesse": "Status: Geen Interesse", "geen": "Status: Geen status"}
+        actieve_filters_fab.append({"label": _status_labels_klant.get(filter_status_klant, filter_status_klant), "url": f"/klanten?zoekterm={zoekterm_fab}&land={land_fab}"})
 
     inhoud = """
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<style>
-.marker-cluster-small { background-color: rgba(179,217,218,0.7); }
-.marker-cluster-small div { background-color: rgba(63,146,149,0.85); color: #fff; }
-.marker-cluster-medium { background-color: rgba(63,146,149,0.6); }
-.marker-cluster-medium div { background-color: rgba(20,118,123,0.9); color: #fff; }
-.marker-cluster-large { background-color: rgba(10,74,79,0.6); }
-.marker-cluster-large div { background-color: rgba(10,74,79,0.95); color: #fff; }
-.marker-cluster div { font-weight: 700; font-family: 'Libre Franklin', -apple-system, sans-serif; }
-</style>
 <style>
 .data-thead, .data-row { display: flex; align-items: center; padding: 0 var(--space-4); }
 .data-thead { padding-top: 10px; padding-bottom: 10px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8792; }
@@ -8669,21 +8675,24 @@ def fabrieken_pagina():
 .data-row { padding-top: 9px; padding-bottom: 9px; border-bottom: 1px solid var(--gray-100); font-size: 13px; text-decoration: none; color: inherit; }
 .data-row:hover { background: #f9fbfc; }
 .data-row .zacht { color: #4b5563; font-size: 12.5px; }
-#fabriekenKaart { height: 340px; border: 1px solid var(--gray-200); }
+.klant-status-badge { font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
+.klant-status-tab { padding: 7px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; text-decoration: none; border: 1px solid var(--gray-200); background: #fff; color: var(--gray-600); }
+.klant-status-tab.actief { background: var(--brand-600); color: #fff; border-color: var(--brand-600); }
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;padding-left:20px;">
     <div>
-        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Fabrieken</div>
+        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Klanten</div>
     </div>
     <div style="display:flex;gap:22px;">
-        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ fabrieken_lijst|length }}</div></div>
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ klanten_lijst|length }}</div></div>
         <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat_fab }}</div></div>
     </div>
 </div>
 
-<form method="GET" id="fabriekZoekForm" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;">
-    <input type="text" name="zoekterm" value="{{ zoekterm_fab }}" placeholder="Fabriek of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
+<form method="GET" id="klantZoekForm" style="max-width:820px;height:44px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;display:flex;align-items:stretch;margin-bottom:14px;">
+    {% if filter_status_klant %}<input type="hidden" name="filter_status" value="{{ filter_status_klant }}">{% endif %}
+    <input type="text" name="zoekterm" value="{{ zoekterm_fab }}" placeholder="Klant of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
     <select name="land" onchange="this.form.submit()" style="width:150px;border:none;border-left:1px solid var(--gray-100);padding:0 14px;font-size:14px;cursor:pointer;">
         <option value="">Alle landen</option>
         {% for l in alle_landen_fab %}<option value="{{ l }}" {% if land_fab == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
@@ -8691,89 +8700,58 @@ def fabrieken_pagina():
     <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">Search →</button>
 </form>
 
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <a href="/klanten" class="klant-status-tab {% if not filter_status_klant %}actief{% endif %}">Alle</a>
+    <a href="/klanten?filter_status=klant" class="klant-status-tab {% if filter_status_klant == 'klant' %}actief{% endif %}">🟢 Klant ({{ aantal_per_status.klant }})</a>
+    <a href="/klanten?filter_status=in_proces" class="klant-status-tab {% if filter_status_klant == 'in_proces' %}actief{% endif %}">🔵 In Proces ({{ aantal_per_status.in_proces }})</a>
+    <a href="/klanten?filter_status=potentie" class="klant-status-tab {% if filter_status_klant == 'potentie' %}actief{% endif %}">🟡 Potentie ({{ aantal_per_status.potentie }})</a>
+    <a href="/klanten?filter_status=geen" class="klant-status-tab {% if filter_status_klant == 'geen' %}actief{% endif %}">⚪ Geen status</a>
+</div>
+
 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;">
     {% for af in actieve_filters_fab %}
     <a href="{{ af.url }}" style="display:inline-flex;align-items:center;gap:5px;background:var(--brand-600);color:#fff;border-radius:14px;padding:4px 11px;font-size:12px;font-weight:600;text-decoration:none;">{{ af.label }}<span style="font-weight:800;opacity:0.8;">✕</span></a>
     {% endfor %}
-    {% if actieve_filters_fab %}<a href="/fabrieken" style="font-size:12px;color:var(--gray-300);text-decoration:none;margin-left:4px;">Wis alles</a>{% endif %}
 </div>
 
-{% if fabrieken_lijst %}
-<div class="kaart-tabel-blok">
-    <div class="map-panel">
-        <div id="fabriekenKaart"></div>
-    </div>
-    <div class="results-list" id="fabriekenLijst">
+{% if klanten_lijst %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="results-list" id="klantenLijst">
         <div class="data-thead">
-            <span style="flex:1.6;" data-sort="naam">Fabriek</span>
+            <span style="flex:1.6;" data-sort="naam">Klant</span>
             <span style="flex:1;" data-sort="locatie">Locatie</span>
-            <span style="flex:1.6;" data-sort="materialen">Materialen</span>
-            <span style="width:150px;text-align:right;"></span>
+            <span style="flex:1.4;" data-sort="materialen">Materialen</span>
+            <span style="width:120px;" data-sort="status">Status</span>
+            <span style="width:100px;text-align:right;"></span>
         </div>
-        {% for f in fabrieken_lijst %}
+        {% for f in klanten_lijst %}
         <a class="data-row" href="/bedrijf/{{ f.naam|urlencode }}"
            data-naam="{{ f.naam|e }}" data-locatie="{{ f.stad|default('',true)|e }}, {{ f.land|default('',true)|e }}" data-materialen="{{ f.materialen|default('',true)|e }}"
-           data-lat="{{ f.lat or '' }}" data-lon="{{ f.lon or '' }}">
+           data-status="{{ f.status|default('',true)|e }}">
             <span style="flex:1.6;font-weight:600;color:var(--gray-800);">🏭 {{ f.naam }}</span>
             <span style="flex:1;" class="zacht">{{ f.stad }}, {{ f.land }}</span>
-            <span style="flex:1.6;" class="zacht">{{ f.materialen|default('—',true) }}</span>
-            <span style="width:150px;text-align:right;">
-                <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Bekijk profiel →</span>
+            <span style="flex:1.4;" class="zacht">{{ f.materialen|default('—',true) }}</span>
+            <span style="width:120px;">
+                {% if f.status == "klant" %}<span class="klant-status-badge" style="background:#f0fdf4;color:#16a34a;">🟢 Klant</span>
+                {% elif f.status == "in_proces" %}<span class="klant-status-badge" style="background:#eff6ff;color:#1d4ed8;">🔵 In Proces</span>
+                {% elif f.status == "potentie" %}<span class="klant-status-badge" style="background:#fffbeb;color:#d97706;">🟡 Potentie</span>
+                {% elif f.status == "geen_interesse" %}<span class="klant-status-badge" style="background:var(--gray-100);color:var(--gray-500);">⚪ Geen interesse</span>
+                {% else %}<span class="zacht">—</span>{% endif %}
+            </span>
+            <span style="width:100px;text-align:right;">
+                <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Profiel →</span>
             </span>
         </a>
         {% endfor %}
     </div>
-    <div class="results-header">
-        <div class="results-count">
-            <strong id="fabInBeeldTeller">{{ fabrieken_met_coords|length }}</strong> fabrieken in kaartbeeld · <strong>{{ fabrieken_lijst|length }}</strong> totaal
-            <span style="color:var(--gray-300);font-size:11px;"> · zoom of sleep de kaart om te filteren</span>
-        </div>
-    </div>
 </div>
 {% else %}
-<div class="lege-staat">Geen fabrieken gevonden voor deze filters.</div>
+<div class="lege-staat">Geen klanten gevonden voor deze filters.</div>
 {% endif %}
 
 <script>
-var fabriekenData = {{ fabrieken_met_coords|tojson }};
-if (fabriekenData.length) {
-    var fKaart = L.map("fabriekenKaart").setView([fabriekenData[0].lat, fabriekenData[0].lon], 5);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap"}).addTo(fKaart);
-    var fCluster = L.markerClusterGroup();
-    var fabriekIconFab = L.divIcon({
-        html: '<div style="width:18px;height:18px;border-radius:50%;background:#0d5c62;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-size:9px;">🏭</div>',
-        className: '', iconSize: [18,18], iconAnchor: [9,9]
-    });
-    fabriekenData.forEach(function(f) {
-        L.marker([f.lat, f.lon], {icon: fabriekIconFab})
-            .bindPopup("<b>🏭 " + f.naam.replace(/"/g,"") + "</b><br><small>" + f.stad + ", " + f.land + "</small>")
-            .addTo(fCluster);
-    });
-    fKaart.addLayer(fCluster);
-    if (fabriekenData.length > 1) {
-        fKaart.fitBounds(fabriekenData.map(function(f){ return [f.lat, f.lon]; }), {padding:[30,30], maxZoom:7});
-    }
-
-    var fabRijen = Array.prototype.slice.call(document.querySelectorAll("#fabriekenLijst .data-row"));
-    function syncFabKaart() {
-        var bounds = fKaart.getBounds();
-        var teller = 0;
-        fabRijen.forEach(function(rij) {
-            var lat = parseFloat(rij.dataset.lat), lon = parseFloat(rij.dataset.lon);
-            if (isNaN(lat) || isNaN(lon)) { rij.style.display = "none"; return; }
-            var zichtbaar = bounds.contains([lat, lon]);
-            rij.style.display = zichtbaar ? "" : "none";
-            if (zichtbaar) teller++;
-        });
-        var tellerEl = document.getElementById("fabInBeeldTeller");
-        if (tellerEl) tellerEl.textContent = teller;
-    }
-    fKaart.on("moveend zoomend", syncFabKaart);
-    fKaart.whenReady(function () { setTimeout(syncFabKaart, 300); });
-}
-
 (function () {
-    var lijst = document.getElementById("fabriekenLijst");
+    var lijst = document.getElementById("klantenLijst");
     if (!lijst) return;
     var koppen = lijst.querySelectorAll(".data-thead [data-sort]");
     var richting = "desc", sleutel = null;
@@ -8782,8 +8760,8 @@ if (fabriekenData.length) {
             var k = kop.dataset.sort;
             richting = (sleutel === k && richting === "desc") ? "asc" : "desc";
             sleutel = k;
-            koppen.forEach(function (x) { x.textContent = x.textContent.replace(/ [\\u2191\\u2193]$/, ""); });
-            kop.textContent += richting === "desc" ? " \\u2193" : " \\u2191";
+            koppen.forEach(function (x) { x.textContent = x.textContent.replace(/ [\u2191\u2193]$/, ""); });
+            kop.textContent += richting === "desc" ? " \u2193" : " \u2191";
             var rijen = Array.prototype.slice.call(lijst.querySelectorAll(".data-row"));
             rijen.sort(function (a, b) {
                 var va = a.dataset[k] || "", vb = b.dataset[k] || "";
@@ -8796,10 +8774,11 @@ if (fabriekenData.length) {
 })();
 </script>
     """
-    pagina = render_simple_page("Fabrieken", "fabrieken", inhoud)
-    return render_template_string(pagina, fabrieken_lijst=fabrieken_lijst, fabrieken_met_coords=fabrieken_met_coords,
+    pagina = render_simple_page("Klanten", "klanten", inhoud)
+    return render_template_string(pagina, klanten_lijst=klanten_lijst,
                                     zoekterm_fab=zoekterm_fab, land_fab=land_fab, actieve_filters_fab=actieve_filters_fab,
-                                    alle_landen_fab=alle_landen_fab, landen_in_resultaat_fab=landen_in_resultaat_fab)
+                                    alle_landen_fab=alle_landen_fab, landen_in_resultaat_fab=landen_in_resultaat_fab,
+                                    filter_status_klant=filter_status_klant, aantal_per_status=aantal_per_status)
 
 @app.route("/fabriek/<naam>")
 def fabriek_detail(naam):
