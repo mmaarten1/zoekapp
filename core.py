@@ -1549,3 +1549,6 @@ def vind_transport_tarieven_dichtbij(lat, lon, straal_km=40):
         if dichtstbijzijnde:
             resultaat[forwarder] = dichtstbijzijnde
     return resultaat
+
+ORDER_STATUSSEN = ["Open", "Onderhandeling", "Gewonnen", "Verloren"]
+ORDER_KLEUREN = {"Open": "#3b82f6", "Onderhandeling": "var(--brand-600)", "Gewonnen": "var(--green-600)", "Verloren": "var(--gray-400)"}
