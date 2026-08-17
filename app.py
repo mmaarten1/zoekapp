@@ -35,6 +35,7 @@ from core import (
     PAGINA_HOOFD, sidebar_html, render_simple_page, is_huidige_gebruiker_admin, vereist_admin_of_403,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
+    bewaar_users, AFDELINGEN, AFDELING_LABELS, ROLLEN, ROL_LABELS,
 )
 
 from bs4 import BeautifulSoup
@@ -1915,7 +1916,9 @@ def login():
             session["ingelogd"] = True
             session["gebruikersnaam"] = gebruikersnaam
             session["team"] = users[gebruikersnaam].get("team", "")
-            return redirect(url_for("index"))
+            session["afdeling"] = users[gebruikersnaam].get("afdeling", "")
+            session["rol"] = users[gebruikersnaam].get("rol", "")
+            return redirect(url_for("zoeken.index"))
         else:
             fout = "Onjuiste gebruikersnaam of wachtwoord."
     return render_template_string(LOGIN_HTML, fout=fout)
@@ -2452,6 +2455,8 @@ def gebruikers_beheer():
             nieuwe_naam = request.form.get("gebruikersnaam", "").strip()
             team = request.form.get("team", "").strip()
             is_admin_nieuw = request.form.get("is_admin") == "on"
+            afdeling_nieuw = request.form.get("afdeling", "")
+            rol_nieuw = request.form.get("rol", "medewerker")
             users = laad_users()
             if not nieuwe_naam:
                 bericht = "Gebruikersnaam is verplicht."
@@ -2459,9 +2464,12 @@ def gebruikers_beheer():
                 bericht = f"'{nieuwe_naam}' bestaat al."
             else:
                 nieuw_wachtwoord = genereer_wachtwoord()
-                users[nieuwe_naam] = {"wachtwoord": generate_password_hash(nieuw_wachtwoord), "team": team, "is_admin": is_admin_nieuw}
-                with open(USERS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(users, f, ensure_ascii=False, indent=2)
+                users[nieuwe_naam] = {
+                    "wachtwoord": generate_password_hash(nieuw_wachtwoord), "team": team, "is_admin": is_admin_nieuw,
+                    "afdeling": afdeling_nieuw if afdeling_nieuw in AFDELINGEN else "",
+                    "rol": rol_nieuw if rol_nieuw in ROLLEN else "medewerker",
+                }
+                bewaar_users(users)
                 bericht = f"'{nieuwe_naam}' toegevoegd!"
         elif actie == "verwijderen":
             te_verwijderen = request.form.get("gebruikersnaam", "")
@@ -2470,8 +2478,7 @@ def gebruikers_beheer():
                 bericht = "Je kunt jezelf niet verwijderen."
             elif te_verwijderen in users:
                 del users[te_verwijderen]
-                with open(USERS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(users, f, ensure_ascii=False, indent=2)
+                bewaar_users(users)
                 bericht = f"'{te_verwijderen}' verwijderd."
         elif actie == "toggle_admin":
             doelnaam = request.form.get("gebruikersnaam", "")
@@ -2481,9 +2488,20 @@ def gebruikers_beheer():
             elif doelnaam in users:
                 huidige = users[doelnaam].get("is_admin", True)
                 users[doelnaam]["is_admin"] = not huidige
-                with open(USERS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(users, f, ensure_ascii=False, indent=2)
+                bewaar_users(users)
                 bericht = f"'{doelnaam}' is nu {'wel' if not huidige else 'geen'} admin."
+        elif actie == "wijzig_afdeling_rol":
+            doelnaam = request.form.get("gebruikersnaam", "")
+            nieuwe_afdeling = request.form.get("afdeling", "")
+            nieuwe_rol = request.form.get("rol", "")
+            users = laad_users()
+            if doelnaam in users:
+                if nieuwe_afdeling in AFDELINGEN or nieuwe_afdeling == "":
+                    users[doelnaam]["afdeling"] = nieuwe_afdeling
+                if nieuwe_rol in ROLLEN:
+                    users[doelnaam]["rol"] = nieuwe_rol
+                bewaar_users(users)
+                bericht = f"Afdeling/rol van '{doelnaam}' bijgewerkt."
 
     users = laad_users()
     inhoud = """
@@ -2498,6 +2516,13 @@ def gebruikers_beheer():
             <input type="hidden" name="actie" value="toevoegen">
             <input type="text" name="gebruikersnaam" placeholder="Gebruikersnaam (bv. leander)" required style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
             <input type="text" name="team" placeholder="Team (bv. papier-nl)" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+            <select name="afdeling" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+                <option value="">Geen afdeling</option>
+                {% for a in afdelingen %}<option value="{{ a }}">{{ afdeling_labels[a] }}</option>{% endfor %}
+            </select>
+            <select name="rol" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+                {% for r in rollen %}<option value="{{ r }}" {% if r == 'medewerker' %}selected{% endif %}>{{ rol_labels[r] }}</option>{% endfor %}
+            </select>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--gray-600);margin-bottom:12px;">
                 <input type="checkbox" name="is_admin"> Admin (mag ook gebruikers beheren)
             </label>
@@ -2508,32 +2533,48 @@ def gebruikers_beheer():
     <div class="info-kaart" style="max-width:420px;">
         <div class="dg-kaart-titel">Huidige gebruikers ({{ users|length }})</div>
         {% for naam, info in users.items() %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--gray-100);">
-            <div>
-                <b style="color:var(--gray-800);">{{ naam }}</b>
-                <span style="color:var(--gray-400);font-size:12px;"> · {{ info.team or "geen team" }}</span>
-                {% if info.get("is_admin", True) %}<span style="background:var(--brand-50);color:var(--brand-600);font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;">ADMIN</span>{% endif %}
+        <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                    <b style="color:var(--gray-800);">{{ naam }}</b>
+                    <span style="color:var(--gray-400);font-size:12px;"> · {{ info.team or "geen team" }}</span>
+                    {% if info.get("is_admin", True) %}<span style="background:var(--brand-50);color:var(--brand-600);font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;">ADMIN</span>{% endif %}
+                    {% if info.get("afdeling") %}<span style="background:var(--gray-100);color:var(--gray-600);font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;margin-left:6px;">{{ afdeling_labels.get(info.afdeling, info.afdeling) }}</span>{% endif %}
+                    {% if info.get("rol") %}<span style="background:var(--gray-100);color:var(--gray-600);font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;margin-left:4px;">{{ rol_labels.get(info.rol, info.rol) }}</span>{% endif %}
+                </div>
+                {% if naam != gebruikersnaam %}
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <form method="POST" style="margin:0;">
+                        <input type="hidden" name="actie" value="toggle_admin">
+                        <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
+                        <button type="submit" style="background:none;border:1px solid var(--gray-200);border-radius:6px;padding:3px 8px;color:var(--gray-500);cursor:pointer;font-size:11px;">{{ "Admin intrekken" if info.get("is_admin", True) else "Maak admin" }}</button>
+                    </form>
+                    <form method="POST" onsubmit="return confirm('{{ naam }} verwijderen?');" style="margin:0;">
+                        <input type="hidden" name="actie" value="verwijderen">
+                        <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
+                        <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.9rem;">✕</button>
+                    </form>
+                </div>
+                {% endif %}
             </div>
-            {% if naam != gebruikersnaam %}
-            <div style="display:flex;gap:10px;align-items:center;">
-                <form method="POST" style="margin:0;">
-                    <input type="hidden" name="actie" value="toggle_admin">
-                    <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
-                    <button type="submit" style="background:none;border:1px solid var(--gray-200);border-radius:6px;padding:3px 8px;color:var(--gray-500);cursor:pointer;font-size:11px;">{{ "Admin intrekken" if info.get("is_admin", True) else "Maak admin" }}</button>
-                </form>
-                <form method="POST" onsubmit="return confirm('{{ naam }} verwijderen?');" style="margin:0;">
-                    <input type="hidden" name="actie" value="verwijderen">
-                    <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
-                    <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.9rem;">✕</button>
-                </form>
-            </div>
-            {% endif %}
+            <form method="POST" style="display:flex;gap:6px;margin-top:6px;">
+                <input type="hidden" name="actie" value="wijzig_afdeling_rol">
+                <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
+                <select name="afdeling" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
+                    <option value="">Geen afdeling</option>
+                    {% for a in afdelingen %}<option value="{{ a }}" {% if info.get("afdeling") == a %}selected{% endif %}>{{ afdeling_labels[a] }}</option>{% endfor %}
+                </select>
+                <select name="rol" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
+                    {% for r in rollen %}<option value="{{ r }}" {% if info.get("rol") == r %}selected{% endif %}>{{ rol_labels[r] }}</option>{% endfor %}
+                </select>
+            </form>
         </div>
         {% endfor %}
     </div>
     """
     pagina = render_simple_page("Gebruikers beheren", "instellingen", inhoud)
-    return render_template_string(pagina, users=users, bericht=bericht, nieuw_wachtwoord=nieuw_wachtwoord)
+    return render_template_string(pagina, users=users, bericht=bericht, nieuw_wachtwoord=nieuw_wachtwoord,
+                                    afdelingen=AFDELINGEN, afdeling_labels=AFDELING_LABELS, rollen=ROLLEN, rol_labels=ROL_LABELS)
 
 @app.route("/instellingen")
 def instellingen():

@@ -60,6 +60,21 @@ def laad_users():
             return json.load(f)
     except:
         return {}
+
+def bewaar_users(users):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+# ============================================================
+# Rechtensysteem — Fase 1: datamodel (afdeling + rol per gebruiker).
+# Nog GEEN afscherming van schermen o.b.v. deze velden — dat komt in een
+# latere fase. Dit legt alleen de basis vast.
+# ============================================================
+AFDELINGEN = ["accountmanager", "backoffice", "logistiek", "finance"]
+AFDELING_LABELS = {"accountmanager": "Accountmanager/Trader", "backoffice": "Backoffice", "logistiek": "Logistiek", "finance": "Finance"}
+ROLLEN = ["directeur", "manager", "medewerker"]
+ROL_LABELS = {"directeur": "Directeur", "manager": "Manager", "medewerker": "Medewerker"}
+
 STATUS_FILE = datapad("status.json")
 
 ACCOUNTMANAGERS_FILE = datapad("accountmanagers.json")
