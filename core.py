@@ -75,6 +75,54 @@ AFDELING_LABELS = {"accountmanager": "Accountmanager/Trader", "backoffice": "Bac
 ROLLEN = ["directeur", "manager", "medewerker"]
 ROL_LABELS = {"directeur": "Directeur", "manager": "Manager", "medewerker": "Medewerker"}
 
+# ============================================================
+# Rechtensysteem — Fase 1, stap 2: schermen afschermen o.b.v. afdeling/rol.
+#
+# Belangrijk, bewust zo ontworpen (backward-compatible):
+# - is_admin of rol "directeur" -> ziet altijd alles (ongeacht afdeling).
+# - Gebruiker zonder afdeling ingesteld -> ziet ook alles (zodat bestaande
+#   accounts, die nog geen afdeling toegewezen kregen, niets merken).
+# - Alleen als een gebruiker EXPLICIET een afdeling heeft, en die afdeling
+#   staat niet in de lijst voor een pagina, wordt de pagina verborgen/
+#   geblokkeerd.
+# - Pagina's die niet in PAGINA_AFDELINGEN staan zijn voor iedereen
+#   zichtbaar (zoeken, dashboard, notities, instellingen, etc.).
+# ============================================================
+PAGINA_AFDELINGEN = {
+    "klanten": ["accountmanager", "backoffice"],
+    "leveranciers": ["accountmanager", "backoffice"],
+    "contacten": ["accountmanager", "backoffice"],
+    "orders": ["accountmanager"],
+    "marktprijzen": ["accountmanager"],
+    "materialen": ["accountmanager", "backoffice"],
+    "certificeringen": ["accountmanager", "backoffice"],
+    "voorraad": ["logistiek", "backoffice"],
+    "logistiek": ["logistiek"],
+    "facturen": ["finance"],
+}
+
+def mag_pagina_zien(pagina_key):
+    """True als de ingelogde gebruiker deze pagina mag zien, o.b.v. afdeling/rol."""
+    if is_huidige_gebruiker_admin():
+        return True
+    if session.get("rol", "") == "directeur":
+        return True
+    vereiste_afdelingen = PAGINA_AFDELINGEN.get(pagina_key)
+    if not vereiste_afdelingen:
+        return True
+    afdeling = session.get("afdeling", "")
+    if not afdeling:
+        return True
+    return afdeling in vereiste_afdelingen
+
+def vereist_afdeling_of_403(pagina_key):
+    """Geef een 403-response terug als de gebruiker deze pagina niet mag zien, anders None."""
+    if mag_pagina_zien(pagina_key):
+        return None
+    pagina = render_simple_page("Geen toegang", pagina_key,
+        '<div class="page-title">Geen toegang</div><div class="lege-staat">Dit onderdeel is niet beschikbaar voor jouw afdeling. Vraag een admin of directeur om je afdeling aan te passen als dit niet klopt.</div>')
+    return render_template_string(pagina), 403
+
 STATUS_FILE = datapad("status.json")
 
 ACCOUNTMANAGERS_FILE = datapad("accountmanagers.json")
@@ -1450,6 +1498,8 @@ def sidebar_html(actief):
     ]
     links = ""
     for key, href, icoon, label in items:
+        if not mag_pagina_zien(key):
+            continue
         cls = "sidebar-link active" if key == actief else "sidebar-link"
         badge_html = ""
         if key == "orders" and aantal_open_orders > 0:

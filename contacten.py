@@ -12,13 +12,15 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 
 from core import (
     laad_contactpersonen, bewaar_contactpersonen, laad_accountmanagers,
-    is_huidige_gebruiker_admin, ENF_BEDRIJVEN, render_simple_page,
+    is_huidige_gebruiker_admin, ENF_BEDRIJVEN, render_simple_page, vereist_afdeling_of_403,
 )
 
 contacten_bp = Blueprint("contacten", __name__)
 
 @contacten_bp.route("/contacten", methods=["GET", "POST"])
 def contacten():
+    _guard = vereist_afdeling_of_403("contacten")
+    if _guard: return _guard
     if request.method == "POST":
         actie = request.form.get("actie", "")
         personen = laad_contactpersonen()

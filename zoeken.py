@@ -27,7 +27,7 @@ from core import (
     bereken_afstand_km, vind_transport_tarieven_dichtbij, sync_contactpersoon_naar_contacten,
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
-    laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN,
+    laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien,
 )
 
 zoeken_bp = Blueprint("zoeken", __name__)
@@ -834,16 +834,16 @@ HTML = '''
         <a href="/wereldkaart" class="sidebar-link"><span class="icoon">WM</span> World Map</a>
         <a href="/dashboard" class="sidebar-link"><span class="icoon">DB</span> Dashboard</a>
         <a href="/inzichten" class="sidebar-link"><span class="icoon">IZ</span> Inzichten</a>
-        <a href="/materialen" class="sidebar-link"><span class="icoon">MT</span> Materials</a>
-        <a href="/klanten" class="sidebar-link"><span class="icoon">KL</span> Klanten</a>
-        <a href="/leveranciers" class="sidebar-link"><span class="icoon">LV</span> Leveranciers</a>
-        <a href="/certificeringen" class="sidebar-link"><span class="icoon">CF</span> Certifications</a>
-        <a href="/contacten" class="sidebar-link"><span class="icoon">CT</span> Contacten</a>
-        <a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">OR</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>
-        <a href="/logistiek" class="sidebar-link"><span class="icoon">LG</span> Logistiek</a>
-        <a href="/facturen" class="sidebar-link"><span class="icoon">FA</span> Facturen</a>
-        <a href="/marktprijzen" class="sidebar-link"><span class="icoon">MP</span> Marktprijzen</a>
-        <a href="/voorraad" class="sidebar-link"><span class="icoon">VR</span> Voorraad</a>
+        {% if mag_pagina_zien('materialen') %}<a href="/materialen" class="sidebar-link"><span class="icoon">MT</span> Materials</a>{% endif %}
+        {% if mag_pagina_zien('klanten') %}<a href="/klanten" class="sidebar-link"><span class="icoon">KL</span> Klanten</a>{% endif %}
+        {% if mag_pagina_zien('leveranciers') %}<a href="/leveranciers" class="sidebar-link"><span class="icoon">LV</span> Leveranciers</a>{% endif %}
+        {% if mag_pagina_zien('certificeringen') %}<a href="/certificeringen" class="sidebar-link"><span class="icoon">CF</span> Certifications</a>{% endif %}
+        {% if mag_pagina_zien('contacten') %}<a href="/contacten" class="sidebar-link"><span class="icoon">CT</span> Contacten</a>{% endif %}
+        {% if mag_pagina_zien('orders') %}<a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">OR</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>{% endif %}
+        {% if mag_pagina_zien('logistiek') %}<a href="/logistiek" class="sidebar-link"><span class="icoon">LG</span> Logistiek</a>{% endif %}
+        {% if mag_pagina_zien('facturen') %}<a href="/facturen" class="sidebar-link"><span class="icoon">FA</span> Facturen</a>{% endif %}
+        {% if mag_pagina_zien('marktprijzen') %}<a href="/marktprijzen" class="sidebar-link"><span class="icoon">MP</span> Marktprijzen</a>{% endif %}
+        {% if mag_pagina_zien('voorraad') %}<a href="/voorraad" class="sidebar-link"><span class="icoon">VR</span> Voorraad</a>{% endif %}
         <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">NT</span> Notities</a>
         <a href="/instellingen" class="sidebar-link"><span class="icoon">IN</span> Instellingen</a>
     </nav>
@@ -2316,7 +2316,8 @@ def index():
         alle_gebruikersnamen=sorted(laad_users().keys()),
         actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst,
         materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()),
-        aantal_open_orders=sum(1 for o in laad_orders() if o.get("status") in ("Open", "Onderhandeling")))
+        aantal_open_orders=sum(1 for o in laad_orders() if o.get("status") in ("Open", "Onderhandeling")),
+        mag_pagina_zien=mag_pagina_zien)
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 

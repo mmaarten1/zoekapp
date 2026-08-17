@@ -36,6 +36,7 @@ from core import (
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
     bewaar_users, AFDELINGEN, AFDELING_LABELS, ROLLEN, ROL_LABELS,
+    mag_pagina_zien, vereist_afdeling_of_403, PAGINA_AFDELINGEN,
 )
 
 from bs4 import BeautifulSoup
@@ -2180,6 +2181,8 @@ def get_document_bestand(bestandsnaam):
 
 @app.route("/logistiek")
 def logistiek_pagina():
+    _guard = vereist_afdeling_of_403("logistiek")
+    if _guard: return _guard
     vooringevuld_bedrijf = request.args.get("bedrijf", "")
 
     alle_shipments_log = laad_shipments()
@@ -2276,6 +2279,8 @@ def logistiek_pagina():
 
 @app.route("/facturen", methods=["GET", "POST"])
 def facturen_pagina():
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
     if request.method == "POST":
         actie = request.form.get("actie", "")
         alle_facturen = laad_facturen()

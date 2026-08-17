@@ -13,13 +13,15 @@ from flask import Blueprint, request, session, render_template_string
 
 from core import (
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_accountmanagers,
-    laad_users, render_simple_page,
+    laad_users, render_simple_page, vereist_afdeling_of_403,
 )
 
 relaties_bp = Blueprint("relaties", __name__)
 
 @relaties_bp.route("/leveranciers")
 def leveranciers_pagina():
+    _guard = vereist_afdeling_of_403("leveranciers")
+    if _guard: return _guard
     bericht_lev = ("succes", "Leverancier toegevoegd.") if request.args.get("toegevoegd") else None
 
     zoekterm_lev = request.args.get("zoekterm", "").strip().lower()
@@ -235,6 +237,8 @@ def leveranciers_pagina():
 
 @relaties_bp.route("/klanten")
 def klanten_pagina():
+    _guard = vereist_afdeling_of_403("klanten")
+    if _guard: return _guard
     bericht_klant = ("succes", "Klant toegevoegd.") if request.args.get("toegevoegd") else None
 
     zoekterm_fab = request.args.get("zoekterm", "").strip().lower()

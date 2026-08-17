@@ -14,13 +14,15 @@ from core import (
     laad_orders, bewaar_orders, laad_accountmanagers, laad_meldingen, bewaar_meldingen,
     laad_marktprijzen, bewaar_marktprijzen, parse_hoeveelheid_getal, laad_shipments,
     laad_status, laad_materiaal_taxonomie, render_simple_page,
-    ORDER_STATUSSEN, ORDER_KLEUREN,
+    ORDER_STATUSSEN, ORDER_KLEUREN, vereist_afdeling_of_403,
 )
 
 orders_bp = Blueprint("orders", __name__)
 
 @orders_bp.route("/export-orders-csv")
 def export_orders_csv():
+    _guard = vereist_afdeling_of_403("orders")
+    if _guard: return _guard
     import csv, io
     filter_status = request.args.get("filter_status", "")
     filter_materiaal = request.args.get("filter_materiaal", "")
@@ -49,6 +51,8 @@ def export_orders_csv():
 
 @orders_bp.route("/orders", methods=["GET", "POST"])
 def orders_pagina():
+    _guard = vereist_afdeling_of_403("orders")
+    if _guard: return _guard
     if request.method == "POST":
         actie = request.form.get("actie", "")
         alle_orders = laad_orders()

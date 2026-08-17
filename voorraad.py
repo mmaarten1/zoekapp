@@ -19,6 +19,7 @@ from core import (
     parse_hoeveelheid_getal, bereken_voorraad_status, is_huidige_gebruiker_admin,
     vereist_admin_of_403, render_simple_page, ENF_BEDRIJVEN,
     ALBLASSERDAM_NAAM, bepaal_shipment_flow_type, shipment_hoeveelheid, SHIPMENT_STATUSSEN,
+    vereist_afdeling_of_403,
 )
 
 voorraad_bp = Blueprint("voorraad", __name__)
@@ -210,6 +211,8 @@ def voorraad_contracten_actie():
 
 @voorraad_bp.route("/voorraad", methods=["GET", "POST"])
 def voorraad_pagina():
+    _guard = vereist_afdeling_of_403("voorraad")
+    if _guard: return _guard
     if request.method == "POST":
         actie = request.form.get("actie", "")
         # Handmatige voorraadmutaties (los van shipments/orders) zijn alleen voor admins.

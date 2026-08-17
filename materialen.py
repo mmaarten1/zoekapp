@@ -13,7 +13,7 @@ from flask import Blueprint, request, jsonify, render_template_string
 from core import (
     laad_materiaal_taxonomie, bewaar_materiaal_taxonomie, vereist_admin_of_403,
     render_simple_page, ENF_BEDRIJVEN, laad_accountmanagers, laad_cert_vervaldatums,
-    bewaar_cert_vervaldatums, _cert_sleutel, parse_hoeveelheid_getal,
+    bewaar_cert_vervaldatums, _cert_sleutel, parse_hoeveelheid_getal, vereist_afdeling_of_403,
 )
 
 materialen_bp = Blueprint("materialen", __name__)
@@ -136,6 +136,8 @@ def materialen_beheer():
 
 @materialen_bp.route("/certificeringen")
 def certificeringen_pagina():
+    _guard = vereist_afdeling_of_403("certificeringen")
+    if _guard: return _guard
     _am_lookup_cert = laad_accountmanagers()
     _vervaldatums = laad_cert_vervaldatums()
     vandaag_cert = datetime.date.today()
@@ -263,6 +265,8 @@ function wijzigCertVervaldatum(input) {
 
 @materialen_bp.route("/materialen")
 def materialen():
+    _guard = vereist_afdeling_of_403("materialen")
+    if _guard: return _guard
     taxonomie = laad_materiaal_taxonomie()
 
     materialen_data = []

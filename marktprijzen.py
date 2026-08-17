@@ -12,13 +12,15 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 
 from core import (
     laad_marktprijzen, bewaar_marktprijzen, laad_status, laad_accountmanagers,
-    laad_materiaal_taxonomie, render_simple_page, is_huidige_gebruiker_admin,
+    laad_materiaal_taxonomie, render_simple_page, is_huidige_gebruiker_admin, vereist_afdeling_of_403,
 )
 
 marktprijzen_bp = Blueprint("marktprijzen", __name__)
 
 @marktprijzen_bp.route("/marktprijzen", methods=["GET", "POST"])
 def marktprijzen_pagina():
+    _guard = vereist_afdeling_of_403("marktprijzen")
+    if _guard: return _guard
     if request.method == "POST":
         actie = request.form.get("actie", "")
         prijzen = laad_marktprijzen()
