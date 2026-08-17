@@ -624,3 +624,58 @@ def shipment_hoeveelheid(shipment):
     if werkelijk:
         return parse_hoeveelheid_getal(werkelijk)
     return parse_hoeveelheid_getal(shipment.get("gepland_hoeveelheid", ""))
+
+# ============================================================
+# ENF_BEDRIJVEN / PAPIERFABRIEKEN — hoofddatabron + transport-data
+# ============================================================
+TENANT_ID = os.environ.get("TENANT_ID", "peute")
+
+# ============================================
+# COMPANIES HOUSE (UK) - status-check tegen faillissement/ontbinding
+# ============================================
+COMPANIES_HOUSE_API_KEY = os.environ.get("COMPANIES_HOUSE_API_KEY", "")
+CH_FAILLIET_STATUSSEN = {
+    "dissolved", "liquidation", "administration", "insolvency-proceedings",
+    "receivership", "voluntary-arrangement", "converted-closed",
+}
+
+def companies_house_status(bedrijfsnaam):
+    """Zoekt een bedrijfsnaam op bij Companies House. Geeft (status, gevonden_naam) terug, of (None, None) als niet gevonden/geen key."""
+    if not COMPANIES_HOUSE_API_KEY:
+        return None, None
+    try:
+        resp = requests.get(
+            "https://api.company-information.service.gov.uk/search/companies",
+            params={"q": bedrijfsnaam, "items_per_page": 1},
+            auth=(COMPANIES_HOUSE_API_KEY, ""),
+            timeout=15
+        )
+        if resp.status_code != 200:
+            return None, None
+        items = resp.json().get("items", [])
+        if not items:
+            return None, None
+        return items[0].get("company_status"), items[0].get("title")
+    except Exception:
+        return None, None
+
+def is_ch_financieel_gezond(bedrijfsnaam):
+    """True = gezond of onbekend (geen key/geen match -> voordeel van de twijfel). False = aantoonbaar failliet/ontbonden."""
+    status, _ = companies_house_status(bedrijfsnaam)
+    if status is None:
+        return True
+    return status not in CH_FAILLIET_STATUSSEN
+
+def laad_transport_data():
+    try:
+        with open(datapad("transport_prijzen.json"), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def laad_forwarder_wachtwoorden():
+    try:
+        with open(datapad("forwarder_wachtwoorden.json"), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
