@@ -28,7 +28,8 @@ from core import (
     FOTOS_MAP, FOTO_CATEGORIEEN, GEOCODE_CACHE_FILE, MARKTPRIJZEN_FILE,
     MATERIAAL_TAXONOMIE_FILE, MELDINGEN_FILE, NOTITIES_FILE, ORDERS_FILE,
     SHIPMENTS_FILE, STATUS_FILE, UITNODIGINGEN_FILE, USERS_FILE,
-    VOORRAADMOMENTEN_FILE, VOORRAAD_FILE, _STANDAARD_TAXONOMIE
+    VOORRAADMOMENTEN_FILE, VOORRAAD_FILE, _STANDAARD_TAXONOMIE,
+    ALBLASSERDAM_NAAM, bepaal_shipment_flow_type, shipment_hoeveelheid,
 )
 
 from bs4 import BeautifulSoup
@@ -6257,25 +6258,6 @@ def export_shipments_csv():
                      headers={"Content-Disposition": "attachment; filename=shipments_export.csv"})
 
 SHIPMENT_STATUSSEN = ["Planned", "Confirmed", "Loading", "Loaded", "In Transit", "Arrived", "Weighed", "Received", "Delivered", "Cancelled"]
-ALBLASSERDAM_NAAM = "Alblasserdam"
-
-def bepaal_shipment_flow_type(shipment):
-    """Bepaalt puur op basis van origin/destination of dit inbound/outbound (Alblasserdam) of direct flow is."""
-    origin = (shipment.get("origin_land","") or "").strip().lower()
-    dest = (shipment.get("destination_land","") or "").strip().lower()
-    alb = ALBLASSERDAM_NAAM.lower()
-    if dest == alb:
-        return "inbound"
-    if origin == alb:
-        return "outbound"
-    return "direct"
-
-def shipment_hoeveelheid(shipment):
-    """Werkelijk gewogen gewicht heeft voorrang boven gepland gewicht."""
-    werkelijk = shipment.get("werkelijk_hoeveelheid", "")
-    if werkelijk:
-        return parse_hoeveelheid_getal(werkelijk)
-    return parse_hoeveelheid_getal(shipment.get("gepland_hoeveelheid", ""))
 
 @app.route("/voorraad/shipments", methods=["POST"])
 def voorraad_shipments_actie():
