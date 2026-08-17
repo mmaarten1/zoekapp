@@ -936,7 +936,6 @@ def gov_uk_import_status():
 CH_CLEANUP_STATUS = {"bezig": False, "voortgang": "", "gecontroleerd": 0, "totaal": 0, "verwijderd": 0, "klaar": False, "fout": ""}
 
 def _ch_cleanup_worker(gebruikersnaam):
-    global ENF_BEDRIJVEN
     CH_CLEANUP_STATUS.update({"bezig": True, "klaar": False, "fout": "", "gecontroleerd": 0, "verwijderd": 0})
     try:
         if not COMPANIES_HOUSE_API_KEY:
@@ -956,7 +955,7 @@ def _ch_cleanup_worker(gebruikersnaam):
                 CH_CLEANUP_STATUS["voortgang"] = f"{i+1}/{len(uk_bedrijven)} gecontroleerd, {CH_CLEANUP_STATUS['verwijderd']} failliet/ontbonden gevonden..."
 
         if te_verwijderen_namen:
-            ENF_BEDRIJVEN = [b for b in ENF_BEDRIJVEN if (b["naam"], b.get("regio","")) not in te_verwijderen_namen or b.get("land","").strip().lower() != "united kingdom"]
+            ENF_BEDRIJVEN[:] = [b for b in ENF_BEDRIJVEN if (b["naam"], b.get("regio","")) not in te_verwijderen_namen or b.get("land","").strip().lower() != "united kingdom"]
             bewaar_bedrijven()
 
         CH_CLEANUP_STATUS["voortgang"] = "Klaar!"
@@ -1350,11 +1349,12 @@ def dedupliceer_lijst(lijst, plaatsveld, modus="streng"):
 
 def opschonen_bedrijven_en_fabrieken(modus="streng"):
     """Dedupliceert ENF_BEDRIJVEN en PAPIERFABRIEKEN in-place en slaat ze op. Geeft (aantal_bedrijven_verwijderd, aantal_fabrieken_verwijderd) terug."""
-    global ENF_BEDRIJVEN, PAPIERFABRIEKEN
-    ENF_BEDRIJVEN, dubbel_bedrijven = dedupliceer_lijst(ENF_BEDRIJVEN, "regio", modus)
+    nieuwe_bedrijven, dubbel_bedrijven = dedupliceer_lijst(ENF_BEDRIJVEN, "regio", modus)
+    ENF_BEDRIJVEN[:] = nieuwe_bedrijven
     bewaar_bedrijven()
 
-    PAPIERFABRIEKEN, dubbel_fabrieken = dedupliceer_lijst(PAPIERFABRIEKEN, "stad", modus)
+    nieuwe_fabrieken, dubbel_fabrieken = dedupliceer_lijst(PAPIERFABRIEKEN, "stad", modus)
+    PAPIERFABRIEKEN[:] = nieuwe_fabrieken
     bewaar_papierfabrieken()
 
     return dubbel_bedrijven, dubbel_fabrieken
@@ -1856,8 +1856,8 @@ def forwarder_upload():
                         tarieven[str(kolom).strip()] = str(waarde).strip()
                     records.append({"stad": stad, "tarieven": tarieven})
 
-                global TRANSPORT_DATA
-                TRANSPORT_DATA = laad_transport_data()
+                TRANSPORT_DATA.clear()
+                TRANSPORT_DATA.update(laad_transport_data())
                 TRANSPORT_DATA[forwarder] = records
                 with open(datapad("transport_prijzen.json"), "w", encoding="utf-8") as f:
                     json.dump(TRANSPORT_DATA, f, ensure_ascii=False, indent=2)
