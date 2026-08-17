@@ -1554,3 +1554,5 @@ ORDER_STATUSSEN = ["Open", "Onderhandeling", "Gewonnen", "Verloren"]
 ORDER_KLEUREN = {"Open": "#3b82f6", "Onderhandeling": "var(--brand-600)", "Gewonnen": "var(--green-600)", "Verloren": "var(--gray-400)"}
 
 SHIPMENT_STATUSSEN = ["Planned", "Confirmed", "Loading", "Loaded", "In Transit", "Arrived", "Weighed", "Received", "Delivered", "Cancelled"]
+
+LANDEN = sorted(set(b["land"] for b in ENF_BEDRIJVEN))
