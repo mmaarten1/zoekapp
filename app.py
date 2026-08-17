@@ -1068,6 +1068,11 @@ def bewaar_bedrijven():
     with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
         json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
 
+def bewaar_papierfabrieken():
+    """Centrale save-functie voor PAPIERFABRIEKEN. Schrijft de huidige staat van de globale lijst weg."""
+    with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
+        json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+
 _bedrijven_gewijzigd = False
 for _b in ENF_BEDRIJVEN:
     if "bedrijf_id" not in _b:
@@ -1943,8 +1948,7 @@ def opschonen_bedrijven_en_fabrieken(modus="streng"):
     bewaar_bedrijven()
 
     PAPIERFABRIEKEN, dubbel_fabrieken = dedupliceer_lijst(PAPIERFABRIEKEN, "stad", modus)
-    with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
-        json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+    bewaar_papierfabrieken()
 
     return dubbel_bedrijven, dubbel_fabrieken
 
@@ -2399,8 +2403,7 @@ def importeer_bedrijven():
                         aantal_bedrijven += 1
 
                 bewaar_bedrijven()
-                with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
-                    json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+                bewaar_papierfabrieken()
 
                 bericht = f"Gelukt! {aantal_bedrijven} bedrijven/klanten en {aantal_fabrieken} fabrieken toegevoegd."
                 if aantal_dubbel:
@@ -5542,8 +5545,7 @@ def set_bedrijf_veld():
     for f_item in PAPIERFABRIEKEN:
         if f_item["naam"] == bedrijf_naam:
             f_item[veld] = waarde
-            with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
-                json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+            bewaar_papierfabrieken()
             if veld == "contactpersoon" and waarde:
                 sync_contactpersoon_naar_contacten(bedrijf_naam, waarde, email=f_item.get("email_algemeen",""), telefoon=f_item.get("telefoon",""), gebruiker=session.get("gebruikersnaam",""))
             return jsonify({"veld": veld, "waarde": waarde})
@@ -5579,8 +5581,7 @@ def set_materiaal_volume():
             else:
                 volumes.pop(materiaal, None)
             f_item["materiaal_volumes"] = volumes
-            with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
-                json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+            bewaar_papierfabrieken()
             return jsonify({"materiaal": materiaal, "volume": volume})
     return jsonify({"error": "Bedrijf niet gevonden"}), 404
 
@@ -5598,8 +5599,7 @@ def set_fabriek_kwaliteiten():
     for f in PAPIERFABRIEKEN:
         if f["naam"] == naam:
             f["kwaliteiten"] = waarde
-            with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as fh:
-                json.dump(PAPIERFABRIEKEN, fh, ensure_ascii=False, indent=2)
+            bewaar_papierfabrieken()
             return jsonify({"kwaliteiten": waarde})
     return jsonify({"error": "Fabriek niet gevonden"}), 404
 
