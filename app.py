@@ -132,6 +132,32 @@ def bewaar_contactpersonen(data):
     with open(CONTACTPERSONEN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+def sync_contactpersoon_naar_contacten(bedrijf_naam, naam, rol="", email="", telefoon="", gebruiker=""):
+    """Zet een contactpersoon (uit het bedrijfsformulier of losse veld-bewerking) automatisch
+    ook in Contacten. Bestaat de combinatie naam+bedrijf al, dan vullen we alleen ontbrekende
+    velden aan (rol/e-mail/telefoon) i.p.v. een dubbel record aan te maken."""
+    naam = (naam or "").strip()
+    bedrijf_naam = (bedrijf_naam or "").strip()
+    if not naam or not bedrijf_naam:
+        return
+    personen = laad_contactpersonen()
+    for p in personen:
+        if p["naam"].strip().lower() == naam.lower() and p["bedrijf"].strip().lower() == bedrijf_naam.lower():
+            if rol and not p.get("rol"):
+                p["rol"] = rol
+            if email and not p.get("email"):
+                p["email"] = email
+            if telefoon and not p.get("telefoon"):
+                p["telefoon"] = telefoon
+            bewaar_contactpersonen(personen)
+            return
+    personen.append({
+        "id": str(uuid.uuid4()), "naam": naam, "bedrijf": bedrijf_naam, "rol": rol,
+        "email": email, "telefoon": telefoon, "laatst": "",
+        "gebruiker": gebruiker, "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+    })
+    bewaar_contactpersonen(personen)
+
 FACTUREN_FILE = datapad("facturen.json")
 
 def laad_facturen():
@@ -785,6 +811,12 @@ def verwerk_bedrijf_toevoegen(form, type_bedrijf, huidige_gebruiker=""):
         alle_status = laad_status()
         alle_status[naam_nieuw] = status_nieuw
         bewaar_status(alle_status)
+
+    # Ingevulde contactpersonen automatisch ook in Contacten laten verschijnen
+    if velden_tekst.get("contactpersoon"):
+        sync_contactpersoon_naar_contacten(naam_nieuw, velden_tekst["contactpersoon"], email=velden_tekst.get("email_algemeen",""), telefoon=velden_tekst.get("telefoon",""), gebruiker=huidige_gebruiker)
+    for c in overige_contacten:
+        sync_contactpersoon_naar_contacten(naam_nieuw, c.get("naam",""), rol=c.get("functie") or c.get("afdeling",""), email=c.get("email",""), telefoon=c.get("telefoon",""), gebruiker=huidige_gebruiker)
 
     label = "leveranciers" if type_bedrijf == "leverancier" else "klanten"
     return True, f"'{naam_nieuw}' toegevoegd aan je {label}.", naam_nieuw
@@ -5509,12 +5541,16 @@ def set_bedrijf_veld():
             b[veld] = waarde
             with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
                 json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            if veld == "contactpersoon" and waarde:
+                sync_contactpersoon_naar_contacten(bedrijf_naam, waarde, email=b.get("email_algemeen",""), telefoon=b.get("telefoon",""), gebruiker=session.get("gebruikersnaam",""))
             return jsonify({"veld": veld, "waarde": waarde})
     for f_item in PAPIERFABRIEKEN:
         if f_item["naam"] == bedrijf_naam:
             f_item[veld] = waarde
             with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
                 json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
+            if veld == "contactpersoon" and waarde:
+                sync_contactpersoon_naar_contacten(bedrijf_naam, waarde, email=f_item.get("email_algemeen",""), telefoon=f_item.get("telefoon",""), gebruiker=session.get("gebruikersnaam",""))
             return jsonify({"veld": veld, "waarde": waarde})
     return jsonify({"error": "Bedrijf niet gevonden"}), 404
 
