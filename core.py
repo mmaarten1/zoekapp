@@ -1485,3 +1485,10 @@ def is_huidige_gebruiker_admin():
         return False  # onbekende/niet-bestaande gebruiker: nooit admin
     # Backwards-compatible: bestaande gebruikers zonder is_admin-veld blijven admin
     return users[gebruikersnaam].get("is_admin", True)
+
+def vereist_admin_of_403():
+    """Geef een 403-response terug als de ingelogde gebruiker geen admin is, anders None."""
+    if not is_huidige_gebruiker_admin():
+        pagina = render_simple_page("Geen toegang", "instellingen", '<div class="page-title">Geen toegang</div><div class="lege-staat">Deze functie is alleen voor admins. Vraag een admin om je rechten aan te passen.</div>')
+        return render_template_string(pagina), 403
+    return None
