@@ -644,6 +644,50 @@ def uitgebreid_bedrijfsformulier_html():
     <div><span class="ubf-label">E-mail sales</span><input type="text" name="email_sales" value="{{ waarden.email_sales|default('',true) }}" class="ubf-input"></div>
 </div>
 
+<div class="ubf-sectiekop">Overige contacten</div>
+<table id="contactenTabel" style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:12.5px;">
+    <thead><tr style="text-align:left;color:var(--gray-400);font-size:10px;text-transform:uppercase;">
+        <th style="padding:4px 6px;">Afdeling</th><th style="padding:4px 6px;">Naam</th><th style="padding:4px 6px;">E-mail</th><th style="padding:4px 6px;">Telefoon</th><th style="padding:4px 6px;">Functie</th><th></th>
+    </tr></thead>
+    <tbody id="contactenTabelBody"></tbody>
+</table>
+<button type="button" onclick="voegContactRijToe()" style="padding:6px 12px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;margin-bottom:20px;">+ Contactpersoon toevoegen</button>
+
+<div class="ubf-sectiekop">Depot-adressen</div>
+<table id="depotsTabel" style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:12.5px;">
+    <thead><tr style="text-align:left;color:var(--gray-400);font-size:10px;text-transform:uppercase;">
+        <th style="padding:4px 6px;">Bedrijfsnaam</th><th style="padding:4px 6px;">Adres</th><th style="padding:4px 6px;">Telefoon</th><th style="padding:4px 6px;">E-mail</th><th style="padding:4px 6px;">Openingsuren</th><th style="padding:4px 6px;">Overig</th><th></th>
+    </tr></thead>
+    <tbody id="depotsTabelBody"></tbody>
+</table>
+<button type="button" onclick="voegDepotRijToe()" style="padding:6px 12px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;margin-bottom:20px;">+ Depot-adres toevoegen</button>
+
+<script>
+function voegContactRijToe() {
+    var tbody = document.getElementById("contactenTabelBody");
+    var rij = document.createElement("tr");
+    rij.innerHTML = '<td style="padding:3px;"><input type="text" name="contact_afdeling[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="contact_naam[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="contact_email[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="contact_telefoon[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="contact_functie[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><button type="button" onclick="this.closest(\\'tr\\').remove()" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button></td>';
+    tbody.appendChild(rij);
+}
+function voegDepotRijToe() {
+    var tbody = document.getElementById("depotsTabelBody");
+    var rij = document.createElement("tr");
+    rij.innerHTML = '<td style="padding:3px;"><input type="text" name="depot_naam[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="depot_adres[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="depot_telefoon[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="depot_email[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="depot_openingsuren[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><input type="text" name="depot_overig[]" class="ubf-input" style="font-size:12px;padding:5px 7px;"></td>' +
+        '<td style="padding:3px;"><button type="button" onclick="this.closest(\\'tr\\').remove()" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button></td>';
+    tbody.appendChild(rij);
+}
+</script>
+
 <div class="ubf-sectiekop">Overig</div>
 <div style="margin-bottom:14px;">
     <span class="ubf-label">Overige informatie</span>
@@ -676,17 +720,56 @@ def verwerk_bedrijf_toevoegen(form, type_bedrijf, huidige_gebruiker=""):
     status_nieuw = form.get("status", "").strip()
     geo = geocode_adres(stad_nieuw, land_nieuw) if (stad_nieuw or land_nieuw) else None
 
+    # Dynamische rijen: "Overige contacten" en "Depot-adressen" (herhaalbare velden, bv. contact_afdeling[])
+    overige_contacten = []
+    afdelingen = form.getlist("contact_afdeling[]")
+    namen_c = form.getlist("contact_naam[]")
+    emails_c = form.getlist("contact_email[]")
+    telefoons_c = form.getlist("contact_telefoon[]")
+    functies_c = form.getlist("contact_functie[]")
+    for i in range(len(afdelingen)):
+        if not any([afdelingen[i].strip(), namen_c[i].strip() if i < len(namen_c) else "", emails_c[i].strip() if i < len(emails_c) else ""]):
+            continue
+        overige_contacten.append({
+            "afdeling": afdelingen[i].strip(),
+            "naam": namen_c[i].strip() if i < len(namen_c) else "",
+            "email": emails_c[i].strip() if i < len(emails_c) else "",
+            "telefoon": telefoons_c[i].strip() if i < len(telefoons_c) else "",
+            "functie": functies_c[i].strip() if i < len(functies_c) else "",
+        })
+
+    depot_adressen = []
+    depot_namen = form.getlist("depot_naam[]")
+    depot_adres_lijst = form.getlist("depot_adres[]")
+    depot_telefoons = form.getlist("depot_telefoon[]")
+    depot_emails = form.getlist("depot_email[]")
+    depot_uren = form.getlist("depot_openingsuren[]")
+    depot_overig = form.getlist("depot_overig[]")
+    for i in range(len(depot_namen)):
+        if not any([depot_namen[i].strip(), depot_adres_lijst[i].strip() if i < len(depot_adres_lijst) else ""]):
+            continue
+        depot_adressen.append({
+            "naam": depot_namen[i].strip(),
+            "adres": depot_adres_lijst[i].strip() if i < len(depot_adres_lijst) else "",
+            "telefoon": depot_telefoons[i].strip() if i < len(depot_telefoons) else "",
+            "email": depot_emails[i].strip() if i < len(depot_emails) else "",
+            "openingsuren": depot_uren[i].strip() if i < len(depot_uren) else "",
+            "overig": depot_overig[i].strip() if i < len(depot_overig) else "",
+        })
+
     if type_bedrijf == "leverancier":
         nieuw_record = {
             "naam": naam_nieuw, "land": land_nieuw, "regio": stad_nieuw,
             "klanttype": "", "url": "", "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
             "bedrijf_id": TENANT_ID, "brontype": "Handmatig ingevoerd",
+            "overige_contacten": overige_contacten, "depot_adressen": depot_adressen,
             **velden_tekst,
         }
     else:
         nieuw_record = {
             "naam": naam_nieuw, "land": land_nieuw, "stad": stad_nieuw,
             "lat": geo["lat"] if geo else None, "lon": geo["lon"] if geo else None,
+            "overige_contacten": overige_contacten, "depot_adressen": depot_adressen,
             **velden_tekst,
         }
     doellijst.append(nieuw_record)
@@ -9855,6 +9938,47 @@ select.klik-bewerken-veld { cursor:pointer; }
                 <div><div class="veld-label">E-mail finance</div><input type="text" value="{{ bedrijf.email_finance or '' }}" data-veld="email_finance" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
                 <div><div class="veld-label">E-mail sales</div><input type="text" value="{{ bedrijf.email_sales or '' }}" data-veld="email_sales" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld"></div>
             </div>
+
+            {% if bedrijf.overige_contacten %}
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Overige contacten</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12.5px;">
+                <thead><tr style="text-align:left;color:var(--gray-400);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--gray-100);">
+                    <th style="padding:4px 6px;">Afdeling</th><th style="padding:4px 6px;">Naam</th><th style="padding:4px 6px;">E-mail</th><th style="padding:4px 6px;">Telefoon</th><th style="padding:4px 6px;">Functie</th>
+                </tr></thead>
+                <tbody>
+                {% for c in bedrijf.overige_contacten %}
+                <tr style="border-bottom:1px solid var(--gray-50);">
+                    <td style="padding:6px;color:var(--gray-700);">{{ c.afdeling|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-800);font-weight:600;">{{ c.naam|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-600);">{{ c.email|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-600);">{{ c.telefoon|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-600);">{{ c.functie|default('—',true) }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if bedrijf.depot_adressen %}
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Depot-adressen</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12.5px;">
+                <thead><tr style="text-align:left;color:var(--gray-400);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--gray-100);">
+                    <th style="padding:4px 6px;">Naam</th><th style="padding:4px 6px;">Adres</th><th style="padding:4px 6px;">Telefoon</th><th style="padding:4px 6px;">E-mail</th><th style="padding:4px 6px;">Openingsuren</th><th style="padding:4px 6px;">Overig</th>
+                </tr></thead>
+                <tbody>
+                {% for d in bedrijf.depot_adressen %}
+                <tr style="border-bottom:1px solid var(--gray-50);">
+                    <td style="padding:6px;color:var(--gray-800);font-weight:600;">{{ d.naam|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-600);">{{ d.adres|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-600);">{{ d.telefoon|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-600);">{{ d.email|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-600);">{{ d.openingsuren|default('—',true) }}</td>
+                    <td style="padding:6px;color:var(--gray-600);">{{ d.overig|default('—',true) }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
 
             <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Overig</div>
             <div class="veld-label">Overige informatie</div>
