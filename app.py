@@ -1063,14 +1063,18 @@ with open(datapad("bedrijven.json"), "r", encoding="utf-8") as f:
 with open(datapad("papierfabrieken.json"), "r", encoding="utf-8") as f:
     PAPIERFABRIEKEN = json.load(f)
 
+def bewaar_bedrijven():
+    """Centrale save-functie voor ENF_BEDRIJVEN. Schrijft de huidige staat van de globale lijst weg."""
+    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
+        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+
 _bedrijven_gewijzigd = False
 for _b in ENF_BEDRIJVEN:
     if "bedrijf_id" not in _b:
         _b["bedrijf_id"] = TENANT_ID
         _bedrijven_gewijzigd = True
 if _bedrijven_gewijzigd:
-    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+    bewaar_bedrijven()
 
 for fabriek in PAPIERFABRIEKEN:
     if "lat" not in fabriek or "lon" not in fabriek:
@@ -1299,8 +1303,7 @@ def scrapmonster_importeer_land(land_naam, max_paginas=50):
                 b["lat"] = geo["lat"]
                 b["lon"] = geo["lon"]
 
-    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+    bewaar_bedrijven()
 
     return aantal_nieuw, aantal_gezien
 
@@ -1437,8 +1440,7 @@ def _gov_uk_bulk_worker(gebruikersnaam, max_nieuw=3000):
             if i % 25 == 0:
                 GOV_UK_BULK_STATUS["voortgang"] = f"Geocoderen: {i+1}/{len(nieuwe_bedrijven_tmp)}..."
 
-        with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-            json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+        bewaar_bedrijven()
 
         dubbel, _ = opschonen_bedrijven_en_fabrieken("streng")
 
@@ -1543,8 +1545,7 @@ def _ch_cleanup_worker(gebruikersnaam):
 
         if te_verwijderen_namen:
             ENF_BEDRIJVEN = [b for b in ENF_BEDRIJVEN if (b["naam"], b.get("regio","")) not in te_verwijderen_namen or b.get("land","").strip().lower() != "united kingdom"]
-            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            bewaar_bedrijven()
 
         CH_CLEANUP_STATUS["voortgang"] = "Klaar!"
 
@@ -1939,8 +1940,7 @@ def opschonen_bedrijven_en_fabrieken(modus="streng"):
     """Dedupliceert ENF_BEDRIJVEN en PAPIERFABRIEKEN in-place en slaat ze op. Geeft (aantal_bedrijven_verwijderd, aantal_fabrieken_verwijderd) terug."""
     global ENF_BEDRIJVEN, PAPIERFABRIEKEN
     ENF_BEDRIJVEN, dubbel_bedrijven = dedupliceer_lijst(ENF_BEDRIJVEN, "regio", modus)
-    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+    bewaar_bedrijven()
 
     PAPIERFABRIEKEN, dubbel_fabrieken = dedupliceer_lijst(PAPIERFABRIEKEN, "stad", modus)
     with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
@@ -2023,8 +2023,7 @@ def herlabel_brontype():
                         nieuw = "Recyclingcentrum" if delen else ""
                         b["brontype"] = nieuw
                         aantal_gecorrigeerd += 1
-            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            bewaar_bedrijven()
             bericht = f"Klaar! {aantal_gecorrigeerd} verkeerd gegokte 'Papierfabriek'-labels zijn gecorrigeerd."
         else:
             aantal_aangevuld = 0
@@ -2034,8 +2033,7 @@ def herlabel_brontype():
                     if nieuw_type:
                         b["brontype"] = nieuw_type
                         aantal_aangevuld += 1
-            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            bewaar_bedrijven()
             bericht = f"Klaar! {aantal_aangevuld} bedrijven hebben nu een Bedrijfstype gekregen."
 
     telling = {}
@@ -2159,8 +2157,7 @@ def osm_importeer_land(land_naam):
         })
         aantal_nieuw += 1
 
-    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+    bewaar_bedrijven()
 
     return aantal_nieuw, len(elementen)
 
@@ -2401,8 +2398,7 @@ def importeer_bedrijven():
                         })
                         aantal_bedrijven += 1
 
-                with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-                    json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+                bewaar_bedrijven()
                 with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
                     json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
 
@@ -5539,8 +5535,7 @@ def set_bedrijf_veld():
     for b in ENF_BEDRIJVEN:
         if b["naam"] == bedrijf_naam:
             b[veld] = waarde
-            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            bewaar_bedrijven()
             if veld == "contactpersoon" and waarde:
                 sync_contactpersoon_naar_contacten(bedrijf_naam, waarde, email=b.get("email_algemeen",""), telefoon=b.get("telefoon",""), gebruiker=session.get("gebruikersnaam",""))
             return jsonify({"veld": veld, "waarde": waarde})
@@ -5572,8 +5567,7 @@ def set_materiaal_volume():
             else:
                 volumes.pop(materiaal, None)
             b["materiaal_volumes"] = volumes
-            with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-                json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
+            bewaar_bedrijven()
             return jsonify({"materiaal": materiaal, "volume": volume})
     for f_item in PAPIERFABRIEKEN:
         if f_item["naam"] == bedrijf_naam:
