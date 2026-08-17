@@ -33,6 +33,8 @@ from core import (
     TENANT_ID, COMPANIES_HOUSE_API_KEY, CH_FAILLIET_STATUSSEN,
     companies_house_status, is_ch_financieel_gezond, laad_transport_data, laad_forwarder_wachtwoorden,
     PAGINA_HOOFD, sidebar_html, render_simple_page, is_huidige_gebruiker_admin, vereist_admin_of_403,
+    ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
+    TRANSPORT_DATA, vind_transport_tarieven_dichtbij,
 )
 
 from bs4 import BeautifulSoup
@@ -477,55 +479,6 @@ def zet_user_cookie(response):
     if getattr(request, "nieuw_user_id", None):
         response.set_cookie("user_id", request.nieuw_user_id, max_age=60*60*24*365*5)
     return response
-
-with open(datapad("bedrijven.json"), "r", encoding="utf-8") as f:
-    ENF_BEDRIJVEN = json.load(f)
-with open(datapad("papierfabrieken.json"), "r", encoding="utf-8") as f:
-    PAPIERFABRIEKEN = json.load(f)
-
-def bewaar_bedrijven():
-    """Centrale save-functie voor ENF_BEDRIJVEN. Schrijft de huidige staat van de globale lijst weg."""
-    with open(datapad("bedrijven.json"), "w", encoding="utf-8") as f:
-        json.dump(ENF_BEDRIJVEN, f, ensure_ascii=False, indent=2)
-
-def bewaar_papierfabrieken():
-    """Centrale save-functie voor PAPIERFABRIEKEN. Schrijft de huidige staat van de globale lijst weg."""
-    with open(datapad("papierfabrieken.json"), "w", encoding="utf-8") as f:
-        json.dump(PAPIERFABRIEKEN, f, ensure_ascii=False, indent=2)
-
-_bedrijven_gewijzigd = False
-for _b in ENF_BEDRIJVEN:
-    if "bedrijf_id" not in _b:
-        _b["bedrijf_id"] = TENANT_ID
-        _bedrijven_gewijzigd = True
-if _bedrijven_gewijzigd:
-    bewaar_bedrijven()
-
-for fabriek in PAPIERFABRIEKEN:
-    if "lat" not in fabriek or "lon" not in fabriek:
-        geo = geocode_adres(fabriek.get("stad", ""), fabriek.get("land", ""))
-        if geo:
-            fabriek["lat"] = geo["lat"]
-            fabriek["lon"] = geo["lon"]
-
-TRANSPORT_DATA = laad_transport_data()
-
-def vind_transport_tarieven_dichtbij(lat, lon, straal_km=40):
-    resultaat = {}
-    if not lat or not lon:
-        return resultaat
-    for forwarder, steden in TRANSPORT_DATA.items():
-        dichtstbijzijnde = None
-        for record in steden:
-            geo = geocode_adres(record["stad"], "")
-            if not geo:
-                continue
-            afstand = bereken_afstand_km(lat, lon, geo["lat"], geo["lon"])
-            if afstand <= straal_km and (dichtstbijzijnde is None or afstand < dichtstbijzijnde["afstand"]):
-                dichtstbijzijnde = {"stad": record["stad"], "tarieven": record["tarieven"], "afstand": round(afstand, 1)}
-        if dichtstbijzijnde:
-            resultaat[forwarder] = dichtstbijzijnde
-    return resultaat
 
 UPLOAD_HTML = '''
 <!DOCTYPE html>
