@@ -101,6 +101,7 @@ PAGINA_AFDELINGEN = {
     "weegbrug": ["logistiek", "weegbrug"],
     "logistieke_orders": ["logistiek", "weegbrug"],
     "afhandeling": ["logistiek", "weegbrug"],
+    "logistieke_orders_finance": ["finance", "logistiek", "weegbrug"],
     "facturen": ["finance"],
 }
 

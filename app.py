@@ -38,6 +38,7 @@ from core import (
     bewaar_users, AFDELINGEN, AFDELING_LABELS, ROLLEN, ROL_LABELS,
     mag_pagina_zien, vereist_afdeling_of_403, PAGINA_AFDELINGEN,
     laad_containers, bewaar_containers, CONTAINER_TYPES, CONTAINER_STATUSSEN,
+    laad_logistieke_orders, bewaar_logistieke_orders, laad_weegbrug, laad_documenten,
 )
 
 from bs4 import BeautifulSoup
@@ -2583,6 +2584,12 @@ def facturen_pagina():
 .fact-row:last-child { border-bottom:none; }
 </style>
 <div class="page-title">Facturen</div>
+{% if aantal_klaar_voor_finance %}
+<a href="/facturen/logistieke-orders" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:16px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">
+    Logistieke orders klaar voor verwerking
+    <span style="background:var(--brand-600);color:#fff;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:9px;">{{ aantal_klaar_voor_finance }}</span>
+</a>
+{% endif %}
 
 <div class="kpi-mini" style="display:flex;gap:16px;margin-bottom:20px;">
     <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px 18px;flex:1;">
@@ -2668,7 +2675,107 @@ def facturen_pagina():
         vooringevuld_bedrijf=vooringevuld_bedrijf, filter_status_fact=filter_status_fact,
         alle_facturen=alle_facturen, getoonde_facturen=getoonde_facturen,
         openstaande_facturen=openstaande_facturen, te_laat_facturen=te_laat_facturen,
-        totaal_openstaand=totaal_openstaand, alle_bedrijfsnamen_fact=alle_bedrijfsnamen_fact)
+        totaal_openstaand=totaal_openstaand, alle_bedrijfsnamen_fact=alle_bedrijfsnamen_fact,
+        aantal_klaar_voor_finance=sum(1 for o in laad_logistieke_orders() if o.get("status") == "Klaar voor Finance"))
+
+@app.route("/facturen/logistieke-orders", methods=["GET", "POST"])
+def facturen_logistieke_orders():
+    _guard = vereist_afdeling_of_403("logistieke_orders_finance")
+    if _guard: return _guard
+
+    if request.method == "POST":
+        order_id = request.form.get("order_id", "")
+        nieuwe_status = request.form.get("nieuwe_status", "")
+        orders = laad_logistieke_orders()
+        order = next((o for o in orders if o["id"] == order_id), None)
+        if order and nieuwe_status in ("Gefactureerd", "Afgerond"):
+            order["status"] = nieuwe_status
+            bewaar_logistieke_orders(orders)
+        return redirect(url_for("facturen_logistieke_orders"))
+
+    alle_orders = laad_logistieke_orders()
+    weegrecords = {r["id"]: r for r in laad_weegbrug()}
+    documenten = laad_documenten()
+
+    klaar_voor_finance = [o for o in alle_orders if o.get("status") == "Klaar voor Finance"]
+    in_behandeling = [o for o in alle_orders if o.get("status") == "Gefactureerd"]
+    financieel_afgerond = [o for o in alle_orders if o.get("status") == "Afgerond"]
+
+    def _weegbon_link(order):
+        weegrecord = weegrecords.get(order.get("gekoppeld_weegbrug_id", ""))
+        return weegrecord["id"] if weegrecord and weegrecord.get("status") == "Compleet" else None
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/facturen" style="color:var(--gray-400);text-decoration:none;">Facturen</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Logistieke orders</span>
+</div>
+<div class="page-title">Logistieke orders — Finance-verwerking</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Orders die logistiek heeft vrijgegeven, met alle gegevens die Finance nodig heeft voor de (inkoop)factuur.</p>
+
+<style>
+.flo-sectie { border:1px solid var(--gray-200); border-radius:10px; margin-bottom:18px; overflow:hidden; }
+.flo-kop { padding:12px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:12.5px; font-weight:700; color:var(--gray-700); display:flex; justify-content:space-between; }
+.flo-rij { padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; display:flex; align-items:center; gap:16px; }
+</style>
+
+<div class="flo-sectie">
+    <div class="flo-kop"><span>Klaar voor Finance</span><span>{{ klaar_voor_finance|length }}</span></div>
+    {% for o in klaar_voor_finance %}
+    <div class="flo-rij">
+        <span style="width:120px;font-family:var(--font-mono);color:var(--gray-500);"><a href="/logistiek/orders/{{ o.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a></span>
+        <span style="flex:1;color:var(--gray-700);">{{ o.leverancier or '—' }}</span>
+        <span style="width:100px;color:var(--gray-600);">{{ o.materiaal or '—' }}</span>
+        <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--gray-600);">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} ton{% endif %}</span>
+        <span style="width:110px;">
+            {% set wb_id = weegbon_links[o.id] %}
+            {% if wb_id %}<a href="/weegbrug/weegbon/{{ wb_id }}" target="_blank" style="color:var(--brand-600);text-decoration:none;font-size:11.5px;font-weight:600;">Weegbon →</a>{% else %}<span style="color:var(--gray-300);font-size:11.5px;">geen weegbon</span>{% endif %}
+        </span>
+        <form method="POST" style="margin:0;">
+            <input type="hidden" name="order_id" value="{{ o.id }}">
+            <input type="hidden" name="nieuwe_status" value="Gefactureerd">
+            <button type="submit" style="font-size:11px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;">In behandeling nemen</button>
+        </form>
+    </div>
+    {% else %}
+    <div class="flo-rij" style="color:var(--gray-300);">Niets klaar voor verwerking.</div>
+    {% endfor %}
+</div>
+
+<div class="flo-sectie">
+    <div class="flo-kop"><span>In behandeling bij Finance</span><span>{{ in_behandeling|length }}</span></div>
+    {% for o in in_behandeling %}
+    <div class="flo-rij">
+        <span style="width:120px;font-family:var(--font-mono);color:var(--gray-500);"><a href="/logistiek/orders/{{ o.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a></span>
+        <span style="flex:1;color:var(--gray-700);">{{ o.leverancier or '—' }}</span>
+        <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--gray-600);">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} ton{% endif %}</span>
+        <form method="POST" style="margin:0;margin-left:auto;">
+            <input type="hidden" name="order_id" value="{{ o.id }}">
+            <input type="hidden" name="nieuwe_status" value="Afgerond">
+            <button type="submit" style="font-size:11px;padding:4px 10px;background:var(--gray-700);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;">Markeer financieel afgerond</button>
+        </form>
+    </div>
+    {% else %}
+    <div class="flo-rij" style="color:var(--gray-300);">Niets in behandeling.</div>
+    {% endfor %}
+</div>
+
+<div class="flo-sectie">
+    <div class="flo-kop" style="color:var(--gray-400);"><span>Financieel afgerond</span><span>{{ financieel_afgerond|length }}</span></div>
+    {% for o in financieel_afgerond[:10] %}
+    <div class="flo-rij" style="color:var(--gray-500);">
+        <span style="width:120px;font-family:var(--font-mono);"><a href="/logistiek/orders/{{ o.id }}" style="color:var(--gray-500);text-decoration:none;">{{ o.ordernummer }}</a></span>
+        <span style="flex:1;">{{ o.leverancier or '—' }}</span>
+        <span style="color:var(--gray-400);">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} ton{% endif %}</span>
+    </div>
+    {% else %}
+    <div class="flo-rij" style="color:var(--gray-300);">Nog niets afgerond.</div>
+    {% endfor %}
+</div>
+    """
+    pagina = render_simple_page("Logistieke orders", "facturen", inhoud)
+    weegbon_links = {o["id"]: _weegbon_link(o) for o in alle_orders}
+    return render_template_string(pagina, klaar_voor_finance=klaar_voor_finance, in_behandeling=in_behandeling,
+                                    financieel_afgerond=financieel_afgerond, weegbon_links=weegbon_links)
 
 
 
