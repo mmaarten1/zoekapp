@@ -42,7 +42,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
         "orders.json", "accountmanagers.json", "fotomappen.json", "materiaal_taxonomie.json", "voorraad_transacties.json",
         "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json", "cert_vervaldatums.json",
-        "contactpersonen.json", "containers.json",
+        "contactpersonen.json", "containers.json", "weegbrug.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -70,8 +70,8 @@ def bewaar_users(users):
 # Nog GEEN afscherming van schermen o.b.v. deze velden — dat komt in een
 # latere fase. Dit legt alleen de basis vast.
 # ============================================================
-AFDELINGEN = ["accountmanager", "backoffice", "logistiek", "finance"]
-AFDELING_LABELS = {"accountmanager": "Accountmanager/Trader", "backoffice": "Backoffice", "logistiek": "Logistiek", "finance": "Finance"}
+AFDELINGEN = ["accountmanager", "backoffice", "logistiek", "weegbrug", "finance"]
+AFDELING_LABELS = {"accountmanager": "Accountmanager/Trader", "backoffice": "Backoffice", "logistiek": "Logistiek", "weegbrug": "Weegbrug", "finance": "Finance"}
 ROLLEN = ["directeur", "manager", "medewerker"]
 ROL_LABELS = {"directeur": "Directeur", "manager": "Manager", "medewerker": "Medewerker"}
 
@@ -98,6 +98,7 @@ PAGINA_AFDELINGEN = {
     "certificeringen": ["accountmanager", "backoffice"],
     "voorraad": ["logistiek", "backoffice"],
     "logistiek": ["logistiek"],
+    "weegbrug": ["logistiek", "weegbrug"],
     "facturen": ["finance"],
 }
 
@@ -194,6 +195,36 @@ def laad_containers():
 def bewaar_containers(data):
     with open(CONTAINERS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+WEEGBRUG_FILE = datapad("weegbrug.json")
+# Status-badges: Ingewogen (🟠 wacht op uitwegen), Compleet (🟢 in+uitgewogen),
+# Probleem (🔴 gewicht-afwijking), Geannuleerd (⚪). Het "wacht op koppeling met
+# order" (🔵) is geen eigen status maar wordt afgeleid: leeg ordernummer.
+WEEGBRUG_STATUS_BADGES = {
+    "Ingewogen": {"kleur": "#f59e0b", "bol": "🟠", "label": "Alleen ingewogen"},
+    "Compleet": {"kleur": "#16a34a", "bol": "🟢", "label": "Ingewogen + uitgewogen"},
+    "Probleem": {"kleur": "#dc2626", "bol": "🔴", "label": "Probleem/afwijking"},
+    "Geannuleerd": {"kleur": "#94a3b8", "bol": "⚪", "label": "Geannuleerd"},
+}
+
+def laad_weegbrug():
+    try:
+        with open(WEEGBRUG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_weegbrug(data):
+    with open(WEEGBRUG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def genereer_weegnummer(bestaande_records):
+    """WB-YYYYMMDD-NNN, volgnummer per dag zodat weegnummers menselijk leesbaar en uniek blijven."""
+    vandaag_str = datetime.date.today().strftime("%Y%m%d")
+    prefix = f"WB-{vandaag_str}-"
+    vandaag_nummers = [int(r["weegnummer"].replace(prefix, "")) for r in bestaande_records if r.get("weegnummer","").startswith(prefix) and r["weegnummer"].replace(prefix,"").isdigit()]
+    volgnummer = (max(vandaag_nummers) + 1) if vandaag_nummers else 1
+    return f"{prefix}{volgnummer:03d}"
 
 CONTRACTEN_FILE = datapad("contracten.json")
 
@@ -1488,6 +1519,13 @@ PAGINA_HOOFD = """<!DOCTYPE html>
 """
 
 def sidebar_html(actief):
+    """
+    LET OP bij een nieuw zijbalk-item: de zoekpagina (zoeken.py, route '/')
+    heeft een EIGEN, hardcoded kopie van de zijbalk in zijn HTML-template
+    (niet via deze functie) — dit is al twee keer over het hoofd gezien.
+    Elk nieuw item hier moet OOK handmatig toegevoegd worden in zoeken.py,
+    naast de link voor 'logistiek' (zoek op 'class="sidebar-link"').
+    """
     try:
         aantal_open_orders = sum(1 for o in laad_orders() if o.get("status") in ("Open", "Onderhandeling"))
     except Exception:
@@ -1505,6 +1543,7 @@ def sidebar_html(actief):
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
         ("logistiek", "/logistiek", "LG", "Logistiek"),
+        ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
         ("facturen", "/facturen", "FA", "Facturen"),
         ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
         ("voorraad", "/voorraad", "VR", "Voorraad"),
