@@ -2254,9 +2254,10 @@ def logistiek_pagina():
         <span style="width:110px;text-align:right;">Ton</span>
         <span style="width:90px;">Type</span>
         <span style="width:120px;">Status</span>
+        <span style="width:80px;"></span>
     </div>
     {% for s in getoonde_shipments_log %}
-    <div class="log-tabel-rij">
+    <div class="log-tabel-rij" style="flex-wrap:wrap;">
         <span style="width:100px;color:var(--gray-500);">{{ s.datum }}</span>
         <span style="flex:1.6;color:var(--gray-800);font-weight:600;">{{ s.origin_land }}{% if s.origin_leverancier %} ({{ s.origin_leverancier }}){% endif %} → {{ s.destination_land }}{% if s.destination_naam %} ({{ s.destination_naam }}){% endif %}</span>
         <span style="flex:1;color:var(--gray-600);">{{ s.materiaal }}</span>
@@ -2265,9 +2266,51 @@ def logistiek_pagina():
             <span class="log-badge" style="background:{{ '#eff6ff' if s.flow_type=='inbound' else ('#fef2f2' if s.flow_type=='outbound' else '#f5f3ff') }};color:{{ '#1d4ed8' if s.flow_type=='inbound' else ('#dc2626' if s.flow_type=='outbound' else '#7c3aed') }};">{{ s.flow_type|upper }}</span>
         </span>
         <span style="width:120px;color:var(--gray-600);">{{ s.status }}</span>
+        <span style="width:80px;">
+            <button type="button" onclick="toggleShipmentDocs('{{ s.id }}')" style="background:none;border:1px solid var(--gray-200);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--gray-500);cursor:pointer;">📎 Docs</button>
+        </span>
+        <div id="docs-{{ s.id }}" style="display:none;width:100%;margin-top:10px;padding:12px;background:var(--gray-50);border-radius:6px;">
+            <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">CMR / Annex / exportdocumenten</div>
+            <div id="docslijst-{{ s.id }}" style="margin-bottom:8px;font-size:12.5px;color:var(--gray-400);">Laden...</div>
+            <input type="file" id="docupload-{{ s.id }}" accept=".pdf,.doc,.docx" style="font-size:12px;">
+            <button type="button" onclick="uploadShipmentDoc('{{ s.id }}')" style="font-size:11.5px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;margin-left:6px;">Uploaden</button>
+        </div>
     </div>
     {% endfor %}
 </div>
+<script>
+function toggleShipmentDocs(shipmentId) {
+    var paneel = document.getElementById("docs-" + shipmentId);
+    var wordtGeopend = paneel.style.display === "none";
+    paneel.style.display = wordtGeopend ? "block" : "none";
+    if (wordtGeopend) laadShipmentDocs(shipmentId);
+}
+async function laadShipmentDocs(shipmentId) {
+    var lijstDiv = document.getElementById("docslijst-" + shipmentId);
+    try {
+        const res = await fetch("/api/documenten?bedrijf=" + encodeURIComponent(shipmentId));
+        const docs = await res.json();
+        if (!docs.length) { lijstDiv.innerHTML = "Nog geen documenten geüpload."; return; }
+        lijstDiv.innerHTML = docs.map(function(d) {
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">' +
+                '<a href="/documenten_uploads/' + encodeURIComponent(d.bestandsnaam) + '" target="_blank" style="color:var(--brand-600);text-decoration:none;">' + d.originele_naam + '</a>' +
+                '<span style="font-size:11px;color:var(--gray-300);">' + d.timestamp + ' · ' + d.geupload_door + '</span></div>';
+        }).join("");
+    } catch (e) { lijstDiv.innerHTML = "Kon documenten niet laden."; }
+}
+async function uploadShipmentDoc(shipmentId) {
+    var input = document.getElementById("docupload-" + shipmentId);
+    if (!input.files.length) { alert("Kies eerst een bestand."); return; }
+    var form = new FormData();
+    form.append("bedrijf", shipmentId);
+    form.append("document", input.files[0]);
+    const res = await fetch("/api/documenten", {method: "POST", body: form});
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    input.value = "";
+    laadShipmentDocs(shipmentId);
+}
+</script>
 {% else %}
 <div class="lege-staat">{% if vooringevuld_bedrijf %}Geen shipments gevonden voor {{ vooringevuld_bedrijf }}.{% else %}Geen shipments gevonden voor deze filters.{% endif %}</div>
 {% endif %}
