@@ -37,6 +37,7 @@ from core import (
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
     bewaar_users, AFDELINGEN, AFDELING_LABELS, ROLLEN, ROL_LABELS,
     mag_pagina_zien, vereist_afdeling_of_403, PAGINA_AFDELINGEN,
+    laad_containers, bewaar_containers, CONTAINER_TYPES, CONTAINER_STATUSSEN,
 )
 
 from bs4 import BeautifulSoup
@@ -2219,10 +2220,11 @@ def logistiek_pagina():
 .log-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; }
 </style>
 <div class="page-title">Logistiek</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:12px;font-size:0.85rem;">
     {% if vooringevuld_bedrijf %}Shipments voor <b style="color:var(--gray-700);">{{ vooringevuld_bedrijf }}</b> — <a href="/logistiek" style="color:var(--brand-600);">alles tonen</a>
     {% else %}Alle actieve shipments (inbound, outbound en direct flow){% endif %}
 </p>
+<a href="/logistiek/containers" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:6px 12px;border-radius:6px;">📦 Containerbeheer →</a>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
     {% if vooringevuld_bedrijf %}<input type="hidden" name="bedrijf" value="{{ vooringevuld_bedrijf }}">{% endif %}
@@ -2276,6 +2278,149 @@ def logistiek_pagina():
         getoonde_shipments_log=getoonde_shipments_log, actieve_shipments_log=actieve_shipments_log,
         filter_flow_type=filter_flow_type, filter_status_log=filter_status_log, filter_materiaal_log=filter_materiaal_log,
         shipment_statussen=SHIPMENT_STATUSSEN, shipment_materialen_log=shipment_materialen_log)
+
+@app.route("/logistiek/containers", methods=["GET", "POST"])
+def containerbeheer_pagina():
+    _guard = vereist_afdeling_of_403("logistiek")
+    if _guard: return _guard
+
+    if request.method == "POST":
+        actie = request.form.get("actie", "")
+        containers = laad_containers()
+
+        if actie == "toevoegen":
+            nieuw = {
+                "id": str(uuid.uuid4()),
+                "container_nummer": request.form.get("container_nummer", "").strip(),
+                "type": request.form.get("type", "").strip(),
+                "status": request.form.get("status", "Leeg"),
+                "gekoppelde_shipment_id": request.form.get("gekoppelde_shipment_id", "").strip(),
+                "locatie": request.form.get("locatie", "").strip(),
+                "gewicht": request.form.get("gewicht", "").strip(),
+                "notitie": request.form.get("notitie", "").strip(),
+                "gebruiker": session.get("gebruikersnaam", ""),
+                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            }
+            if nieuw["container_nummer"]:
+                containers.append(nieuw)
+                bewaar_containers(containers)
+
+        elif actie == "status_wijzigen":
+            container_id = request.form.get("container_id", "")
+            nieuwe_status = request.form.get("nieuwe_status", "")
+            for c in containers:
+                if c["id"] == container_id:
+                    c["status"] = nieuwe_status
+            bewaar_containers(containers)
+
+        elif actie == "verwijderen":
+            container_id = request.form.get("container_id", "")
+            doel = next((c for c in containers if c["id"] == container_id), None)
+            if doel and (doel.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()):
+                containers = [c for c in containers if c["id"] != container_id]
+                bewaar_containers(containers)
+
+        return redirect(url_for("containerbeheer_pagina"))
+
+    containers = laad_containers()
+    filter_status_cont = request.args.get("filter_status", "")
+    getoonde_containers = containers
+    if filter_status_cont:
+        getoonde_containers = [c for c in getoonde_containers if c.get("status") == filter_status_cont]
+    getoonde_containers = sorted(getoonde_containers, key=lambda c: c.get("aangemaakt",""), reverse=True)
+
+    # Shipment-referenties opzoeken voor koppeling-weergave (echte data, geen verzonnen koppeling)
+    _shipments_lookup = {s["id"]: s for s in laad_shipments()}
+    for c in getoonde_containers:
+        gekoppeld = _shipments_lookup.get(c.get("gekoppelde_shipment_id", ""))
+        c["shipment_referentie"] = gekoppeld.get("referentie", "") if gekoppeld else ""
+
+    open_shipments_voor_koppeling = [s for s in laad_shipments() if s.get("status") not in ("Delivered", "Cancelled")]
+
+    inhoud = """
+<style>
+.log-tabel-rij { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:13px; }
+.log-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
+</style>
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/logistiek" style="color:var(--gray-400);text-decoration:none;">Logistiek</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Containerbeheer</span>
+</div>
+<div class="page-title">Containerbeheer</div>
+
+<div class="info-kaart" style="max-width:460px;margin-bottom:20px;">
+    <div class="dg-kaart-titel">Container toevoegen</div>
+    <form method="POST">
+        <input type="hidden" name="actie" value="toevoegen">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="container_nummer" placeholder="Containernummer (bv. MSKU1234567)" required style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <select name="type" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+                {% for t in container_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="locatie" placeholder="Locatie (bv. Alblasserdam)" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="gewicht" placeholder="Gewicht (ton, optioneel)" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+        </div>
+        <select name="gekoppelde_shipment_id" style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;margin-bottom:8px;box-sizing:border-box;">
+            <option value="">Geen shipment gekoppeld</option>
+            {% for s in open_shipments %}<option value="{{ s.id }}">{{ s.referentie or s.id[:8] }} — {{ s.materiaal }} ({{ s.origin_land }} → {{ s.destination_land }})</option>{% endfor %}
+        </select>
+        <input type="text" name="notitie" placeholder="Notitie (optioneel)" style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;margin-bottom:8px;box-sizing:border-box;">
+        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Toevoegen</button>
+    </form>
+</div>
+
+<form method="GET" style="margin-bottom:16px;">
+    <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle statussen</option>
+        {% for st in container_statussen %}<option value="{{ st }}" {% if filter_status_cont == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+    </select>
+</form>
+
+{% if getoonde_containers %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="log-tabel-kop">
+        <span style="flex:1.2;">Containernummer</span>
+        <span style="width:100px;">Type</span>
+        <span style="flex:1;">Locatie</span>
+        <span style="flex:1;">Gekoppelde shipment</span>
+        <span style="width:130px;">Status</span>
+        <span style="width:40px;"></span>
+    </div>
+    {% for c in getoonde_containers %}
+    <div class="log-tabel-rij">
+        <span style="flex:1.2;font-weight:600;color:var(--gray-800);font-family:var(--font-mono);">{{ c.container_nummer }}</span>
+        <span style="width:100px;color:var(--gray-500);">{{ c.type or '—' }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ c.locatie or '—' }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ c.shipment_referentie or '—' }}</span>
+        <span style="width:130px;">
+            <form method="POST" style="margin:0;">
+                <input type="hidden" name="actie" value="status_wijzigen">
+                <input type="hidden" name="container_id" value="{{ c.id }}">
+                <select name="nieuwe_status" onchange="this.form.submit()" style="font-size:11.5px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
+                    {% for st in container_statussen %}<option value="{{ st }}" {% if c.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                </select>
+            </form>
+        </span>
+        <span style="width:40px;">
+            <form method="POST" onsubmit="return confirm('Container verwijderen?');" style="margin:0;">
+                <input type="hidden" name="actie" value="verwijderen">
+                <input type="hidden" name="container_id" value="{{ c.id }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button>
+            </form>
+        </span>
+    </div>
+    {% endfor %}
+</div>
+<div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoonde_containers|length }} containers</div>
+{% else %}
+<div class="lege-staat">Nog geen containers geregistreerd.</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Containerbeheer", "logistiek", inhoud)
+    return render_template_string(pagina, getoonde_containers=getoonde_containers, filter_status_cont=filter_status_cont,
+                                    container_types=CONTAINER_TYPES, container_statussen=CONTAINER_STATUSSEN,
+                                    open_shipments=open_shipments_voor_koppeling)
 
 @app.route("/facturen", methods=["GET", "POST"])
 def facturen_pagina():

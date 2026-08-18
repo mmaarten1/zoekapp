@@ -42,7 +42,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
         "orders.json", "accountmanagers.json", "fotomappen.json", "materiaal_taxonomie.json", "voorraad_transacties.json",
         "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json", "cert_vervaldatums.json",
-        "contactpersonen.json",
+        "contactpersonen.json", "containers.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -178,6 +178,21 @@ def laad_shipments():
 
 def bewaar_shipments(data):
     with open(SHIPMENTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+CONTAINERS_FILE = datapad("containers.json")
+CONTAINER_TYPES = ["20ft", "40ft", "40ft HC", "Open top", "Flat rack", "Reefer"]
+CONTAINER_STATUSSEN = ["Leeg", "Beladen", "Onderweg", "Op locatie", "Gelost", "Retour"]
+
+def laad_containers():
+    try:
+        with open(CONTAINERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_containers(data):
+    with open(CONTAINERS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 CONTRACTEN_FILE = datapad("contracten.json")
