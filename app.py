@@ -2223,6 +2223,9 @@ def logistiek_pagina():
         [s for s in actieve_shipments_log if s.get("status") in ("Weighed", "Received") and s.get("weegbon_nummer")],
         key=lambda s: s.get("datum",""), reverse=True
     )[:5]
+    _shipments_met_kosten = [s for s in actieve_shipments_log if s.get("transportkosten")]
+    kpi_totale_kosten = sum(parse_hoeveelheid_getal(s["transportkosten"]) for s in _shipments_met_kosten)
+    kpi_kosten_aantal = len(_shipments_met_kosten)
 
     inhoud = """
 <div class="dg-grid" style="margin-bottom:20px;">
@@ -2230,6 +2233,7 @@ def logistiek_pagina():
     <div class="dg-kaart"><div class="dg-icoon">📍</div><div class="dg-getal">{{ kpi_actieve_ritten|length }}</div><div class="dg-label">Actief onderweg/laden</div></div>
     <div class="dg-kaart"><div class="dg-icoon">📦</div><div class="dg-getal">{{ kpi_te_laden_containers|length }}</div><div class="dg-label">Containers te laden</div></div>
     <div class="dg-kaart"><div class="dg-icoon">⚖️</div><div class="dg-getal">{{ kpi_recente_wegingen|length }}</div><div class="dg-label">Recente wegingen</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">💶</div><div class="dg-getal" style="font-size:1.3rem;">{{ "€{:,.0f}".format(kpi_totale_kosten) }}</div><div class="dg-label">Transportkosten ({{ kpi_kosten_aantal }} ritten)</div></div>
 </div>
 <style>
 .log-tabel-rij { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:13px; }
@@ -2277,6 +2281,7 @@ def logistiek_pagina():
         <span style="width:110px;text-align:right;">Ton</span>
         <span style="width:90px;">Type</span>
         <span style="width:120px;">Status</span>
+        <span style="width:100px;text-align:right;">Kosten</span>
         <span style="width:80px;"></span>
     </div>
     {% for s in getoonde_shipments_log %}
@@ -2289,6 +2294,15 @@ def logistiek_pagina():
             <span class="log-badge" style="background:{{ '#eff6ff' if s.flow_type=='inbound' else ('#fef2f2' if s.flow_type=='outbound' else '#f5f3ff') }};color:{{ '#1d4ed8' if s.flow_type=='inbound' else ('#dc2626' if s.flow_type=='outbound' else '#7c3aed') }};">{{ s.flow_type|upper }}</span>
         </span>
         <span style="width:120px;color:var(--gray-600);">{{ s.status }}</span>
+        <span style="width:100px;">
+            <form method="POST" action="/voorraad/shipments" style="margin:0;display:flex;align-items:center;gap:2px;">
+                <input type="hidden" name="actie" value="kosten_bijwerken">
+                <input type="hidden" name="shipment_id" value="{{ s.id }}">
+                <input type="hidden" name="terug_naar" value="logistiek">
+                <span style="font-size:11px;color:var(--gray-400);">€</span>
+                <input type="text" name="transportkosten" value="{{ s.transportkosten|default('',true) }}" onblur="this.form.submit()" placeholder="0" style="width:60px;padding:3px 4px;border:1px solid var(--gray-200);border-radius:4px;font-size:11.5px;text-align:right;font-family:inherit;">
+            </form>
+        </span>
         <span style="width:80px;">
             <button type="button" onclick="toggleShipmentDocs('{{ s.id }}')" style="background:none;border:1px solid var(--gray-200);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--gray-500);cursor:pointer;">📎 Docs</button>
         </span>
@@ -2345,7 +2359,8 @@ async function uploadShipmentDoc(shipmentId) {
         filter_flow_type=filter_flow_type, filter_status_log=filter_status_log, filter_materiaal_log=filter_materiaal_log,
         shipment_statussen=SHIPMENT_STATUSSEN, shipment_materialen_log=shipment_materialen_log,
         kpi_ritten_vandaag=kpi_ritten_vandaag, kpi_actieve_ritten=kpi_actieve_ritten,
-        kpi_te_laden_containers=kpi_te_laden_containers, kpi_recente_wegingen=kpi_recente_wegingen)
+        kpi_te_laden_containers=kpi_te_laden_containers, kpi_recente_wegingen=kpi_recente_wegingen,
+        kpi_totale_kosten=kpi_totale_kosten, kpi_kosten_aantal=kpi_kosten_aantal)
 
 @app.route("/logistiek/containers", methods=["GET", "POST"])
 def containerbeheer_pagina():

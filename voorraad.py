@@ -106,6 +106,7 @@ def voorraad_shipments_actie():
             "gepland_hoeveelheid": request.form.get("gepland_hoeveelheid", "").strip(),
             "werkelijk_hoeveelheid": "",
             "bruto_gewicht": "", "tara_gewicht": "", "netto_gewicht": "", "weegbon_nummer": "",
+            "transportkosten": "",
             "gekoppelde_shipment_id": request.form.get("gekoppelde_shipment_id", "").strip(),
             "datum": request.form.get("datum", "").strip(),
             "status": "Planned",
@@ -170,6 +171,13 @@ def voorraad_shipments_actie():
                 doel["voorraad_verwerkt"] = True
                 bewaar_shipments(shipments)
 
+    elif actie == "kosten_bijwerken":
+        shipment_id = request.form.get("shipment_id", "")
+        doel = next((s for s in shipments if s["id"] == shipment_id), None)
+        if doel:
+            doel["transportkosten"] = request.form.get("transportkosten", "").strip()
+            bewaar_shipments(shipments)
+
     elif actie == "verwijderen":
         shipment_id = request.form.get("shipment_id", "")
         doel = next((s for s in shipments if s["id"] == shipment_id), None)
@@ -177,6 +185,9 @@ def voorraad_shipments_actie():
             shipments = [s for s in shipments if s["id"] != shipment_id]
             bewaar_shipments(shipments)
 
+    _terug_naar = request.form.get("terug_naar", "")
+    if _terug_naar == "logistiek":
+        return redirect(url_for("logistiek_pagina"))
     return redirect(url_for("voorraad.voorraad_pagina"))
 
 @voorraad_bp.route("/voorraad/contracten", methods=["POST"])
