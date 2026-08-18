@@ -78,6 +78,9 @@ app.register_blueprint(zoeken_bp)
 from weegbrug import weegbrug_bp
 app.register_blueprint(weegbrug_bp)
 
+from logistieke_orders import logistieke_orders_bp
+app.register_blueprint(logistieke_orders_bp)
+
 # ============================================================
 # GEDEELD FORMULIER-FRAGMENT: bedrijfsprofiel (uitgebreid, naar
 # voorbeeld van het externe Zoho-formulier: algemeen, financieel,

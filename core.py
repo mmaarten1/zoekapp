@@ -42,7 +42,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "geocode_cache.json", "forwarder_wachtwoorden.json", "opgeslagen.json", "snapshots.json",
         "orders.json", "accountmanagers.json", "fotomappen.json", "materiaal_taxonomie.json", "voorraad_transacties.json",
         "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json", "cert_vervaldatums.json",
-        "contactpersonen.json", "containers.json", "weegbrug.json",
+        "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -99,6 +99,7 @@ PAGINA_AFDELINGEN = {
     "voorraad": ["logistiek", "backoffice"],
     "logistiek": ["logistiek"],
     "weegbrug": ["logistiek", "weegbrug"],
+    "logistieke_orders": ["logistiek", "weegbrug"],
     "facturen": ["finance"],
 }
 
@@ -223,6 +224,40 @@ def genereer_weegnummer(bestaande_records):
     vandaag_str = datetime.date.today().strftime("%Y%m%d")
     prefix = f"WB-{vandaag_str}-"
     vandaag_nummers = [int(r["weegnummer"].replace(prefix, "")) for r in bestaande_records if r.get("weegnummer","").startswith(prefix) and r["weegnummer"].replace(prefix,"").isdigit()]
+    volgnummer = (max(vandaag_nummers) + 1) if vandaag_nummers else 1
+    return f"{prefix}{volgnummer:03d}"
+
+# ============================================================
+# Logistieke Orders (Weegbrug Fase 2) — LET OP: dit is een ANDER concept dan
+# ENF_BEDRIJVEN-gerelateerde "orders" (orders.py, /orders, voor
+# accountmanagers/trading — klant, prijs, marge). Dit volgt de fysieke
+# aflevering/weging van een inkomende vracht, los daarvan. Vandaar het eigen
+# bestand LOGISTIEKE_ORDERS_FILE (niet ORDERS_FILE) om verwarring/overlap
+# met dat systeem te voorkomen.
+# ============================================================
+LOGISTIEKE_ORDERS_FILE = datapad("logistieke_orders.json")
+LOGISTIEKE_ORDER_STATUSSEN = [
+    "Order aangemaakt", "Transport verwacht", "Truck aangekomen", "Ingewogen",
+    "Order gekoppeld", "Uitgewogen", "Weegbon compleet", "Afhandeling",
+    "Klaar voor Finance", "Gefactureerd", "Afgerond",
+]
+
+def laad_logistieke_orders():
+    try:
+        with open(LOGISTIEKE_ORDERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_logistieke_orders(data):
+    with open(LOGISTIEKE_ORDERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def genereer_logistiek_ordernummer(bestaande_orders):
+    """LO-YYYYMMDD-NNN, zelfde patroon als weegnummers."""
+    vandaag_str = datetime.date.today().strftime("%Y%m%d")
+    prefix = f"LO-{vandaag_str}-"
+    vandaag_nummers = [int(o["ordernummer"].replace(prefix, "")) for o in bestaande_orders if o.get("ordernummer","").startswith(prefix) and o["ordernummer"].replace(prefix,"").isdigit()]
     volgnummer = (max(vandaag_nummers) + 1) if vandaag_nummers else 1
     return f"{prefix}{volgnummer:03d}"
 
@@ -1544,6 +1579,7 @@ def sidebar_html(actief):
         ("orders", "/orders", "OR", "Orders"),
         ("logistiek", "/logistiek", "LG", "Logistiek"),
         ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
+        ("logistieke_orders", "/logistiek/orders", "LO", "Orders (logistiek)"),
         ("facturen", "/facturen", "FA", "Facturen"),
         ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
         ("voorraad", "/voorraad", "VR", "Voorraad"),

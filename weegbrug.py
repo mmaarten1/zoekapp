@@ -21,6 +21,7 @@ from core import (
     laad_weegbrug, bewaar_weegbrug, genereer_weegnummer, WEEGBRUG_STATUS_BADGES,
     laad_accountmanagers, ENF_BEDRIJVEN, is_huidige_gebruiker_admin,
     vereist_afdeling_of_403, render_simple_page, parse_hoeveelheid_getal,
+    laad_logistieke_orders, bewaar_logistieke_orders,
 )
 
 weegbrug_bp = Blueprint("weegbrug", __name__)
@@ -285,6 +286,16 @@ def weegbrug_uitwegen(record_id):
         record["netto_gewicht"] = netto
         record["status"] = status
         bewaar_weegbrug(records)
+
+        # Synchroniseer de gekoppelde logistieke order (indien aanwezig) met de nieuwe weegstatus.
+        if record.get("ordernummer"):
+            orders = laad_logistieke_orders()
+            gekoppelde_order = next((o for o in orders if o.get("ordernummer") == record["ordernummer"]), None)
+            if gekoppelde_order and status == "Compleet":
+                gekoppelde_order["werkelijke_hoeveelheid"] = str(round(float(netto) / 1000, 3)) if netto else gekoppelde_order.get("werkelijke_hoeveelheid","")
+                gekoppelde_order["status"] = "Weegbon compleet"
+                bewaar_logistieke_orders(orders)
+
         return redirect(url_for("weegbrug.weegbrug_pagina"))
 
     inhoud = """
