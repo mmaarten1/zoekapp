@@ -102,7 +102,7 @@ def weegbrug_pagina():
         <span style="width:100px;">Kenteken</span>
         <span style="flex:1;">Leverancier</span>
         <span style="flex:1;">Materiaal</span>
-        <span style="width:90px;text-align:right;">Netto</span>
+        <span style="width:130px;text-align:right;">Netto</span>
         <span style="width:160px;">Status</span>
         <span style="width:90px;"></span>
     </div>
@@ -112,7 +112,9 @@ def weegbrug_pagina():
         <span style="width:100px;font-weight:700;color:var(--gray-800);">{{ r.kenteken }}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.leverancier or '—' }}{% if not r.ordernummer %} <span title="Nog geen order gekoppeld" style="font-size:11px;">🔵</span>{% endif %}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.materiaal or '—' }}</span>
-        <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--gray-600);">{{ r.netto_gewicht or '—' }}</span>
+        <span style="width:130px;text-align:right;font-family:var(--font-mono);color:var(--gray-600);">
+            {% if r.netto_gewicht %}{{ "{:,.0f}".format(r.netto_gewicht|float) }} kg<br><span style="color:var(--gray-400);font-size:11px;">{{ "{:,.3f}".format(r.netto_gewicht|float / 1000) }} ton</span>{% else %}—{% endif %}
+        </span>
         <span style="width:160px;">
             <span style="color:{{ badges[r.status].kleur }};font-size:11.5px;font-weight:700;">{{ badges[r.status].bol }} {{ badges[r.status].label }}</span>
         </span>

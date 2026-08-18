@@ -201,7 +201,7 @@ WEEGBRUG_FILE = datapad("weegbrug.json")
 # Probleem (🔴 gewicht-afwijking), Geannuleerd (⚪). Het "wacht op koppeling met
 # order" (🔵) is geen eigen status maar wordt afgeleid: leeg ordernummer.
 WEEGBRUG_STATUS_BADGES = {
-    "Ingewogen": {"kleur": "#f59e0b", "bol": "🟠", "label": "Alleen ingewogen"},
+    "Ingewogen": {"kleur": "#f59e0b", "bol": "🟠", "label": "Aan het lossen — wacht op uitwegen"},
     "Compleet": {"kleur": "#16a34a", "bol": "🟢", "label": "Ingewogen + uitgewogen"},
     "Probleem": {"kleur": "#dc2626", "bol": "🔴", "label": "Probleem/afwijking"},
     "Geannuleerd": {"kleur": "#94a3b8", "bol": "⚪", "label": "Geannuleerd"},
