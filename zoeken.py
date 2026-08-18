@@ -843,6 +843,7 @@ HTML = '''
         {% if mag_pagina_zien('logistiek') %}<a href="/logistiek" class="sidebar-link"><span class="icoon">LG</span> Logistiek</a>{% endif %}
         {% if mag_pagina_zien('weegbrug') %}<a href="/weegbrug" class="sidebar-link"><span class="icoon">WB</span> Weegbrug</a>{% endif %}
         {% if mag_pagina_zien('logistieke_orders') %}<a href="/logistiek/orders" class="sidebar-link"><span class="icoon">LO</span> Orders (logistiek)</a>{% endif %}
+        {% if mag_pagina_zien('afhandeling') %}<a href="/logistiek/afhandeling" class="sidebar-link"><span class="icoon">AF</span> Afhandeling</a>{% endif %}
         {% if mag_pagina_zien('facturen') %}<a href="/facturen" class="sidebar-link"><span class="icoon">FA</span> Facturen</a>{% endif %}
         {% if mag_pagina_zien('marktprijzen') %}<a href="/marktprijzen" class="sidebar-link"><span class="icoon">MP</span> Marktprijzen</a>{% endif %}
         {% if mag_pagina_zien('voorraad') %}<a href="/voorraad" class="sidebar-link"><span class="icoon">VR</span> Voorraad</a>{% endif %}

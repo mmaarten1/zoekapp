@@ -24,6 +24,7 @@ from core import (
     laad_logistieke_orders, bewaar_logistieke_orders, genereer_logistiek_ordernummer,
     LOGISTIEKE_ORDER_STATUSSEN, laad_weegbrug, bewaar_weegbrug, WEEGBRUG_STATUS_BADGES,
     ENF_BEDRIJVEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
+    laad_documenten,
 )
 
 logistieke_orders_bp = Blueprint("logistieke_orders", __name__)
@@ -272,8 +273,9 @@ def logistieke_order_detail(order_id):
             <div><b>Weegnummer:</b> <a href="/weegbrug" style="color:var(--brand-600);text-decoration:none;">{{ gekoppeld_weegrecord.weegnummer }}</a></div>
             <div><b>Bruto:</b> {{ gekoppeld_weegrecord.bruto_gewicht or '—' }} kg</div>
             <div><b>Tarra:</b> {{ gekoppeld_weegrecord.tarra_gewicht or '—' }} kg</div>
-            <div><b>Netto:</b> {{ gekoppeld_weegrecord.netto_gewicht or '—' }} kg</div>
+            <div><b>Netto:</b> {{ gekoppeld_weegrecord.netto_gewicht or '—' }}{% if gekoppeld_weegrecord.netto_gewicht %} kg ({{ "%.3f"|format(gekoppeld_weegrecord.netto_gewicht|float / 1000) }} ton){% endif %}</div>
             <div><b>Weegstatus:</b> {{ badges[gekoppeld_weegrecord.status].bol }} {{ badges[gekoppeld_weegrecord.status].label }}</div>
+            {% if gekoppeld_weegrecord.status == "Compleet" %}<div style="margin-top:8px;"><a href="/weegbrug/weegbon/{{ gekoppeld_weegrecord.id }}" target="_blank" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Weegbon bekijken (PDF) →</a></div>{% endif %}
         </div>
         {% else %}
         <div style="font-size:12.5px;color:var(--gray-400);margin-bottom:10px;">Nog geen weegrecord gekoppeld.</div>
@@ -375,3 +377,88 @@ def logistieke_order_status(order_id):
         order["status"] = nieuwe_status
         bewaar_logistieke_orders(orders)
     return redirect(url_for("logistieke_orders.logistieke_order_detail", order_id=order_id))
+
+@logistieke_orders_bp.route("/logistiek/afhandeling")
+def afhandeling_pagina():
+    _guard = vereist_afdeling_of_403("afhandeling")
+    if _guard: return _guard
+
+    alle_orders = laad_logistieke_orders()
+    alle_weegrecords = {r["id"]: r for r in laad_weegbrug()}
+    alle_documenten = laad_documenten()
+
+    def gekoppelde_weging(order):
+        return alle_weegrecords.get(order.get("gekoppeld_weegbrug_id", ""))
+
+    openstaand = [o for o in alle_orders if o.get("status") in ("Weegbon compleet", "Afhandeling")]
+    afwijkend = [o for o in alle_orders if gekoppelde_weging(o) and gekoppelde_weging(o).get("status") == "Probleem"]
+    ontbrekende_docs = [o for o in openstaand if not alle_documenten.get(o.get("ordernummer",""), [])]
+    klaar_voor_finance = [o for o in alle_orders if o.get("status") == "Klaar voor Finance"]
+    afgehandeld = [o for o in alle_orders if o.get("status") in ("Gefactureerd", "Afgerond")]
+
+    inhoud = """
+<div class="page-title">Afhandeling</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Vrachten die fysiek zijn afgerond maar administratief nog verwerkt moeten worden — vóórdat ze naar Finance gaan.</p>
+
+<style>
+.af-sectie { border:1px solid var(--gray-200); border-radius:10px; margin-bottom:18px; overflow:hidden; }
+.af-sectie-kop { padding:12px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:12.5px; font-weight:700; color:var(--gray-700); display:flex; justify-content:space-between; align-items:center; }
+.af-rij { display:flex; align-items:center; padding:9px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
+</style>
+
+<div class="af-sectie">
+    <div class="af-sectie-kop"><span>Openstaande afhandelingen</span><span>{{ openstaand|length }}</span></div>
+    {% for o in openstaand %}
+    <div class="af-rij">
+        <span style="flex:1;"><a href="/logistiek/orders/{{ o.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a> — {{ o.leverancier or '—' }}</span>
+        <span style="width:120px;color:var(--gray-500);">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} ton{% endif %}</span>
+        <form method="POST" action="/logistiek/orders/{{ o.id }}/status" style="margin:0;">
+            <input type="hidden" name="nieuwe_status" value="Klaar voor Finance">
+            <button type="submit" style="font-size:11px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;">Vrijgeven voor Finance</button>
+        </form>
+    </div>
+    {% else %}
+    <div class="af-rij" style="color:var(--gray-300);">Niets openstaand — helemaal bij.</div>
+    {% endfor %}
+</div>
+
+<div class="af-sectie">
+    <div class="af-sectie-kop" style="color:#dc2626;"><span>Afwijkende gewichten</span><span>{{ afwijkend|length }}</span></div>
+    {% for o in afwijkend %}
+    <div class="af-rij"><span style="flex:1;"><a href="/logistiek/orders/{{ o.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a> — {{ o.leverancier or '—' }}</span><span style="color:#dc2626;font-weight:600;">Controleer weegrecord</span></div>
+    {% else %}
+    <div class="af-rij" style="color:var(--gray-300);">Geen afwijkingen.</div>
+    {% endfor %}
+</div>
+
+<div class="af-sectie">
+    <div class="af-sectie-kop"><span>Ontbrekende documenten</span><span>{{ ontbrekende_docs|length }}</span></div>
+    {% for o in ontbrekende_docs %}
+    <div class="af-rij"><span style="flex:1;"><a href="/logistiek/orders/{{ o.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a> — {{ o.leverancier or '—' }}</span><span style="color:var(--gray-400);">Nog geen documenten geüpload</span></div>
+    {% else %}
+    <div class="af-rij" style="color:var(--gray-300);">Alle openstaande orders hebben documenten.</div>
+    {% endfor %}
+</div>
+
+<div class="af-sectie">
+    <div class="af-sectie-kop" style="color:var(--brand-600);"><span>Klaar voor Finance</span><span>{{ klaar_voor_finance|length }}</span></div>
+    {% for o in klaar_voor_finance %}
+    <div class="af-rij"><span style="flex:1;"><a href="/logistiek/orders/{{ o.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a> — {{ o.leverancier or '—' }}</span><span style="color:var(--gray-500);">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} ton{% endif %}</span></div>
+    {% else %}
+    <div class="af-rij" style="color:var(--gray-300);">Nog niets vrijgegeven.</div>
+    {% endfor %}
+</div>
+
+<div class="af-sectie">
+    <div class="af-sectie-kop" style="color:var(--gray-400);"><span>Reeds afgehandeld</span><span>{{ afgehandeld|length }}</span></div>
+    {% for o in afgehandeld[:10] %}
+    <div class="af-rij"><span style="flex:1;color:var(--gray-500);"><a href="/logistiek/orders/{{ o.id }}" style="color:var(--gray-500);text-decoration:none;">{{ o.ordernummer }}</a> — {{ o.leverancier or '—' }}</span><span style="color:var(--gray-400);">{{ o.status }}</span></div>
+    {% else %}
+    <div class="af-rij" style="color:var(--gray-300);">Nog geen afgeronde orders.</div>
+    {% endfor %}
+</div>
+    """
+    pagina = render_simple_page("Afhandeling", "afhandeling", inhoud)
+    return render_template_string(pagina, openstaand=openstaand, afwijkend=afwijkend,
+                                    ontbrekende_docs=ontbrekende_docs, klaar_voor_finance=klaar_voor_finance,
+                                    afgehandeld=afgehandeld)
