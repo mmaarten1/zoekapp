@@ -2213,11 +2213,34 @@ def logistiek_pagina():
 
     shipment_materialen_log = sorted({s.get("materiaal", "") for s in actieve_shipments_log if s.get("materiaal")})
 
+    # --- Logistiek-dashboard-KPI's (alleen echte, berekende data — geen chauffeursplanning: geen datamodel daarvoor) ---
+    _vandaag_log = datetime.date.today().isoformat()
+    kpi_ritten_vandaag = [s for s in actieve_shipments_log if s.get("datum","") == _vandaag_log]
+    kpi_actieve_ritten = [s for s in actieve_shipments_log if s.get("status") in ("Loading", "Loaded", "In Transit", "Arrived")]
+    _alle_containers_log = laad_containers()
+    kpi_te_laden_containers = [c for c in _alle_containers_log if c.get("status") == "Leeg"]
+    kpi_recente_wegingen = sorted(
+        [s for s in actieve_shipments_log if s.get("status") in ("Weighed", "Received") and s.get("weegbon_nummer")],
+        key=lambda s: s.get("datum",""), reverse=True
+    )[:5]
+
     inhoud = """
+<div class="dg-grid" style="margin-bottom:20px;">
+    <div class="dg-kaart"><div class="dg-icoon">🚚</div><div class="dg-getal">{{ kpi_ritten_vandaag|length }}</div><div class="dg-label">Ritten vandaag</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">📍</div><div class="dg-getal">{{ kpi_actieve_ritten|length }}</div><div class="dg-label">Actief onderweg/laden</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">📦</div><div class="dg-getal">{{ kpi_te_laden_containers|length }}</div><div class="dg-label">Containers te laden</div></div>
+    <div class="dg-kaart"><div class="dg-icoon">⚖️</div><div class="dg-getal">{{ kpi_recente_wegingen|length }}</div><div class="dg-label">Recente wegingen</div></div>
+</div>
 <style>
 .log-tabel-rij { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:13px; }
 .log-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
 .log-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; }
+.dg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; }
+.dg-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:16px 18px; }
+.dg-icoon { font-size:1.2rem; margin-bottom:6px; }
+.dg-getal { font-size:1.7rem; font-weight:800; color:var(--brand-700); }
+.dg-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.8px; margin-top:4px; font-weight:600; }
+@media (max-width:768px) { .dg-grid { grid-template-columns:repeat(2,1fr); } }
 </style>
 <div class="page-title">Logistiek</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:12px;font-size:0.85rem;">
@@ -2320,7 +2343,9 @@ async function uploadShipmentDoc(shipmentId) {
         vooringevuld_bedrijf=vooringevuld_bedrijf,
         getoonde_shipments_log=getoonde_shipments_log, actieve_shipments_log=actieve_shipments_log,
         filter_flow_type=filter_flow_type, filter_status_log=filter_status_log, filter_materiaal_log=filter_materiaal_log,
-        shipment_statussen=SHIPMENT_STATUSSEN, shipment_materialen_log=shipment_materialen_log)
+        shipment_statussen=SHIPMENT_STATUSSEN, shipment_materialen_log=shipment_materialen_log,
+        kpi_ritten_vandaag=kpi_ritten_vandaag, kpi_actieve_ritten=kpi_actieve_ritten,
+        kpi_te_laden_containers=kpi_te_laden_containers, kpi_recente_wegingen=kpi_recente_wegingen)
 
 @app.route("/logistiek/containers", methods=["GET", "POST"])
 def containerbeheer_pagina():
