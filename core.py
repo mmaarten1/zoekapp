@@ -89,6 +89,9 @@ ROL_LABELS = {"directeur": "Directeur", "manager": "Manager", "medewerker": "Med
 #   zichtbaar (zoeken, dashboard, notities, instellingen, etc.).
 # ============================================================
 PAGINA_AFDELINGEN = {
+    "zoeken": ["accountmanager", "backoffice", "finance"],
+    "wereldkaart": ["accountmanager", "backoffice", "finance"],
+    "instellingen": ["accountmanager", "backoffice", "finance"],
     "klanten": ["accountmanager", "backoffice"],
     "leveranciers": ["accountmanager", "backoffice"],
     "contacten": ["accountmanager", "backoffice"],
@@ -132,6 +135,19 @@ def mag_pagina_zien(pagina_key):
     if not afdeling:
         return True
     return afdeling in vereiste_afdelingen
+
+def effectieve_afdeling():
+    """De afdeling die nu bepalend is voor wat de gebruiker ziet: bij een admin/directeur
+    die 'weergave als' gebruikt is dat de gekozen preview-afdeling, anders gewoon de
+    eigen afdeling. Gebruikt door pagina's die per afdeling andere INHOUD tonen
+    (niet alleen andere zichtbaarheid), zoals het Dashboard."""
+    _is_bevoorrecht = is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur"
+    if _is_bevoorrecht:
+        weergave_als = session.get("weergave_als", "")
+        if weergave_als and weergave_als != "alles":
+            return weergave_als
+        return ""
+    return session.get("afdeling", "")
 
 def vereist_afdeling_of_403(pagina_key):
     """Geef een 403-response terug als de gebruiker deze pagina niet mag zien, anders None."""
@@ -1623,6 +1639,7 @@ def sidebar_html(actief):
         aantal_open_orders = 0
 
     items = [
+        ("live_operations", "/live-operations", "OP", "Live Operations"),
         ("zoeken", "/", "ZK", "Zoeken"),
         ("wereldkaart", "/wereldkaart", "WM", "World Map"),
         ("dashboard", "/dashboard", "DB", "Dashboard"),
@@ -1634,7 +1651,6 @@ def sidebar_html(actief):
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
         ("logistiek", "/logistiek", "LG", "Logistiek"),
-        ("live_operations", "/live-operations", "OP", "Live Operations"),
         ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
         ("logistieke_orders", "/logistiek/orders", "LO", "Orders (logistiek)"),
         ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),

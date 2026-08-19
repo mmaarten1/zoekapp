@@ -27,7 +27,7 @@ from core import (
     bereken_afstand_km, vind_transport_tarieven_dichtbij, sync_contactpersoon_naar_contacten,
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
-    laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien,
+    laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien, vereist_afdeling_of_403,
 )
 
 zoeken_bp = Blueprint("zoeken", __name__)
@@ -2168,6 +2168,8 @@ def _bouw_weergave_balk():
 
 @zoeken_bp.route("/", methods=["GET", "POST"])
 def index():
+    _guard = vereist_afdeling_of_403("zoeken")
+    if _guard: return _guard
     zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = kwaliteiten = volume_filter = materiaal_min_volume = ""
     pagina = 1
 
@@ -2384,6 +2386,8 @@ def fabriek_detail(naam):
 
 @zoeken_bp.route("/wereldkaart")
 def wereldkaart():
+    _guard = vereist_afdeling_of_403("wereldkaart")
+    if _guard: return _guard
     status_alle = laad_status()
     kaart_data = [
         {"naam": b["naam"], "land": b["land"], "regio": b.get("regio",""), "lat": b["lat"], "lon": b["lon"],

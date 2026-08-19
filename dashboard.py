@@ -17,6 +17,8 @@ from core import (
     laad_transport_data, laad_cert_vervaldatums, _cert_sleutel, laad_meldingen,
     parse_hoeveelheid_getal, bereken_afstand_km, bepaal_shipment_flow_type,
     shipment_hoeveelheid, render_simple_page, ENF_BEDRIJVEN, LANDEN,
+    effectieve_afdeling, laad_weegbrug, laad_logistieke_orders, laad_transport_planning,
+    laad_containers,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -64,8 +66,85 @@ def bepaal_continent(land):
     if land in afrika: return "Afrika"
     return "Overig"
 
+def _logistiek_dashboard():
+    """Aparte, logistiek-gerichte dashboard-inhoud — geen omzet/marge/klant-KPI's, alleen wat
+    voor Logistiek/Weegbrug relevant is. Hergebruikt bestaande databronnen, geen nieuwe."""
+    alle_weegrecords = laad_weegbrug()
+    alle_orders = laad_logistieke_orders()
+    alle_transporten = laad_transport_planning()
+    alle_containers = laad_containers()
+
+    _vandaag = datetime.date.today().isoformat()
+    kpi_op_locatie = len([r for r in alle_weegrecords if r.get("status") == "Ingewogen"])
+    kpi_wacht_afhandeling = len([o for o in alle_orders if o.get("status") in ("Weegbon compleet", "Afhandeling")])
+    kpi_klaar_finance = len([o for o in alle_orders if o.get("status") == "Klaar voor Finance"])
+    kpi_transport_gepland = len([t for t in alle_transporten if t.get("status") not in ("Te plannen",)])
+    kpi_transport_onderweg = len([t for t in alle_transporten if t.get("status") == "Onderweg"])
+    _vertraagd_check = lambda t: t.get("laaddatum","") and t["laaddatum"] < _vandaag and t.get("status") in ("Te plannen", "Transport aangevraagd", "Transporteur toegewezen", "Bevestigd")
+    kpi_transport_vertraagd = len([t for t in alle_transporten if _vertraagd_check(t)])
+    kpi_containers_onderweg = len([c for c in alle_containers if c.get("status") in ("Op zee", "Onderweg", "Transport gepland")])
+
+    recente_weegrecords = sorted(alle_weegrecords, key=lambda r: r.get("aangemaakt",""), reverse=True)[:8]
+
+    inhoud = """
+<div class="page-title">Dashboard — Logistiek</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Overzicht specifiek voor Logistiek/Weegbrug — geen omzet- of margecijfers.</p>
+
+<style>
+.ld-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:24px; }
+.ld-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:16px 4px; }
+.ld-getal { font-size:1.7rem; font-weight:800; color:var(--brand-700); }
+.ld-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.8px; margin-top:4px; font-weight:600; }
+.ld-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
+.ld-tabel-rij { display:flex; align-items:center; padding:9px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
+</style>
+
+<div class="ld-grid">
+    <div class="ld-kaart"><div class="ld-getal">{{ kpi_op_locatie }}</div><div class="ld-label">Nu op locatie (weegbrug)</div></div>
+    <div class="ld-kaart"><div class="ld-getal">{{ kpi_wacht_afhandeling }}</div><div class="ld-label">Wacht op afhandeling</div></div>
+    <div class="ld-kaart"><div class="ld-getal">{{ kpi_klaar_finance }}</div><div class="ld-label">Klaar voor Finance</div></div>
+    <div class="ld-kaart"><div class="ld-getal">{{ kpi_transport_onderweg }}</div><div class="ld-label">Transporten onderweg</div></div>
+    <div class="ld-kaart" style="{% if kpi_transport_vertraagd %}border-color:#fecaca;{% endif %}"><div class="ld-getal" style="{% if kpi_transport_vertraagd %}color:#dc2626;{% endif %}">{{ kpi_transport_vertraagd }}</div><div class="ld-label">Transporten vertraagd</div></div>
+    <div class="ld-kaart"><div class="ld-getal">{{ kpi_containers_onderweg }}</div><div class="ld-label">Containers onderweg</div></div>
+</div>
+
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+    <a href="/live-operations" style="font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">Live Operations →</a>
+    <a href="/logistiek/afhandeling" style="font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">Afhandeling →</a>
+    <a href="/transport-overview" style="font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">Transport Overview →</a>
+</div>
+
+{% if recente_weegrecords %}
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Recente weegrecords</div>
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
+    <div class="ld-tabel-kop">
+        <span style="width:110px;">Weegnummer</span>
+        <span style="width:100px;">Kenteken</span>
+        <span style="flex:1;">Leverancier</span>
+        <span style="width:160px;">Status</span>
+    </div>
+    {% for r in recente_weegrecords %}
+    <div class="ld-tabel-rij">
+        <span style="width:110px;font-family:var(--font-mono);color:var(--gray-500);">{{ r.weegnummer }}</span>
+        <span style="width:100px;font-weight:600;color:var(--gray-800);">{{ r.kenteken }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ r.leverancier or '—' }}</span>
+        <span style="width:160px;color:var(--gray-600);font-size:11.5px;">{{ r.status }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Dashboard", "dashboard", inhoud)
+    return render_template_string(pagina, kpi_op_locatie=kpi_op_locatie, kpi_wacht_afhandeling=kpi_wacht_afhandeling,
+                                    kpi_klaar_finance=kpi_klaar_finance, kpi_transport_gepland=kpi_transport_gepland,
+                                    kpi_transport_onderweg=kpi_transport_onderweg, kpi_transport_vertraagd=kpi_transport_vertraagd,
+                                    kpi_containers_onderweg=kpi_containers_onderweg, recente_weegrecords=recente_weegrecords)
+
 @dashboard_bp.route("/dashboard")
 def dashboard():
+    if effectieve_afdeling() in ("logistiek", "weegbrug"):
+        return _logistiek_dashboard()
+
     snapshots = maak_dagelijkse_snapshot()
     groei_pct = None
     groei_periode = None

@@ -3094,6 +3094,8 @@ def gebruikers_beheer():
 
 @app.route("/instellingen")
 def instellingen():
+    _guard = vereist_afdeling_of_403("instellingen")
+    if _guard: return _guard
     inhoud = """
     <div class="page-title">Instellingen</div>
     <div class="info-kaart" style="max-width:400px;margin-bottom:16px;">
