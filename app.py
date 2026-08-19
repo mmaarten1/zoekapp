@@ -2615,6 +2615,7 @@ def facturen_pagina():
                 "referentie": request.form.get("referentie", "").strip(),
                 "omschrijving": request.form.get("omschrijving", "").strip(),
                 "bedrag": request.form.get("bedrag", "").strip(),
+                "btw_percentage": request.form.get("btw_percentage", "").strip(),
                 "factuurdatum": request.form.get("factuurdatum", "").strip(),
                 "vervaldatum": request.form.get("vervaldatum", "").strip(),
                 "betaalddatum": "",
@@ -2660,6 +2661,37 @@ def facturen_pagina():
     te_laat_facturen = [f for f in alle_facturen if f.get("status") == "Te laat"]
     totaal_openstaand = sum(_bedrag_getal(f) for f in openstaande_facturen)
 
+    # --- Te verwerken betalingen: openstaand én binnen 7 dagen vervallend (of al te laat) —
+    # dit is de "moet NU actie op"-lijst, anders dan de bredere 'openstaand'-KPI hierboven. ---
+    _vandaag_fact = datetime.date.today()
+    _binnenkort_grens = (_vandaag_fact + datetime.timedelta(days=7)).isoformat()
+    te_verwerken_betalingen = sorted(
+        [f for f in openstaande_facturen if f.get("vervaldatum","") <= _binnenkort_grens],
+        key=lambda f: f.get("vervaldatum","")
+    )
+    for f in te_verwerken_betalingen:
+        f["bedrag_weergave"] = "{:,.2f}".format(_bedrag_getal(f)).replace(",", "X").replace(".", ",").replace("X", ".")
+
+    # --- BTW-alerts: ontbrekend of ongebruikelijk BTW%, plus eerstvolgende aangiftedeadline. ---
+    STANDAARD_BTW_PERCENTAGES = {"0", "9", "21"}
+    facturen_zonder_btw = [f for f in alle_facturen if not f.get("btw_percentage","").strip()]
+    facturen_ongebruikelijk_btw = [f for f in alle_facturen if f.get("btw_percentage","").strip() and f.get("btw_percentage","").strip() not in STANDAARD_BTW_PERCENTAGES]
+
+    def _volgende_btw_deadline():
+        """Standaard NL kwartaal-BTW-deadlines: uiterlijk laatste dag van de maand ná het kwartaal."""
+        jaar = _vandaag_fact.year
+        deadlines = [
+            datetime.date(jaar, 4, 30), datetime.date(jaar, 7, 31),
+            datetime.date(jaar, 10, 31), datetime.date(jaar + 1, 1, 31),
+        ]
+        for d in deadlines:
+            if d >= _vandaag_fact:
+                return d
+        return datetime.date(jaar + 1, 4, 30)
+
+    btw_deadline = _volgende_btw_deadline()
+    btw_deadline_dagen = (btw_deadline - _vandaag_fact).days
+
     _status_alle_fact = laad_status()
     _accountmanagers_alle_fact = laad_accountmanagers()
     alle_bedrijfsnamen_fact = sorted(set(_status_alle_fact.keys()) | set(_accountmanagers_alle_fact.keys()))[:500]
@@ -2681,18 +2713,45 @@ def facturen_pagina():
 {% endif %}
 
 <div class="kpi-mini" style="display:flex;gap:16px;margin-bottom:20px;">
-    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px 18px;flex:1;">
+    <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;flex:1;">
         <div style="font-size:1.4rem;font-weight:800;color:var(--brand-600);">{{ openstaande_facturen|length }}</div>
         <div style="font-size:0.75rem;color:var(--gray-400);">Openstaand</div>
     </div>
-    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px 18px;flex:1;">
+    <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;flex:1;">
         <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">€{{ "{:,.0f}".format(totaal_openstaand).replace(",", ".") }}</div>
         <div style="font-size:0.75rem;color:var(--gray-400);">Totaal openstaand bedrag</div>
     </div>
-    <div style="background:#fff;border:1px solid {{ '#fecaca' if te_laat_facturen else 'var(--gray-200)' }};border-radius:10px;padding:14px 18px;flex:1;">
+    <div style="background:transparent;border:none;border-top:1px solid {{ '#fecaca' if te_laat_facturen else 'var(--gray-200)' }};border-bottom:1px solid {{ '#fecaca' if te_laat_facturen else 'var(--gray-200)' }};padding:14px 4px;flex:1;">
         <div style="font-size:1.4rem;font-weight:800;color:{{ '#dc2626' if te_laat_facturen else 'var(--gray-800)' }};">{{ te_laat_facturen|length }}</div>
         <div style="font-size:0.75rem;color:var(--gray-400);">Te laat</div>
     </div>
+</div>
+
+{% if te_verwerken_betalingen %}
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Te verwerken betalingen (deze week vervallend of al te laat)</div>
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:20px;">
+    {% for f in te_verwerken_betalingen %}
+    <div class="fact-rij fact-row">
+        <span style="flex:1.4;">{{ f.bedrijf }}</span>
+        <span style="flex:1.2;color:var(--gray-500);">{{ f.referentie or '—' }}</span>
+        <span style="width:100px;text-align:right;font-family:var(--font-mono);">€{{ f.bedrag_weergave }}</span>
+        <span style="width:100px;{% if f.status=='Te laat' %}color:#dc2626;font-weight:700;{% endif %}">{{ f.vervaldatum }}</span>
+        <form method="POST" style="margin:0;">
+            <input type="hidden" name="actie" value="markeer_betaald">
+            <input type="hidden" name="factuur_id" value="{{ f.id }}">
+            <button type="submit" style="font-size:11px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;">Markeer betaald</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">BTW-alerts</div>
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:20px;padding:12px 4px;font-size:12.5px;color:var(--gray-600);">
+    <div style="margin-bottom:6px;">Eerstvolgende BTW-aangifte: <b>{{ btw_deadline.strftime("%d-%m-%Y") }}</b> ({{ btw_deadline_dagen }} dagen)</div>
+    {% if facturen_zonder_btw %}<div style="margin-bottom:6px;color:#b45309;">{{ facturen_zonder_btw|length }} factu{{ "ur" if facturen_zonder_btw|length == 1 else "ren" }} zonder ingevuld BTW-percentage</div>{% endif %}
+    {% if facturen_ongebruikelijk_btw %}<div style="color:#dc2626;">{{ facturen_ongebruikelijk_btw|length }} factu{{ "ur" if facturen_ongebruikelijk_btw|length == 1 else "ren" }} met een afwijkend BTW-percentage (niet 0/9/21%) — controleren</div>{% endif %}
+    {% if not facturen_zonder_btw and not facturen_ongebruikelijk_btw %}<div style="color:var(--gray-400);">Geen BTW-aandachtspunten.</div>{% endif %}
 </div>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
@@ -2714,8 +2773,14 @@ def facturen_pagina():
         <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" list="bedrijvenLijstFacturen" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
         <datalist id="bedrijvenLijstFacturen">{% for naam in alle_bedrijfsnamen_fact %}<option value="{{ naam }}">{% endfor %}</datalist>
         <input type="text" name="referentie" placeholder="Referentie / omschrijving" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
             <input type="text" name="bedrag" placeholder="Bedrag (€)" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <select name="btw_percentage" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+                <option value="">BTW %</option>
+                <option value="0">0%</option>
+                <option value="9">9%</option>
+                <option value="21">21%</option>
+            </select>
             <input type="date" name="factuurdatum" title="Factuurdatum" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <input type="date" name="vervaldatum" title="Vervaldatum" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
         </div>
@@ -2765,7 +2830,10 @@ def facturen_pagina():
         alle_facturen=alle_facturen, getoonde_facturen=getoonde_facturen,
         openstaande_facturen=openstaande_facturen, te_laat_facturen=te_laat_facturen,
         totaal_openstaand=totaal_openstaand, alle_bedrijfsnamen_fact=alle_bedrijfsnamen_fact,
-        aantal_klaar_voor_finance=sum(1 for o in laad_logistieke_orders() if o.get("status") == "Klaar voor Finance"))
+        aantal_klaar_voor_finance=sum(1 for o in laad_logistieke_orders() if o.get("status") == "Klaar voor Finance"),
+        te_verwerken_betalingen=te_verwerken_betalingen, facturen_zonder_btw=facturen_zonder_btw,
+        facturen_ongebruikelijk_btw=facturen_ongebruikelijk_btw, btw_deadline=btw_deadline,
+        btw_deadline_dagen=btw_deadline_dagen)
 
 @app.route("/facturen/logistieke-orders", methods=["GET", "POST"])
 def facturen_logistieke_orders():
