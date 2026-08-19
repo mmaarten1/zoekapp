@@ -203,6 +203,7 @@ def voorraad_contracten_actie():
             "richting": request.form.get("richting", "inkoop"),
             "materiaal": request.form.get("materiaal", "").strip(),
             "contract_volume": request.form.get("contract_volume", "").strip(),
+            "prijs_per_ton": request.form.get("prijs_per_ton", "").strip(),
             "notitie": request.form.get("notitie", "").strip(),
             "gebruiker": session.get("gebruikersnaam", ""),
             "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
@@ -772,6 +773,9 @@ function voorraadStatusSubmit(form, isInbound) {
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <input type="text" name="tegenpartij" placeholder="Tegenpartij" list="bedrijvenLijstVoorraad">
             <input type="text" name="contract_volume" placeholder="Contractvolume (ton)" required>
+        </div>
+        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:10px;">
+            <input type="text" name="prijs_per_ton" placeholder="Prijs per ton (€, optioneel)">
         </div>
         <select name="materiaal" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
             <option value="">Materiaal...</option>

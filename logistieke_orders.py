@@ -25,6 +25,7 @@ from core import (
     LOGISTIEKE_ORDER_STATUSSEN, laad_weegbrug, bewaar_weegbrug, WEEGBRUG_STATUS_BADGES,
     ENF_BEDRIJVEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     laad_documenten, laad_orders, laad_shipments, bereken_voorraad_status, parse_hoeveelheid_getal,
+    laad_contracten, bewaar_contracten, laad_marktprijzen,
 )
 
 logistieke_orders_bp = Blueprint("logistieke_orders", __name__)
@@ -154,6 +155,8 @@ def logistieke_order_nieuw():
             "verwachte_aankomst": request.form.get("verwachte_aankomst", "").strip(),
             "werkelijke_aankomst": "",
             "gekoppeld_weegbrug_id": "",
+            "contract_referentie": "", "prijstype": "", "prijs_per_ton": None, "totale_waarde": None,
+            "verantwoordelijke_afdeling": "",
             "status": "Transport verwacht" if request.form.get("verwachte_aankomst","").strip() else "Order aangemaakt",
             "opmerkingen": request.form.get("opmerkingen", "").strip(),
             "aangemaakt_door": session.get("gebruikersnaam", ""),
@@ -235,6 +238,16 @@ def logistieke_order_detail(order_id):
     # Ongekoppelde weegrecords (voor het koppel-formulier)
     ongekoppelde_weegrecords = [r for r in laad_weegbrug() if not r.get("ordernummer","").strip() and r.get("status") != "Geannuleerd"]
 
+    contract_voortgang = None
+    if order.get("contract_referentie"):
+        gekoppeld_contract = next((c for c in laad_contracten() if c.get("referentie") == order["contract_referentie"]), None)
+        if gekoppeld_contract:
+            try:
+                totaal_vol = float(str(gekoppeld_contract.get("contract_volume","0")).replace(",",""))
+            except (ValueError, TypeError):
+                totaal_vol = 0.0
+            contract_voortgang = {"totaal": round(totaal_vol,1), "geleverd": _contract_geleverd_volume(order["contract_referentie"], orders)}
+
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/logistiek/orders" style="color:var(--gray-400);text-decoration:none;">Orders (logistiek)</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ order.ordernummer }}</span>
@@ -264,6 +277,23 @@ def logistieke_order_detail(order_id):
             <div><b>Werkelijke hoeveelheid:</b> {{ order.werkelijke_hoeveelheid or '—' }}{% if order.werkelijke_hoeveelheid %} ton{% endif %}</div>
         </div>
         {% if order.opmerkingen %}<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--gray-200);"><b>Opmerkingen:</b> {{ order.opmerkingen }}</div>{% endif %}
+    </div>
+
+    <div class="dg-kaart" style="margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Contract / prijs</div>
+        {% if order.contract_referentie or order.prijstype %}
+        <div style="font-size:12.5px;color:var(--gray-600);">
+            <div><b>{{ 'Contract' if order.contract_referentie else 'Type' }}:</b> {{ order.contract_referentie or order.prijstype }}</div>
+            {% if order.prijs_per_ton %}<div><b>Prijs per ton:</b> €{{ order.prijs_per_ton }}</div>{% endif %}
+            {% if order.totale_waarde %}<div><b>Totale waarde:</b> €{{ "{:,.2f}".format(order.totale_waarde).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>{% endif %}
+            {% if order.verantwoordelijke_afdeling %}<div><b>Verantwoordelijk:</b> {{ order.verantwoordelijke_afdeling|capitalize }}</div>{% endif %}
+            {% if order.contract_referentie and contract_voortgang %}<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--gray-200);color:var(--gray-500);">Geleverd onder dit contract (via Live Operaties): {{ contract_voortgang.geleverd }} van {{ contract_voortgang.totaal }} ton</div>{% endif %}
+        </div>
+        <a href="/logistiek/orders/{{ order.id }}/koppel-contract" style="display:inline-block;margin-top:8px;font-size:11.5px;color:var(--brand-600);text-decoration:none;font-weight:600;">Wijzigen →</a>
+        {% else %}
+        <div style="font-size:12.5px;color:var(--gray-400);margin-bottom:8px;">Nog geen contract of prijstype gekoppeld.</div>
+        <a href="/logistiek/orders/{{ order.id }}/koppel-contract" style="font-size:12.5px;color:var(--brand-600);text-decoration:none;font-weight:600;">Contract koppelen →</a>
+        {% endif %}
     </div>
 
     <div class="dg-kaart" style="margin-bottom:16px;">
@@ -337,7 +367,7 @@ laadOrderDocs();
     pagina = render_simple_page(order["ordernummer"], "logistieke_orders", inhoud)
     return render_template_string(pagina, order=order, statussen=LOGISTIEKE_ORDER_STATUSSEN,
                                     gekoppeld_weegrecord=gekoppeld_weegrecord, ongekoppelde_weegrecords=ongekoppelde_weegrecords,
-                                    badges=WEEGBRUG_STATUS_BADGES)
+                                    badges=WEEGBRUG_STATUS_BADGES, contract_voortgang=contract_voortgang)
 
 @logistieke_orders_bp.route("/logistiek/orders/<order_id>/koppelen", methods=["POST"])
 def logistieke_order_koppelen(order_id):
@@ -486,6 +516,7 @@ def live_operations_pagina():
             "materiaal": o.get("materiaal",""), "status": o.get("status",""),
             "herkomst": weging.get("herkomst","") if weging else "",
             "bestemming": weging.get("bestemming","") if weging else "",
+            "contract_referentie": o.get("contract_referentie",""), "prijstype": o.get("prijstype",""),
         })
     gekoppelde_weeg_ids = {o.get("gekoppeld_weegbrug_id") for o in alle_orders if o.get("gekoppeld_weegbrug_id")}
     for r in alle_weegrecords:
@@ -576,6 +607,7 @@ def live_operations_pagina():
         <span style="width:90px;">Kenteken</span>
         <span style="flex:1;">Materiaal</span>
         <span style="width:160px;">Status</span>
+        <span style="width:130px;">Contract</span>
     </div>
     {% for r in getoond %}
     <div class="lv-tabel-rij">
@@ -588,6 +620,13 @@ def live_operations_pagina():
         <span style="width:90px;color:var(--gray-600);">{{ r.kenteken or '—' }}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.materiaal or '—' }}</span>
         <span style="width:160px;font-size:11px;font-weight:600;color:var(--gray-600);">{{ r.status }}</span>
+        <span style="width:130px;">
+            {% if r.type == "order" %}
+                {% if r.contract_referentie %}<span style="font-size:11px;color:var(--gray-600);">{{ r.contract_referentie }}</span>
+                {% elif r.prijstype %}<span style="font-size:11px;color:var(--gray-500);">{{ r.prijstype }}</span>
+                {% else %}<a href="/logistiek/orders/{{ r.id }}/koppel-contract" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Contract koppelen</a>{% endif %}
+            {% endif %}
+        </span>
     </div>
     {% endfor %}
 </div>
@@ -810,3 +849,111 @@ def logistieke_inzichten_pagina():
                                     klanten_binnenkort=klanten_binnenkort, leverancier_trend=leverancier_trend,
                                     route_overzicht=route_overzicht, kosten_per_ton_gemiddeld=kosten_per_ton_gemiddeld,
                                     vertraagde_inkomend=vertraagde_inkomend)
+
+def _contract_geleverd_volume(contract_referentie, alle_orders=None):
+    """Som van werkelijke_hoeveelheid van alle logistieke orders die aan dit contract
+    gekoppeld zijn EN daadwerkelijk afgerond/gefactureerd zijn (dus echt geleverd,
+    niet alleen gepland)."""
+    if alle_orders is None:
+        alle_orders = laad_logistieke_orders()
+    geleverd = sum(
+        parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+        for o in alle_orders
+        if o.get("contract_referentie") == contract_referentie and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
+    )
+    return round(geleverd, 3)
+
+@logistieke_orders_bp.route("/logistiek/orders/<order_id>/koppel-contract", methods=["GET", "POST"])
+def logistieke_order_koppel_contract(order_id):
+    """Koppelt een order aan een bestaand contract (prijs komt automatisch mee) of markeert
+    'm als spot-transactie (dagprijs uit de marktprijzen-module). Bepaalt ook welke afdeling
+    (Finance of Logistiek) verantwoordelijk is voor deze koppeling."""
+    _guard = vereist_afdeling_of_403("live_operations")
+    if _guard: return _guard
+
+    orders = laad_logistieke_orders()
+    order = next((o for o in orders if o["id"] == order_id), None)
+    if not order:
+        pagina = render_simple_page("Niet gevonden", "live_operations", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/live-operations">Terug naar Live Operaties</a></div>')
+        return render_template_string(pagina), 404
+
+    alle_contracten = laad_contracten()
+    # Suggestie: contracten die qua materiaal en tegenpartij (leverancier) passen, bovenaan.
+    passende_contracten = [c for c in alle_contracten if c.get("materiaal","") == order.get("materiaal","") and c.get("tegenpartij","") == order.get("leverancier","")]
+    overige_contracten = [c for c in alle_contracten if c not in passende_contracten]
+
+    if request.method == "POST":
+        keuze = request.form.get("contract_keuze", "")
+        verantwoordelijke_afdeling = request.form.get("verantwoordelijke_afdeling", "")
+
+        if keuze == "spot":
+            marktprijzen_materiaal = sorted(
+                [p for p in laad_marktprijzen() if p.get("materiaal","") == order.get("materiaal","")],
+                key=lambda p: p.get("datum",""), reverse=True
+            )
+            dagprijs = marktprijzen_materiaal[0]["prijs_per_ton"] if marktprijzen_materiaal else None
+            order["contract_referentie"] = ""
+            order["prijstype"] = "Spot (dagprijs)"
+            order["prijs_per_ton"] = dagprijs
+        else:
+            gekozen_contract = next((c for c in alle_contracten if c["id"] == keuze), None)
+            if gekozen_contract:
+                order["contract_referentie"] = gekozen_contract["referentie"]
+                order["prijstype"] = "Contract"
+                try:
+                    order["prijs_per_ton"] = float(str(gekozen_contract.get("prijs_per_ton","0")).replace(",","."))
+                except (ValueError, TypeError):
+                    order["prijs_per_ton"] = None
+
+        if order.get("werkelijke_hoeveelheid") and order.get("prijs_per_ton"):
+            try:
+                order["totale_waarde"] = round(float(order["werkelijke_hoeveelheid"]) * float(order["prijs_per_ton"]), 2)
+            except (ValueError, TypeError):
+                order["totale_waarde"] = None
+
+        order["verantwoordelijke_afdeling"] = verantwoordelijke_afdeling if verantwoordelijke_afdeling in ("finance", "logistiek") else order.get("verantwoordelijke_afdeling","")
+        bewaar_logistieke_orders(orders)
+        return redirect(url_for("logistieke_orders.logistieke_order_detail", order_id=order_id))
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/logistiek/orders/{{ order.id }}" style="color:var(--gray-400);text-decoration:none;">{{ order.ordernummer }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Contract koppelen</span>
+</div>
+<div class="page-title">Contract koppelen — {{ order.ordernummer }}</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">{{ order.leverancier }} — {{ order.materiaal }}. Koppel een bestaand contract (prijs komt automatisch mee) of markeer als spot-transactie (dagprijs).</p>
+
+<form method="POST" style="max-width:520px;">
+    <div style="margin-bottom:16px;">
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;display:block;margin-bottom:6px;">
+            <input type="radio" name="contract_keuze" value="spot" checked onchange="document.getElementById('contract_select').disabled=true;"> Spot-transactie (dagprijs uit marktprijzen)
+        </label>
+        {% if passende_contracten %}
+        <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 4px 0;">Passende contracten (zelfde materiaal + leverancier)</div>
+        {% for c in passende_contracten %}
+        <label style="font-size:12.5px;color:var(--gray-700);display:block;margin-bottom:6px;">
+            <input type="radio" name="contract_keuze" value="{{ c.id }}" onchange="document.getElementById('contract_select').disabled=true;"> {{ c.referentie }} — {{ c.contract_volume }} ton{% if c.prijs_per_ton %} à €{{ c.prijs_per_ton }}/ton{% endif %}
+        </label>
+        {% endfor %}
+        {% endif %}
+        {% if overige_contracten %}
+        <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 4px 0;">Overige contracten</div>
+        <select id="contract_select" name="contract_keuze" onchange="document.querySelectorAll('input[name=contract_keuze][type=radio]').forEach(function(r){r.checked=false;});" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <option value="">— geen —</option>
+            {% for c in overige_contracten %}<option value="{{ c.id }}">{{ c.referentie }} — {{ c.tegenpartij }} ({{ c.materiaal }}, {{ c.contract_volume }} ton{% if c.prijs_per_ton %}, €{{ c.prijs_per_ton }}/ton{% endif %})</option>{% endfor %}
+        </select>
+        {% endif %}
+    </div>
+    <div style="margin-bottom:18px;">
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Verantwoordelijke afdeling</label>
+        <select name="verantwoordelijke_afdeling" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <option value="">— geen specifieke afdeling —</option>
+            <option value="finance" {% if order.verantwoordelijke_afdeling == "finance" %}selected{% endif %}>Finance</option>
+            <option value="logistiek" {% if order.verantwoordelijke_afdeling == "logistiek" %}selected{% endif %}>Logistiek</option>
+        </select>
+    </div>
+    <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Koppelen</button>
+    <a href="/logistiek/orders/{{ order.id }}" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+</form>
+    """
+    pagina = render_simple_page("Contract koppelen", "live_operations", inhoud)
+    return render_template_string(pagina, order=order, passende_contracten=passende_contracten, overige_contracten=overige_contracten)
