@@ -462,3 +462,144 @@ def afhandeling_pagina():
     return render_template_string(pagina, openstaand=openstaand, afwijkend=afwijkend,
                                     ontbrekende_docs=ontbrekende_docs, klaar_voor_finance=klaar_voor_finance,
                                     afgehandeld=afgehandeld)
+
+@logistieke_orders_bp.route("/live-operations")
+def live_operations_pagina():
+    _guard = vereist_afdeling_of_403("live_operations")
+    if _guard: return _guard
+
+    alle_orders = laad_logistieke_orders()
+    alle_weegrecords = laad_weegbrug()
+    weegrecords_lookup = {r["id"]: r for r in alle_weegrecords}
+
+    # --- Eén rij per vracht: order als basis, aangevuld met weegbrug-data indien gekoppeld.
+    # Voor weegrecords die nog GEEN order hebben, tonen we die ook als losse rij
+    # (anders zou een net ingewogen, nog niet gekoppelde vracht onzichtbaar blijven). ---
+    rijen = []
+    for o in alle_orders:
+        weging = weegrecords_lookup.get(o.get("gekoppeld_weegbrug_id", ""))
+        rijen.append({
+            "type": "order", "id": o["id"], "referentie": o["ordernummer"],
+            "datum": o.get("datum",""), "leverancier": o.get("leverancier",""),
+            "transporteur": o.get("transporteur",""),
+            "kenteken": weging.get("kenteken","") if weging else o.get("kenteken",""),
+            "materiaal": o.get("materiaal",""), "status": o.get("status",""),
+            "herkomst": weging.get("herkomst","") if weging else "",
+            "bestemming": weging.get("bestemming","") if weging else "",
+        })
+    gekoppelde_weeg_ids = {o.get("gekoppeld_weegbrug_id") for o in alle_orders if o.get("gekoppeld_weegbrug_id")}
+    for r in alle_weegrecords:
+        if r["id"] in gekoppelde_weeg_ids or r.get("status") == "Geannuleerd":
+            continue
+        rijen.append({
+            "type": "weegbrug", "id": r["id"], "referentie": r["weegnummer"],
+            "datum": r.get("aangemaakt","").split(" ")[0] if r.get("aangemaakt") else "",
+            "leverancier": r.get("leverancier",""), "transporteur": r.get("transporteur",""),
+            "kenteken": r.get("kenteken",""), "materiaal": r.get("materiaal",""),
+            "status": "Ingewogen (geen order)" if r.get("status")=="Ingewogen" else r.get("status",""),
+            "herkomst": r.get("herkomst",""), "bestemming": r.get("bestemming",""),
+        })
+
+    # --- Filters ---
+    f_datum = request.args.get("datum", "")
+    f_leverancier = request.args.get("leverancier", "").strip().lower()
+    f_transporteur = request.args.get("transporteur", "").strip().lower()
+    f_kenteken = request.args.get("kenteken", "").strip().lower()
+    f_materiaal = request.args.get("materiaal", "").strip().lower()
+    f_ordernummer = request.args.get("ordernummer", "").strip().lower()
+    f_status = request.args.get("status", "")
+    f_herkomst = request.args.get("herkomst", "").strip().lower()
+    f_bestemming = request.args.get("bestemming", "").strip().lower()
+
+    getoond = rijen
+    if f_datum: getoond = [r for r in getoond if r["datum"] == f_datum]
+    if f_leverancier: getoond = [r for r in getoond if f_leverancier in r["leverancier"].lower()]
+    if f_transporteur: getoond = [r for r in getoond if f_transporteur in r["transporteur"].lower()]
+    if f_kenteken: getoond = [r for r in getoond if f_kenteken in r["kenteken"].lower()]
+    if f_materiaal: getoond = [r for r in getoond if f_materiaal in r["materiaal"].lower()]
+    if f_ordernummer: getoond = [r for r in getoond if f_ordernummer in r["referentie"].lower()]
+    if f_status: getoond = [r for r in getoond if r["status"] == f_status]
+    if f_herkomst: getoond = [r for r in getoond if f_herkomst in r["herkomst"].lower()]
+    if f_bestemming: getoond = [r for r in getoond if f_bestemming in r["bestemming"].lower()]
+    getoond = sorted(getoond, key=lambda r: r["datum"], reverse=True)
+
+    # --- Statustabel, precies zoals gevraagd: Onderweg/Aangekomen/Op weegbrug/
+    # Ingewogen/Wachten op uitwegen/Volledig afgerond. Alleen o.b.v. data die we
+    # daadwerkelijk bijhouden — geen extra granulariteit verzonnen. ---
+    kpi_onderweg = len([r for r in rijen if r["status"] == "Transport verwacht"])
+    kpi_aangekomen = len([r for r in rijen if r["status"] == "Truck aangekomen"])
+    kpi_ingewogen = len([r for r in rijen if r["status"] in ("Ingewogen", "Ingewogen (geen order)")])
+    kpi_afgerond = len([r for r in rijen if r["status"] == "Afgerond"])
+
+    alle_statussen_voor_filter = sorted({r["status"] for r in rijen})
+
+    inhoud = """
+<div class="page-title">Live Operations</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Control tower: alle inkomende vrachten in één overzicht — Weegbrug en Orders gecombineerd.</p>
+
+<style>
+.lv-statustabel { width:100%; max-width:520px; border:1px solid var(--gray-200); border-radius:10px; overflow:hidden; margin-bottom:24px; }
+.lv-statusrij { display:flex; justify-content:space-between; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:13px; }
+.lv-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
+.lv-tabel-rij { display:flex; align-items:center; padding:9px 16px; border-bottom:1px solid var(--gray-100); font-size:12px; }
+</style>
+
+<div class="lv-statustabel">
+    <div class="lv-statusrij"><span>Onderweg (transport verwacht)</span><b>{{ kpi_onderweg }}</b></div>
+    <div class="lv-statusrij"><span>Aangekomen</span><b>{{ kpi_aangekomen }}</b></div>
+    <div class="lv-statusrij"><span>Ingewogen / wachten op uitwegen</span><b>{{ kpi_ingewogen }}</b></div>
+    <div class="lv-statusrij" style="border-bottom:none;"><span>Volledig afgerond</span><b>{{ kpi_afgerond }}</b></div>
+</div>
+
+<form method="GET" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+    <input type="date" name="datum" value="{{ f_datum }}" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;">
+    <input type="text" name="leverancier" value="{{ f_leverancier }}" placeholder="Leverancier" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:110px;">
+    <input type="text" name="transporteur" value="{{ f_transporteur }}" placeholder="Transporteur" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:110px;">
+    <input type="text" name="kenteken" value="{{ f_kenteken }}" placeholder="Kenteken" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:90px;">
+    <input type="text" name="materiaal" value="{{ f_materiaal }}" placeholder="Materiaal" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:100px;">
+    <input type="text" name="ordernummer" value="{{ f_ordernummer }}" placeholder="Ordernr." style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:100px;">
+    <select name="status" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;">
+        <option value="">Alle statussen</option>
+        {% for st in alle_statussen_voor_filter %}<option value="{{ st }}" {% if f_status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+    </select>
+    <input type="text" name="herkomst" value="{{ f_herkomst }}" placeholder="Herkomst" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:100px;">
+    <input type="text" name="bestemming" value="{{ f_bestemming }}" placeholder="Bestemming" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:100px;">
+    <button type="submit" style="padding:6px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;background:#fff;cursor:pointer;">Filteren</button>
+</form>
+
+{% if getoond %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="lv-tabel-kop">
+        <span style="width:90px;">Datum</span>
+        <span style="width:110px;">Referentie</span>
+        <span style="flex:1;">Leverancier</span>
+        <span style="width:90px;">Kenteken</span>
+        <span style="flex:1;">Materiaal</span>
+        <span style="width:160px;">Status</span>
+    </div>
+    {% for r in getoond %}
+    <div class="lv-tabel-rij">
+        <span style="width:90px;color:var(--gray-500);">{{ r.datum or '—' }}</span>
+        <span style="width:110px;font-family:var(--font-mono);">
+            {% if r.type == "order" %}<a href="/logistiek/orders/{{ r.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;">{{ r.referentie }}</a>
+            {% else %}<span style="color:var(--gray-500);">{{ r.referentie }}</span>{% endif %}
+        </span>
+        <span style="flex:1;color:var(--gray-700);">{{ r.leverancier or '—' }}</span>
+        <span style="width:90px;color:var(--gray-600);">{{ r.kenteken or '—' }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ r.materiaal or '—' }}</span>
+        <span style="width:160px;font-size:11px;font-weight:600;color:var(--gray-600);">{{ r.status }}</span>
+    </div>
+    {% endfor %}
+</div>
+<div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoond|length }} vrachten</div>
+{% else %}
+<div class="lege-staat">Geen vrachten gevonden voor deze filters.</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Live Operations", "live_operations", inhoud)
+    return render_template_string(pagina, getoond=getoond, kpi_onderweg=kpi_onderweg, kpi_aangekomen=kpi_aangekomen,
+                                    kpi_ingewogen=kpi_ingewogen, kpi_afgerond=kpi_afgerond,
+                                    alle_statussen_voor_filter=alle_statussen_voor_filter,
+                                    f_datum=f_datum, f_leverancier=f_leverancier, f_transporteur=f_transporteur,
+                                    f_kenteken=f_kenteken, f_materiaal=f_materiaal, f_ordernummer=f_ordernummer,
+                                    f_status=f_status, f_herkomst=f_herkomst, f_bestemming=f_bestemming)
