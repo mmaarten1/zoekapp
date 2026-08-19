@@ -274,7 +274,7 @@ def logistieke_order_detail(order_id):
             <div><b>Bruto:</b> {{ gekoppeld_weegrecord.bruto_gewicht or '—' }} kg</div>
             <div><b>Tarra:</b> {{ gekoppeld_weegrecord.tarra_gewicht or '—' }} kg</div>
             <div><b>Netto:</b> {{ gekoppeld_weegrecord.netto_gewicht or '—' }}{% if gekoppeld_weegrecord.netto_gewicht %} kg ({{ "%.3f"|format(gekoppeld_weegrecord.netto_gewicht|float / 1000) }} ton){% endif %}</div>
-            <div><b>Weegstatus:</b> {{ badges[gekoppeld_weegrecord.status].bol }} {{ badges[gekoppeld_weegrecord.status].label }}</div>
+            <div><b>Weegstatus:</b> {{ badges[gekoppeld_weegrecord.status].label }}</div>
             {% if gekoppeld_weegrecord.status == "Compleet" %}<div style="margin-top:8px;"><a href="/weegbrug/weegbon/{{ gekoppeld_weegrecord.id }}" target="_blank" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Weegbon bekijken (PDF) →</a></div>{% endif %}
         </div>
         {% else %}

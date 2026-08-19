@@ -39,6 +39,7 @@ from core import (
     mag_pagina_zien, vereist_afdeling_of_403, PAGINA_AFDELINGEN,
     laad_containers, bewaar_containers, CONTAINER_TYPES, CONTAINER_STATUSSEN,
     laad_logistieke_orders, bewaar_logistieke_orders, laad_weegbrug, laad_documenten,
+    laad_bedrijfslogo_instelling, bewaar_bedrijfslogo_instelling, LOGO_MAP, LOGO_POSITIES,
 )
 
 from bs4 import BeautifulSoup
@@ -3252,10 +3253,51 @@ def instellingen():
         <a href="/gebruikers-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
         <a href="/materialen-beheer" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Materialen beheren</a>
     </div>
+    <div class="info-kaart" style="max-width:400px;margin-top:16px;">
+        <div class="dg-kaart-titel">Bedrijfslogo (op de weegbon)</div>
+        {% if logo_instelling.bestandsnaam %}
+        <img src="/bedrijfslogo/{{ logo_instelling.bestandsnaam }}" style="max-width:160px;max-height:60px;margin-bottom:10px;display:block;">
+        {% else %}
+        <div style="font-size:12.5px;color:var(--gray-400);margin-bottom:10px;">Nog geen logo geüpload.</div>
+        {% endif %}
+        <form method="POST" action="/instellingen/logo" enctype="multipart/form-data">
+            <input type="file" name="logo" accept="image/*" style="font-size:12px;margin-bottom:8px;display:block;">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Positie op de weegbon</label>
+            <select name="positie" style="width:100%;padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;margin-top:2px;">
+                {% for p in logo_posities %}<option value="{{ p }}" {% if logo_instelling.positie == p %}selected{% endif %}>{{ p|capitalize }}</option>{% endfor %}
+            </select>
+            <button type="submit" style="padding:7px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Opslaan</button>
+        </form>
+    </div>
     {% endif %}
     """
     pagina = render_simple_page("Instellingen", "instellingen", inhoud)
-    return render_template_string(pagina, gebruikersnaam=session.get("gebruikersnaam",""), team=session.get("team",""), is_admin=is_huidige_gebruiker_admin())
+    return render_template_string(pagina, gebruikersnaam=session.get("gebruikersnaam",""), team=session.get("team",""),
+                                    is_admin=is_huidige_gebruiker_admin(), logo_instelling=laad_bedrijfslogo_instelling(),
+                                    logo_posities=LOGO_POSITIES)
+
+@app.route("/instellingen/logo", methods=["POST"])
+def instellingen_logo_upload():
+    if not is_huidige_gebruiker_admin():
+        return redirect(url_for("instellingen"))
+    instelling = laad_bedrijfslogo_instelling()
+    bestand = request.files.get("logo")
+    if bestand and bestand.filename:
+        _, extensie = os.path.splitext(bestand.filename)
+        if extensie.lower() in (".png", ".jpg", ".jpeg", ".svg", ".gif"):
+            if not os.path.exists(LOGO_MAP):
+                os.makedirs(LOGO_MAP)
+            nieuwe_bestandsnaam = f"logo{extensie.lower()}"
+            bestand.save(os.path.join(LOGO_MAP, nieuwe_bestandsnaam))
+            instelling["bestandsnaam"] = nieuwe_bestandsnaam
+    instelling["positie"] = request.form.get("positie", "links") if request.form.get("positie") in LOGO_POSITIES else instelling.get("positie", "links")
+    bewaar_bedrijfslogo_instelling(instelling)
+    return redirect(url_for("instellingen"))
+
+@app.route("/bedrijfslogo/<bestandsnaam>")
+def bedrijfslogo_bestand(bestandsnaam):
+    from flask import send_from_directory
+    return send_from_directory(LOGO_MAP, bestandsnaam)
 
 
 

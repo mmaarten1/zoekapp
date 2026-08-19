@@ -246,10 +246,11 @@ WEEGBRUG_FILE = datapad("weegbrug.json")
 # Probleem (🔴 gewicht-afwijking), Geannuleerd (⚪). Het "wacht op koppeling met
 # order" (🔵) is geen eigen status maar wordt afgeleid: leeg ordernummer.
 WEEGBRUG_STATUS_BADGES = {
-    "Ingewogen": {"kleur": "#f59e0b", "bol": "🟠", "label": "Aan het lossen — wacht op uitwegen"},
-    "Compleet": {"kleur": "#16a34a", "bol": "🟢", "label": "Ingewogen + uitgewogen"},
-    "Probleem": {"kleur": "#dc2626", "bol": "🔴", "label": "Probleem/afwijking"},
-    "Geannuleerd": {"kleur": "#94a3b8", "bol": "⚪", "label": "Geannuleerd"},
+    "Opdracht": {"kleur": "#94a3b8", "label": "Opdracht aangemaakt", "kort": "Opdracht"},
+    "Ingewogen": {"kleur": "#f59e0b", "label": "Aan het lossen — wacht op uitwegen", "kort": "Ingewogen"},
+    "Compleet": {"kleur": "#16a34a", "label": "Ingewogen en uitgewogen", "kort": "Compleet"},
+    "Probleem": {"kleur": "#dc2626", "label": "Afwijking in gewicht", "kort": "Afwijking"},
+    "Geannuleerd": {"kleur": "#94a3b8", "label": "Geannuleerd", "kort": "Geannuleerd"},
 }
 
 def laad_weegbrug():
@@ -1642,11 +1643,15 @@ def sidebar_html(actief):
         aantal_open_orders = 0
 
     items = [
-        ("live_operations", "/live-operations", "OP", "Live Operations"),
+        ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
+        ("live_operations", "/live-operations", "OP", "Live Operaties"),
+        ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),
+        ("dashboard", "/dashboard", "DB", "Dashboard"),
+        ("logistieke_orders", "/logistiek/orders", "LO", "Orders logistiek"),
+        ("notities", "/notities-overzicht", "NT", "Notities"),
         ("inzichten_logistiek", "/inzichten/logistiek", "IL", "Logistieke Inzichten"),
         ("zoeken", "/", "ZK", "Zoeken"),
         ("wereldkaart", "/wereldkaart", "WM", "World Map"),
-        ("dashboard", "/dashboard", "DB", "Dashboard"),
         ("inzichten", "/inzichten", "IZ", "Inzichten"),
         ("materialen", "/materialen", "MT", "Materials"),
         ("klanten", "/klanten", "KL", "Klanten"),
@@ -1655,9 +1660,6 @@ def sidebar_html(actief):
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
         ("logistiek", "/logistiek", "LG", "Logistiek"),
-        ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
-        ("logistieke_orders", "/logistiek/orders", "LO", "Orders (logistiek)"),
-        ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),
         ("transport_overview", "/transport-overview", "TO", "Transport Overview"),
         ("transport_planning", "/transport-planning", "TP", "Transport Planning"),
         ("transport_rates", "/transport-rates", "TR", "Transport Rates"),
@@ -1665,7 +1667,6 @@ def sidebar_html(actief):
         ("inzichten_financieel", "/inzichten/financieel", "IF", "Financiële Inzichten"),
         ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
         ("voorraad", "/voorraad", "VR", "Voorraad"),
-        ("notities", "/notities-overzicht", "NT", "Notities"),
         ("instellingen", "/instellingen", "IN", "Instellingen"),
     ]
     links = ""
@@ -1810,3 +1811,21 @@ ORDER_KLEUREN = {"Open": "#3b82f6", "Onderhandeling": "var(--brand-600)", "Gewon
 SHIPMENT_STATUSSEN = ["Planned", "Confirmed", "Loading", "Loaded", "In Transit", "Arrived", "Weighed", "Received", "Delivered", "Cancelled"]
 
 LANDEN = sorted(set(b["land"] for b in ENF_BEDRIJVEN))
+
+# ============================================================
+# Bedrijfslogo-instelling (voor op de weegbon: bestand + positie).
+# ============================================================
+LOGO_MAP = datapad("bedrijfslogo")
+LOGO_INSTELLING_FILE = datapad("logo_instelling.json")
+LOGO_POSITIES = ["links", "midden", "rechts"]
+
+def laad_bedrijfslogo_instelling():
+    try:
+        with open(LOGO_INSTELLING_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {"bestandsnaam": "", "positie": "links"}
+
+def bewaar_bedrijfslogo_instelling(instelling):
+    with open(LOGO_INSTELLING_FILE, "w", encoding="utf-8") as f:
+        json.dump(instelling, f, ensure_ascii=False, indent=2)
