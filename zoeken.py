@@ -851,6 +851,7 @@ HTML = '''
         {% if mag_pagina_zien('transport_planning') %}<a href="/transport-planning" class="sidebar-link"><span class="icoon">TP</span> Transport Planning</a>{% endif %}
         {% if mag_pagina_zien('transport_rates') %}<a href="/transport-rates" class="sidebar-link"><span class="icoon">TR</span> Transport Rates</a>{% endif %}
         {% if mag_pagina_zien('facturen') %}<a href="/facturen" class="sidebar-link"><span class="icoon">FA</span> Facturen</a>{% endif %}
+        {% if mag_pagina_zien('inzichten_financieel') %}<a href="/inzichten/financieel" class="sidebar-link"><span class="icoon">IF</span> Financiële Inzichten</a>{% endif %}
         {% if mag_pagina_zien('marktprijzen') %}<a href="/marktprijzen" class="sidebar-link"><span class="icoon">MP</span> Marktprijzen</a>{% endif %}
         {% if mag_pagina_zien('voorraad') %}<a href="/voorraad" class="sidebar-link"><span class="icoon">VR</span> Voorraad</a>{% endif %}
         <a href="/notities-overzicht" class="sidebar-link"><span class="icoon">NT</span> Notities</a>

@@ -2956,6 +2956,140 @@ def genereer_wachtwoord():
     tekens = string.ascii_letters + string.digits
     return "".join(secrets.choice(tekens) for _ in range(10))
 
+@app.route("/inzichten/financieel")
+def financiele_inzichten():
+    """Financiële Inzichten — alleen met echt berekenbare data. Bewust NIET gebouwd:
+    'Claims' en 'Credit notes' (geen datamodel hiervoor aanwezig), en 'Winst komende
+    30 dagen' (zelfde marge-datagat als bij Commerciële Inzichten — geen gekoppelde
+    inkoopprijs). Voor 'contractwaarde vs. werkelijke waarde' bestaat alleen een
+    contractVOLUME-veld (geen contractprijs), dus dat is hier volume, geen euro's."""
+    _guard = vereist_afdeling_of_403("inzichten_financieel")
+    if _guard: return _guard
+
+    alle_facturen = laad_facturen()
+    for f in alle_facturen:
+        f["status"] = bepaal_factuur_status(f)
+
+    def _bedrag_getal(f):
+        try:
+            return float(str(f.get("bedrag", "0")).replace(",", "."))
+        except (ValueError, TypeError):
+            return 0.0
+
+    openstaande_facturen = [f for f in alle_facturen if f.get("status") != "Betaald"]
+    te_laat_facturen = [f for f in alle_facturen if f.get("status") == "Te laat"]
+    totaal_openstaand = sum(_bedrag_getal(f) for f in openstaande_facturen)
+    totaal_te_laat = sum(_bedrag_getal(f) for f in te_laat_facturen)
+
+    # --- Gemiddelde betalingstermijn: (betaalddatum - factuurdatum), alleen betaalde facturen met beide data ---
+    betalingstermijnen = []
+    for f in alle_facturen:
+        if f.get("betaalddatum") and f.get("factuurdatum"):
+            try:
+                fd = datetime.date.fromisoformat(f["factuurdatum"])
+                bd = datetime.date.fromisoformat(f["betaalddatum"])
+                betalingstermijnen.append((bd - fd).days)
+            except (ValueError, TypeError):
+                pass
+    gem_betalingstermijn = round(sum(betalingstermijnen) / len(betalingstermijnen), 1) if betalingstermijnen else None
+
+    # --- Verwachte cashflow: openstaande facturen geprojecteerd op vervaldatum, komende 4 weken ---
+    _vandaag = datetime.date.today()
+    cashflow_weken = []
+    for i in range(4):
+        week_start = _vandaag + datetime.timedelta(days=i*7)
+        week_eind = week_start + datetime.timedelta(days=6)
+        bedrag_week = sum(_bedrag_getal(f) for f in openstaande_facturen if f.get("vervaldatum","") and week_start.isoformat() <= f["vervaldatum"] <= week_eind.isoformat())
+        cashflow_weken.append({"label": f"{week_start.strftime('%d-%m')} t/m {week_eind.strftime('%d-%m')}", "bedrag": round(bedrag_week, 2)})
+    max_cashflow_week = max([w["bedrag"] for w in cashflow_weken], default=1) or 1
+
+    # --- Nog te factureren orders: logistieke orders 'Klaar voor Finance', nog niet Gefactureerd ---
+    alle_logistieke_orders = laad_logistieke_orders()
+    nog_te_factureren = [o for o in alle_logistieke_orders if o.get("status") == "Klaar voor Finance"]
+
+    # --- Contractvolume vs. werkelijk geleverd volume (LET OP: volume, geen waarde — zie docstring) ---
+    alle_contracten = laad_contracten()
+    alle_shipments = laad_shipments()
+    contract_vergelijking = []
+    for c in alle_contracten:
+        try:
+            contract_vol = float(str(c.get("contract_volume","0")).replace(",",""))
+        except (ValueError, TypeError):
+            contract_vol = 0
+        werkelijk_vol = sum(
+            parse_hoeveelheid_getal(s.get("werkelijk_hoeveelheid","")) for s in alle_shipments
+            if s.get("materiaal","") == c.get("materiaal","") and (s.get("origin_leverancier","") == c.get("tegenpartij","") or s.get("destination_naam","") == c.get("tegenpartij",""))
+        )
+        contract_vergelijking.append({
+            "referentie": c.get("referentie",""), "tegenpartij": c.get("tegenpartij",""), "materiaal": c.get("materiaal",""),
+            "contract_volume": round(contract_vol,1), "werkelijk_volume": round(werkelijk_vol,1),
+            "verschil": round(werkelijk_vol - contract_vol, 1),
+        })
+
+    inhoud = """
+<div class="page-title">Financiële Inzichten</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Rapportages voor Finance — facturen, cashflow, nog te factureren.</p>
+
+<style>
+.fi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; margin-bottom:24px; }
+.fi-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:16px 4px; }
+.fi-getal { font-size:1.5rem; font-weight:800; color:var(--gray-800); }
+.fi-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.6px; margin-top:4px; font-weight:600; }
+.fi-sectie { border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:24px; }
+.fi-kop { padding:12px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:12.5px; font-weight:700; color:var(--gray-700); }
+.fi-rij { display:flex; align-items:center; padding:9px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
+</style>
+
+<div class="fi-grid">
+    <div class="fi-kaart"><div class="fi-getal">{{ openstaande_facturen|length }}</div><div class="fi-label">Openstaande facturen</div></div>
+    <div class="fi-kaart" style="{% if te_laat_facturen %}border-color:#fecaca;{% endif %}"><div class="fi-getal" style="{% if te_laat_facturen %}color:#dc2626;{% endif %}">{{ te_laat_facturen|length }}</div><div class="fi-label">Overdue (te laat)</div></div>
+    <div class="fi-kaart"><div class="fi-getal">€{{ "{:,.0f}".format(totaal_openstaand).replace(",", ".") }}</div><div class="fi-label">Totaal openstaand</div></div>
+    <div class="fi-kaart"><div class="fi-getal">{% if gem_betalingstermijn %}{{ gem_betalingstermijn }}{% else %}—{% endif %}</div><div class="fi-label">Gem. betalingstermijn (dagen)</div></div>
+    <div class="fi-kaart"><div class="fi-getal">{{ nog_te_factureren|length }}</div><div class="fi-label">Nog te factureren orders</div></div>
+</div>
+
+<div class="fi-sectie">
+    <div class="fi-kop">Verwachte cashflow (komende 4 weken, o.b.v. vervaldatum openstaande facturen)</div>
+    {% for w in cashflow_weken %}
+    <div class="fi-rij">
+        <span style="width:160px;color:var(--gray-500);">{{ w.label }}</span>
+        <div style="flex:1;background:var(--gray-100);border-radius:4px;height:16px;overflow:hidden;margin-right:10px;">
+            <div style="background:var(--brand-600);height:100%;width:{{ (w.bedrag/max_cashflow_week*100)|round(1) }}%;"></div>
+        </div>
+        <span style="width:100px;text-align:right;font-family:var(--font-mono);color:var(--gray-700);">€{{ "{:,.0f}".format(w.bedrag).replace(",", ".") }}</span>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="fi-sectie">
+    <div class="fi-kop">Nog te factureren orders</div>
+    {% for o in nog_te_factureren %}
+    <div class="fi-rij"><a href="/logistiek/orders/{{ o.id }}" style="flex:1;color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a><span style="color:var(--gray-500);">{{ o.leverancier or '—' }}</span><span style="width:100px;text-align:right;color:var(--gray-600);">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} ton{% endif %}</span></div>
+    {% else %}
+    <div class="fi-rij" style="color:var(--gray-300);">Niets openstaand.</div>
+    {% endfor %}
+</div>
+
+<div class="fi-sectie">
+    <div class="fi-kop">Contractvolume vs. werkelijk geleverd volume <span style="font-weight:400;color:var(--gray-400);">(volume, geen euro's — contracten hebben geen prijsveld)</span></div>
+    {% for c in contract_vergelijking %}
+    <div class="fi-rij">
+        <span style="flex:1;color:var(--gray-700);">{{ c.referentie }} — {{ c.tegenpartij }} ({{ c.materiaal }})</span>
+        <span style="width:110px;text-align:right;color:var(--gray-500);">Contract: {{ c.contract_volume }}t</span>
+        <span style="width:110px;text-align:right;color:var(--gray-500);">Werkelijk: {{ c.werkelijk_volume }}t</span>
+        <span style="width:100px;text-align:right;font-weight:700;color:{{ '#16a34a' if c.verschil >= 0 else '#dc2626' }};">{{ '+' if c.verschil >= 0 else '' }}{{ c.verschil }}t</span>
+    </div>
+    {% else %}
+    <div class="fi-rij" style="color:var(--gray-300);">Geen contracten geregistreerd.</div>
+    {% endfor %}
+</div>
+    """
+    pagina = render_simple_page("Financiële Inzichten", "inzichten_financieel", inhoud)
+    return render_template_string(pagina, openstaande_facturen=openstaande_facturen, te_laat_facturen=te_laat_facturen,
+                                    totaal_openstaand=totaal_openstaand, gem_betalingstermijn=gem_betalingstermijn,
+                                    cashflow_weken=cashflow_weken, max_cashflow_week=max_cashflow_week,
+                                    nog_te_factureren=nog_te_factureren, contract_vergelijking=contract_vergelijking)
+
 
 @app.route("/gebruikers-beheer", methods=["GET", "POST"])
 def gebruikers_beheer():
