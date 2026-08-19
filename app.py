@@ -2386,11 +2386,25 @@ def containerbeheer_pagina():
                 "id": str(uuid.uuid4()),
                 "container_nummer": request.form.get("container_nummer", "").strip(),
                 "type": request.form.get("type", "").strip(),
-                "status": request.form.get("status", "Leeg"),
+                "status": request.form.get("status", "Booking"),
                 "gekoppelde_shipment_id": request.form.get("gekoppelde_shipment_id", "").strip(),
                 "locatie": request.form.get("locatie", "").strip(),
                 "gewicht": request.form.get("gewicht", "").strip(),
                 "notitie": request.form.get("notitie", "").strip(),
+                "land_herkomst": request.form.get("land_herkomst", "").strip(),
+                "leverancier": request.form.get("leverancier", "").strip(),
+                "laadlocatie": request.form.get("laadlocatie", "").strip(),
+                "haven": request.form.get("haven", "").strip(),
+                "reederij": request.form.get("reederij", "").strip(),
+                "eta": request.form.get("eta", "").strip(),
+                "etd": request.form.get("etd", "").strip(),
+                "vessel": request.form.get("vessel", "").strip(),
+                "bookingnummer": request.form.get("bookingnummer", "").strip(),
+                "sealnummer": request.form.get("sealnummer", "").strip(),
+                "materiaal": request.form.get("materiaal", "").strip(),
+                "bestemming": request.form.get("bestemming", "").strip(),
+                "fabriek": request.form.get("fabriek", "").strip(),
+                "transporteur": request.form.get("transporteur", "").strip(),
                 "gebruiker": session.get("gebruikersnaam", ""),
                 "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
             }
@@ -2430,6 +2444,25 @@ def containerbeheer_pagina():
 
     open_shipments_voor_koppeling = [s for s in laad_shipments() if s.get("status") not in ("Delivered", "Cancelled")]
 
+    filter_land_cont = request.args.get("filter_land", "")
+    if filter_land_cont:
+        getoonde_containers = [c for c in getoonde_containers if c.get("land_herkomst") == filter_land_cont]
+
+    leverancier_namen_cont = sorted({b["naam"] for b in ENF_BEDRIJVEN})
+    fabriek_namen_cont = sorted({b["naam"] for b in PAPIERFABRIEKEN})
+    landen_herkomst = sorted({c.get("land_herkomst","") for c in containers if c.get("land_herkomst")})
+
+    per_land = []
+    for land in landen_herkomst:
+        containers_land = [c for c in containers if c.get("land_herkomst") == land]
+        per_land.append({
+            "land": land,
+            "onderweg": len([c for c in containers_land if c.get("status") in ("Op zee", "Onderweg", "Transport gepland")]),
+            "aangekomen": len([c for c in containers_land if c.get("status") in ("Aangekomen haven", "Douane", "Vrijgegeven")]),
+            "afgerond": len([c for c in containers_land if c.get("status") in ("Geleverd", "Afgerond")]),
+        })
+    per_land.sort(key=lambda l: l["land"])
+
     inhoud = """
 <style>
 .log-tabel-rij { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:13px; }
@@ -2440,7 +2473,7 @@ def containerbeheer_pagina():
 </div>
 <div class="page-title">Containerbeheer</div>
 
-<div class="info-kaart" style="max-width:460px;margin-bottom:20px;">
+<div class="info-kaart" style="max-width:560px;margin-bottom:20px;">
     <div class="dg-kaart-titel">Container toevoegen</div>
     <form method="POST">
         <input type="hidden" name="actie" value="toevoegen">
@@ -2451,8 +2484,38 @@ def containerbeheer_pagina():
             </select>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-            <input type="text" name="locatie" placeholder="Locatie (bv. Alblasserdam)" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="land_herkomst" placeholder="Land van herkomst" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="leverancier" placeholder="Leverancier" list="leveranciers_lijst_cont" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <datalist id="leveranciers_lijst_cont">{% for naam in leverancier_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="laadlocatie" placeholder="Laadlocatie" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="haven" placeholder="Haven" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="reederij" placeholder="Reederij" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="vessel" placeholder="Vessel" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div><label style="font-size:10.5px;color:var(--gray-400);">ETD</label><input type="date" name="etd" style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;box-sizing:border-box;font-family:inherit;"></div>
+            <div><label style="font-size:10.5px;color:var(--gray-400);">ETA</label><input type="date" name="eta" style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;box-sizing:border-box;font-family:inherit;"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="bookingnummer" placeholder="Bookingnummer" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="sealnummer" placeholder="Sealnummer" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="materiaal" placeholder="Materiaal" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
             <input type="text" name="gewicht" placeholder="Gewicht (ton, optioneel)" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="bestemming" placeholder="Bestemming" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="fabriek" placeholder="Fabriek (indien bekend)" list="fabrieken_lijst_cont" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <datalist id="fabrieken_lijst_cont">{% for naam in fabriek_namen_cont %}<option value="{{ naam }}">{% endfor %}</datalist>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="locatie" placeholder="Huidige locatie" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="transporteur" placeholder="Transporteur" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
         </div>
         <select name="gekoppelde_shipment_id" style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;margin-bottom:8px;box-sizing:border-box;">
             <option value="">Geen shipment gekoppeld</option>
@@ -2463,35 +2526,56 @@ def containerbeheer_pagina():
     </form>
 </div>
 
-<form method="GET" style="margin-bottom:16px;">
+<form method="GET" style="margin-bottom:16px;display:flex;gap:8px;">
     <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
         <option value="">Alle statussen</option>
         {% for st in container_statussen %}<option value="{{ st }}" {% if filter_status_cont == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
     </select>
+    <select name="filter_land" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle landen</option>
+        {% for land in landen_herkomst %}<option value="{{ land }}" {% if filter_land_cont == land %}selected{% endif %}>{{ land }}</option>{% endfor %}
+    </select>
 </form>
+
+{% if per_land %}
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Per land van herkomst</div>
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
+    {% for l in per_land %}
+    <a href="/logistiek/containers?filter_land={{ l.land|urlencode }}" style="text-decoration:none;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px 16px;min-width:180px;">
+        <div style="font-size:12.5px;font-weight:700;color:var(--gray-800);margin-bottom:8px;">{{ l.land }}</div>
+        <span style="display:inline-block;margin-right:12px;font-size:11.5px;color:var(--gray-500);">Onderweg: <b>{{ l.onderweg }}</b></span>
+        <span style="display:inline-block;margin-right:12px;font-size:11.5px;color:var(--gray-500);">Aangekomen: <b>{{ l.aangekomen }}</b></span>
+        <span style="display:inline-block;font-size:11.5px;color:var(--gray-500);">Afgerond: <b>{{ l.afgerond }}</b></span>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
 
 {% if getoonde_containers %}
 <div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
     <div class="log-tabel-kop">
-        <span style="flex:1.2;">Containernummer</span>
-        <span style="width:100px;">Type</span>
-        <span style="flex:1;">Locatie</span>
-        <span style="flex:1;">Gekoppelde shipment</span>
-        <span style="width:130px;">Status</span>
+        <span style="flex:1.1;">Containernummer</span>
+        <span style="width:90px;">Herkomst</span>
+        <span style="flex:1;">Leverancier</span>
+        <span style="flex:1;">Materiaal</span>
+        <span style="width:90px;">ETA</span>
+        <span style="width:170px;">Status</span>
         <span style="width:40px;"></span>
     </div>
     {% for c in getoonde_containers %}
     <div class="log-tabel-rij">
-        <span style="flex:1.2;font-weight:600;color:var(--gray-800);font-family:var(--font-mono);">{{ c.container_nummer }}</span>
-        <span style="width:100px;color:var(--gray-500);">{{ c.type or '—' }}</span>
-        <span style="flex:1;color:var(--gray-600);">{{ c.locatie or '—' }}</span>
-        <span style="flex:1;color:var(--gray-600);">{{ c.shipment_referentie or '—' }}</span>
-        <span style="width:130px;">
+        <span style="flex:1.1;font-weight:600;color:var(--gray-800);font-family:var(--font-mono);">{{ c.container_nummer }}</span>
+        <span style="width:90px;color:var(--gray-500);">{{ c.land_herkomst or '—' }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ c.leverancier or c.shipment_referentie or '—' }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ c.materiaal or '—' }}</span>
+        <span style="width:90px;color:var(--gray-600);">{{ c.eta or '—' }}</span>
+        <span style="width:170px;">
             <form method="POST" style="margin:0;">
                 <input type="hidden" name="actie" value="status_wijzigen">
                 <input type="hidden" name="container_id" value="{{ c.id }}">
                 <select name="nieuwe_status" onchange="this.form.submit()" style="font-size:11.5px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
                     {% for st in container_statussen %}<option value="{{ st }}" {% if c.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    {% if c.status not in container_statussen %}<option value="{{ c.status }}" selected>{{ c.status }} (oud)</option>{% endif %}
                 </select>
             </form>
         </span>
@@ -2513,7 +2597,9 @@ def containerbeheer_pagina():
     pagina = render_simple_page("Containerbeheer", "logistiek", inhoud)
     return render_template_string(pagina, getoonde_containers=getoonde_containers, filter_status_cont=filter_status_cont,
                                     container_types=CONTAINER_TYPES, container_statussen=CONTAINER_STATUSSEN,
-                                    open_shipments=open_shipments_voor_koppeling)
+                                    open_shipments=open_shipments_voor_koppeling, leverancier_namen=leverancier_namen_cont,
+                                    fabriek_namen_cont=fabriek_namen_cont, landen_herkomst=landen_herkomst,
+                                    filter_land_cont=filter_land_cont, per_land=per_land)
 
 @app.route("/facturen", methods=["GET", "POST"])
 def facturen_pagina():

@@ -103,6 +103,7 @@ PAGINA_AFDELINGEN = {
     "afhandeling": ["logistiek", "weegbrug"],
     "logistieke_orders_finance": ["finance", "logistiek", "weegbrug"],
     "transport_planning": ["logistiek"],
+    "transport_rates": ["logistiek"],
     "facturen": ["finance"],
 }
 
@@ -187,7 +188,16 @@ def bewaar_shipments(data):
 
 CONTAINERS_FILE = datapad("containers.json")
 CONTAINER_TYPES = ["20ft", "40ft", "40ft HC", "Open top", "Flat rack", "Reefer"]
-CONTAINER_STATUSSEN = ["Leeg", "Beladen", "Onderweg", "Op locatie", "Gelost", "Retour"]
+# Uitgebreide statusflow voor internationale/zeevracht-containertracking.
+# Let op: bestaande containers met een oudere status (Leeg/Beladen/Onderweg/
+# Op locatie/Gelost/Retour) blijven gewoon geldig staan — die tekst wordt niet
+# aangepast, alleen de KEUZELIJST voor nieuwe/gewijzigde containers is nu
+# groter. Dit voorkomt dat bestaande data ongeldig lijkt na deze uitbreiding.
+CONTAINER_STATUSSEN = [
+    "Booking", "Empty container", "Laden", "Vertrokken", "Op zee",
+    "Aangekomen haven", "Douane", "Vrijgegeven", "Transport gepland",
+    "Onderweg", "Geleverd", "Afgerond",
+]
 
 def laad_containers():
     try:
@@ -1616,6 +1626,7 @@ def sidebar_html(actief):
         ("logistieke_orders", "/logistiek/orders", "LO", "Orders (logistiek)"),
         ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),
         ("transport_planning", "/transport-planning", "TP", "Transport Planning"),
+        ("transport_rates", "/transport-rates", "TR", "Transport Rates"),
         ("facturen", "/facturen", "FA", "Facturen"),
         ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
         ("voorraad", "/voorraad", "VR", "Voorraad"),
