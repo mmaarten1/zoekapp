@@ -92,6 +92,7 @@ PAGINA_AFDELINGEN = {
     "zoeken": ["accountmanager", "backoffice", "finance"],
     "wereldkaart": ["accountmanager", "backoffice", "finance"],
     "instellingen": ["accountmanager", "backoffice", "finance"],
+    "inzichten": ["accountmanager"],
     "klanten": ["accountmanager", "backoffice"],
     "leveranciers": ["accountmanager", "backoffice"],
     "contacten": ["accountmanager", "backoffice"],

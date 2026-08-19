@@ -9,7 +9,7 @@ Registratie in app.py met: app.register_blueprint(dashboard_bp)
 """
 import json
 import datetime
-from flask import Blueprint, session, render_template_string
+from flask import Blueprint, session, render_template_string, request
 
 from core import (
     datapad, laad_status, laad_shipments, laad_voorraad, laad_orders,
@@ -18,7 +18,7 @@ from core import (
     parse_hoeveelheid_getal, bereken_afstand_km, bepaal_shipment_flow_type,
     shipment_hoeveelheid, render_simple_page, ENF_BEDRIJVEN, LANDEN,
     effectieve_afdeling, laad_weegbrug, laad_logistieke_orders, laad_transport_planning,
-    laad_containers,
+    laad_containers, vereist_afdeling_of_403,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -700,49 +700,200 @@ def dashboard():
         aantal_forwarders=aantal_forwarders, aantal_transport_steden=aantal_transport_steden,
         placeholders=placeholders,
         activiteit=activiteit)
+
 @dashboard_bp.route("/inzichten")
 def inzichten():
-    per_land = {}
-    per_materiaal = {}
-    for b in ENF_BEDRIJVEN:
-        land = b.get("land", "Onbekend")
-        per_land[land] = per_land.get(land, 0) + 1
-        for m in [x.strip() for x in b.get("materialen", "").split(",") if x.strip()]:
-            per_materiaal[m] = per_materiaal.get(m, 0) + 1
+    """Commerciële Inzichten: rapportages op materiaal+land, alleen met echt
+    berekenbare data. Marge-onderdelen zijn bewust weggelaten — daarvoor
+    ontbreekt een gekoppelde inkoopprijs (zie afspraak met gebruiker)."""
+    _guard = vereist_afdeling_of_403("inzichten")
+    if _guard: return _guard
 
-    top_landen = sorted(per_land.items(), key=lambda x: -x[1])[:10]
-    top_materialen = sorted(per_materiaal.items(), key=lambda x: -x[1])[:10]
-    max_land = max([a for _, a in top_landen], default=1)
-    max_mat = max([a for _, a in top_materialen], default=1)
+    LANDEN_KEUZE = ["United Kingdom", "Spain", "France", "Germany", "Netherlands"]
+    LAND_LABELS = {"United Kingdom": "UK", "Spain": "Spanje", "France": "Frankrijk", "Germany": "Duitsland", "Netherlands": "Nederland"}
+
+    alle_orders = laad_orders()
+    materiaal_opties = sorted({o.get("materiaal","").strip() for o in alle_orders if o.get("materiaal","").strip()})
+    gekozen_materiaal = request.args.get("materiaal", "")
+    gekozen_land = request.args.get("land", "")
+
+    resultaat_html = ""
+    if gekozen_materiaal and gekozen_land:
+        _bedrijf_land_lookup = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
+
+        def _order_getal(o):
+            try:
+                return float(str(o.get("prijs","0")).replace(",",".").replace("€",""))
+            except (ValueError, TypeError):
+                return 0.0
+
+        def _order_hoeveelheid(o):
+            return parse_hoeveelheid_getal(o.get("hoeveelheid",""))
+
+        gefilterde_orders = [
+            o for o in alle_orders
+            if o.get("materiaal","").strip() == gekozen_materiaal
+            and _bedrijf_land_lookup.get(o.get("bedrijf",""), "") == gekozen_land
+        ]
+        gewonnen_orders = [o for o in gefilterde_orders if o.get("status") == "Gewonnen"]
+
+        # --- Omzet deze maand vs. vorige maand ---
+        _vandaag = datetime.date.today()
+        _deze_maand_key = (_vandaag.year, _vandaag.month)
+        _vorige_maand_datum = (_vandaag.replace(day=1) - datetime.timedelta(days=1))
+        _vorige_maand_key = (_vorige_maand_datum.year, _vorige_maand_datum.month)
+
+        def _maand_key(datum_str):
+            try:
+                d = datetime.date.fromisoformat(datum_str)
+                return (d.year, d.month)
+            except (ValueError, TypeError):
+                return None
+
+        omzet_deze_maand = sum(_order_getal(o) for o in gewonnen_orders if _maand_key(o.get("datum","")) == _deze_maand_key)
+        omzet_vorige_maand = sum(_order_getal(o) for o in gewonnen_orders if _maand_key(o.get("datum","")) == _vorige_maand_key)
+        omzet_verschil_pct = round((omzet_deze_maand - omzet_vorige_maand) / omzet_vorige_maand * 100, 1) if omzet_vorige_maand > 0 else None
+
+        # --- Gemiddelde verkoopprijs per ton ---
+        totaal_omzet_gewonnen = sum(_order_getal(o) for o in gewonnen_orders)
+        totaal_volume_gewonnen = sum(_order_hoeveelheid(o) for o in gewonnen_orders)
+        gem_verkoopprijs_per_ton = round(totaal_omzet_gewonnen / totaal_volume_gewonnen, 2) if totaal_volume_gewonnen > 0 else None
+
+        # --- Volumeontwikkeling per maand (laatste 6 maanden) ---
+        _maand_labels = []
+        _maand_sleutels = []
+        _cursor = _vandaag.replace(day=1)
+        for _ in range(6):
+            _maand_sleutels.append((_cursor.year, _cursor.month))
+            _maand_labels.append(_cursor.strftime("%b %Y"))
+            _cursor = (_cursor - datetime.timedelta(days=1)).replace(day=1)
+        _maand_sleutels.reverse()
+        _maand_labels.reverse()
+        volume_per_maand = []
+        for sleutel, label in zip(_maand_sleutels, _maand_labels):
+            vol = sum(_order_hoeveelheid(o) for o in gewonnen_orders if _maand_key(o.get("datum","")) == sleutel)
+            volume_per_maand.append({"label": label, "volume": round(vol, 1)})
+        max_volume_maand = max([v["volume"] for v in volume_per_maand], default=1) or 1
+
+        # --- Prijsontwikkeling per materiaal (uit marktprijzen, niet land-specifiek) ---
+        alle_marktprijzen = laad_marktprijzen()
+        prijspunten_materiaal = sorted(
+            [p for p in alle_marktprijzen if p.get("materiaal","") == gekozen_materiaal],
+            key=lambda p: p.get("datum","")
+        )[-12:]
+
+        # --- Gemiddeld laadgewicht per leverancier (weegbrug, materiaal+land-gefilterd) ---
+        alle_weegrecords = laad_weegbrug()
+        weegrecords_gefilterd = [
+            r for r in alle_weegrecords
+            if r.get("materiaal","").strip() == gekozen_materiaal
+            and _bedrijf_land_lookup.get(r.get("leverancier",""), "") == gekozen_land
+            and r.get("netto_gewicht")
+        ]
+        per_leverancier = {}
+        for r in weegrecords_gefilterd:
+            lev = r.get("leverancier","Onbekend")
+            per_leverancier.setdefault(lev, []).append(float(r["netto_gewicht"]))
+        gem_laadgewicht_per_leverancier = sorted(
+            [{"leverancier": lev, "gemiddeld": round(sum(gewichten)/len(gewichten), 0), "aantal": len(gewichten)} for lev, gewichten in per_leverancier.items()],
+            key=lambda x: -x["gemiddeld"]
+        )
+
+        resultaat_html = render_template_string("""
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Omzet</div>
+<div class="ci-grid" style="margin-bottom:24px;">
+    <div class="ci-kaart">
+        <div class="ci-getal">€{{ "{:,.0f}".format(omzet_deze_maand).replace(",", ".") }}</div>
+        <div class="ci-label">Omzet deze maand</div>
+        {% if omzet_verschil_pct is not none %}<div style="font-size:11.5px;color:{{ '#16a34a' if omzet_verschil_pct >= 0 else '#dc2626' }};margin-top:4px;">{{ '+' if omzet_verschil_pct >= 0 else '' }}{{ omzet_verschil_pct }}% t.o.v. vorige maand</div>{% endif %}
+    </div>
+    <div class="ci-kaart">
+        <div class="ci-getal">€{{ "{:,.0f}".format(omzet_vorige_maand).replace(",", ".") }}</div>
+        <div class="ci-label">Omzet vorige maand</div>
+    </div>
+    <div class="ci-kaart">
+        <div class="ci-getal">{% if gem_verkoopprijs_per_ton %}€{{ gem_verkoopprijs_per_ton }}{% else %}—{% endif %}</div>
+        <div class="ci-label">Gem. verkoopprijs per ton (gewonnen)</div>
+    </div>
+</div>
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Volumeontwikkeling per maand</div>
+<div style="margin-bottom:24px;">
+    {% for v in volume_per_maand %}
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
+        <span style="width:80px;font-size:11.5px;color:var(--gray-500);">{{ v.label }}</span>
+        <div style="flex:1;background:var(--gray-100);border-radius:4px;height:16px;overflow:hidden;">
+            <div style="background:var(--brand-600);height:100%;width:{{ (v.volume/max_volume_maand*100)|round(1) }}%;"></div>
+        </div>
+        <span style="width:70px;text-align:right;font-size:11.5px;color:var(--gray-600);font-family:var(--font-mono);">{{ v.volume }} t</span>
+    </div>
+    {% endfor %}
+</div>
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Prijsontwikkeling {{ gekozen_materiaal }} (marktprijzen)</div>
+{% if prijspunten_materiaal %}
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:24px;">
+    {% for p in prijspunten_materiaal %}
+    <div style="display:flex;padding:7px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="width:110px;color:var(--gray-500);">{{ p.datum }}</span>
+        <span style="color:var(--gray-700);font-weight:600;">€{{ p.prijs_per_ton }} / ton</span>
+        <span style="margin-left:10px;color:var(--gray-400);">{{ p.bron or '' }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat" style="margin-bottom:24px;">Nog geen marktprijspunten voor {{ gekozen_materiaal }}.</div>
+{% endif %}
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Gemiddeld laadgewicht per leverancier</div>
+{% if gem_laadgewicht_per_leverancier %}
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
+    {% for l in gem_laadgewicht_per_leverancier %}
+    <div style="display:flex;padding:7px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="flex:1;color:var(--gray-700);">{{ l.leverancier }}</span>
+        <span style="width:120px;text-align:right;font-family:var(--font-mono);color:var(--gray-600);">{{ "{:,.0f}".format(l.gemiddeld) }} kg</span>
+        <span style="width:80px;text-align:right;color:var(--gray-400);">{{ l.aantal }}x</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">Geen weegrecords voor deze combinatie.</div>
+{% endif %}
+        """, omzet_deze_maand=omzet_deze_maand, omzet_vorige_maand=omzet_vorige_maand,
+             omzet_verschil_pct=omzet_verschil_pct, gem_verkoopprijs_per_ton=gem_verkoopprijs_per_ton,
+             volume_per_maand=volume_per_maand, max_volume_maand=max_volume_maand,
+             prijspunten_materiaal=prijspunten_materiaal, gekozen_materiaal=gekozen_materiaal,
+             gem_laadgewicht_per_leverancier=gem_laadgewicht_per_leverancier)
 
     inhoud = """
-    <div class="page-title">Inzichten</div>
-    <div class="dg-rij-2">
-        <div class="info-kaart">
-            <div class="dg-kaart-titel">Top 10 landen</div>
-            {% for land, aantal in top_landen %}
-            <a href="/?land={{ land }}" class="dg-bar-rij" style="text-decoration:none;">
-                <span class="dg-bar-label" style="color:var(--gray-700);">{{ land }}</span>
-                <div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (aantal/max_land*100)|round(1) }}%"></div></div>
-                <span class="dg-bar-getal">{{ aantal }}</span>
-            </a>
-            {% else %}
-            <div class="lege-staat">Nog geen data.</div>
-            {% endfor %}
-        </div>
-        <div class="info-kaart">
-            <div class="dg-kaart-titel">Top 10 materialen</div>
-            {% for mat, aantal in top_materialen %}
-            <a href="/?materiaal={{ mat }}" class="dg-bar-rij" style="text-decoration:none;">
-                <span class="dg-bar-label" style="color:var(--gray-700);">{{ mat }}</span>
-                <div class="dg-bar-track"><div class="dg-bar-fill" style="width:{{ (aantal/max_mat*100)|round(1) }}%"></div></div>
-                <span class="dg-bar-getal">{{ aantal }}</span>
-            </a>
-            {% else %}
-            <div class="lege-staat">Nog geen data.</div>
-            {% endfor %}
-        </div>
-    </div>
+<div class="page-title">Commerciële Inzichten</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Kies materiaal en land om rapportages te zien.</p>
+
+<style>
+.ci-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+.ci-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:16px 4px; }
+.ci-getal { font-size:1.5rem; font-weight:800; color:var(--gray-800); }
+.ci-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.6px; margin-top:4px; font-weight:600; }
+</style>
+
+<form method="GET" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+    <select name="materiaal" required style="padding:8px 12px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        <option value="">Materiaal kiezen...</option>
+        {% for m in materiaal_opties %}<option value="{{ m }}" {% if gekozen_materiaal == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+    </select>
+    <select name="land" required style="padding:8px 12px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        <option value="">Land kiezen...</option>
+        {% for land in landen_keuze %}<option value="{{ land }}" {% if gekozen_land == land %}selected{% endif %}>{{ land_labels[land] }}</option>{% endfor %}
+    </select>
+    <button type="submit" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Tonen</button>
+</form>
+
+{% if not gekozen_materiaal or not gekozen_land %}
+<div class="lege-staat">Kies hierboven een materiaal én land om de commerciële inzichten te zien.</div>
+{% else %}
+""" + resultaat_html + """
+{% endif %}
     """
     pagina = render_simple_page("Inzichten", "inzichten", inhoud)
-    return render_template_string(pagina, top_landen=top_landen, top_materialen=top_materialen, max_land=max_land, max_mat=max_mat)
+    return render_template_string(pagina, materiaal_opties=materiaal_opties, landen_keuze=LANDEN_KEUZE,
+                                    land_labels=LAND_LABELS, gekozen_materiaal=gekozen_materiaal, gekozen_land=gekozen_land)
