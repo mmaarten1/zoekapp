@@ -843,6 +843,7 @@ HTML = '''
         {% if mag_pagina_zien('orders') %}<a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">OR</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>{% endif %}
         {% if mag_pagina_zien('logistiek') %}<a href="/logistiek" class="sidebar-link"><span class="icoon">LG</span> Logistiek</a>{% endif %}
         {% if mag_pagina_zien('live_operations') %}<a href="/live-operations" class="sidebar-link"><span class="icoon">OP</span> Live Operations</a>{% endif %}
+        {% if mag_pagina_zien('inzichten_logistiek') %}<a href="/inzichten/logistiek" class="sidebar-link"><span class="icoon">IL</span> Logistieke Inzichten</a>{% endif %}
         {% if mag_pagina_zien('weegbrug') %}<a href="/weegbrug" class="sidebar-link"><span class="icoon">WB</span> Weegbrug</a>{% endif %}
         {% if mag_pagina_zien('logistieke_orders') %}<a href="/logistiek/orders" class="sidebar-link"><span class="icoon">LO</span> Orders (logistiek)</a>{% endif %}
         {% if mag_pagina_zien('afhandeling') %}<a href="/logistiek/afhandeling" class="sidebar-link"><span class="icoon">AF</span> Afhandeling</a>{% endif %}

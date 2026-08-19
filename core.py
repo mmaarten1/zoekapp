@@ -93,6 +93,7 @@ PAGINA_AFDELINGEN = {
     "wereldkaart": ["accountmanager", "backoffice", "finance"],
     "instellingen": ["accountmanager", "backoffice", "finance"],
     "inzichten": ["accountmanager"],
+    "inzichten_logistiek": ["logistiek"],
     "klanten": ["accountmanager", "backoffice"],
     "leveranciers": ["accountmanager", "backoffice"],
     "contacten": ["accountmanager", "backoffice"],
@@ -1641,6 +1642,7 @@ def sidebar_html(actief):
 
     items = [
         ("live_operations", "/live-operations", "OP", "Live Operations"),
+        ("inzichten_logistiek", "/inzichten/logistiek", "IL", "Logistieke Inzichten"),
         ("zoeken", "/", "ZK", "Zoeken"),
         ("wereldkaart", "/wereldkaart", "WM", "World Map"),
         ("dashboard", "/dashboard", "DB", "Dashboard"),

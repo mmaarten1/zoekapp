@@ -24,7 +24,7 @@ from core import (
     laad_logistieke_orders, bewaar_logistieke_orders, genereer_logistiek_ordernummer,
     LOGISTIEKE_ORDER_STATUSSEN, laad_weegbrug, bewaar_weegbrug, WEEGBRUG_STATUS_BADGES,
     ENF_BEDRIJVEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
-    laad_documenten,
+    laad_documenten, laad_orders, laad_shipments, bereken_voorraad_status, parse_hoeveelheid_getal,
 )
 
 logistieke_orders_bp = Blueprint("logistieke_orders", __name__)
@@ -603,3 +603,210 @@ def live_operations_pagina():
                                     f_datum=f_datum, f_leverancier=f_leverancier, f_transporteur=f_transporteur,
                                     f_kenteken=f_kenteken, f_materiaal=f_materiaal, f_ordernummer=f_ordernummer,
                                     f_status=f_status, f_herkomst=f_herkomst, f_bestemming=f_bestemming)
+
+@logistieke_orders_bp.route("/inzichten/logistiek")
+def logistieke_inzichten_pagina():
+    """Logistieke Inzichten — alleen met echt berekenbare data. Bewust NIET gebouwd:
+    'materialen die tekort dreigen te komen' (geen minimum-voorraadniveau vastgelegd),
+    'percentage volledig geladen trucks' (geen laadcapaciteit-referentie), en
+    'kosten door wachttijd' (geen wachttijd-tracking + tarief). Die vragen eerst
+    nieuwe datavelden vóór ze zinvol gebouwd kunnen worden."""
+    _guard = vereist_afdeling_of_403("inzichten_logistiek")
+    if _guard: return _guard
+
+    _vandaag = datetime.date.today()
+    voorraad_status = bereken_voorraad_status()
+    alle_verkooporders = laad_orders()
+    alle_logistieke_orders = laad_logistieke_orders()
+    alle_shipments = laad_shipments()
+    alle_weegrecords = laad_weegbrug()
+
+    # --- Beschikbaar volume nu + verwacht binnenkomend (7/14/30 dagen) ---
+    def _binnenkomend_binnen(dagen):
+        grens = (_vandaag + datetime.timedelta(days=dagen)).isoformat()
+        result = {}
+        for o in alle_logistieke_orders:
+            verwacht = o.get("verwachte_aankomst", "")
+            if verwacht and _vandaag.isoformat() <= verwacht <= grens and o.get("status") not in ("Afgerond", "Gefactureerd"):
+                mat = o.get("materiaal", "Onbekend")
+                result[mat] = result.get(mat, 0) + parse_hoeveelheid_getal(o.get("verwachte_hoeveelheid",""))
+        return result
+
+    binnenkomend_7d = _binnenkomend_binnen(7)
+    binnenkomend_14d = _binnenkomend_binnen(14)
+    binnenkomend_30d = _binnenkomend_binnen(30)
+    alle_materialen_volume = sorted(set(voorraad_status["fysiek_per_materiaal"].keys()) | set(binnenkomend_30d.keys()))
+    volume_overzicht = [{
+        "materiaal": m,
+        "nu": round(voorraad_status["fysiek_per_materiaal"].get(m, 0), 1),
+        "d7": round(binnenkomend_7d.get(m, 0), 1),
+        "d14": round(binnenkomend_14d.get(m, 0), 1),
+        "d30": round(binnenkomend_30d.get(m, 0), 1),
+    } for m in alle_materialen_volume]
+
+    # --- Klanten die binnenkort volume nodig hebben (open verkooporders, verwachte_datum binnen 14 dagen) ---
+    _grens_klant = (_vandaag + datetime.timedelta(days=14)).isoformat()
+    klanten_binnenkort = sorted(
+        [o for o in alle_verkooporders if o.get("status") in ("Open", "Onderhandeling") and o.get("verwachte_datum","") and _vandaag.isoformat() <= o["verwachte_datum"] <= _grens_klant],
+        key=lambda o: o.get("verwachte_datum","")
+    )
+
+    # --- Openstaande orders vs. beschikbaar volume (per materiaal) ---
+    open_vraag_per_materiaal = {}
+    for o in alle_verkooporders:
+        if o.get("status") in ("Open", "Onderhandeling"):
+            mat = o.get("materiaal", "Onbekend")
+            open_vraag_per_materiaal[mat] = open_vraag_per_materiaal.get(mat, 0) + parse_hoeveelheid_getal(o.get("hoeveelheid",""))
+    vraag_vs_aanbod = []
+    for m in sorted(set(open_vraag_per_materiaal.keys()) | set(voorraad_status["fysiek_per_materiaal"].keys())):
+        aanbod = voorraad_status["fysiek_per_materiaal"].get(m, 0) + binnenkomend_30d.get(m, 0)
+        vraag = open_vraag_per_materiaal.get(m, 0)
+        vraag_vs_aanbod.append({"materiaal": m, "vraag": round(vraag,1), "aanbod": round(aanbod,1), "tekort": round(vraag - aanbod, 1) if vraag > aanbod else 0})
+
+    # --- Leveranciers-volumetrend (laatste 30 dagen vs. de 30 dagen daarvoor) ---
+    _30d_geleden = (_vandaag - datetime.timedelta(days=30)).isoformat()
+    _60d_geleden = (_vandaag - datetime.timedelta(days=60)).isoformat()
+    def _weegdatum(r):
+        return r.get("aangemaakt","").split(" ")[0] if r.get("aangemaakt") else ""
+    def _weeg_iso(r):
+        d = _weegdatum(r)
+        try:
+            return datetime.datetime.strptime(d, "%d-%m-%Y").date().isoformat()
+        except (ValueError, TypeError):
+            return ""
+    per_leverancier_recent = {}
+    per_leverancier_vorige = {}
+    for r in alle_weegrecords:
+        if r.get("status") != "Compleet" or not r.get("leverancier"):
+            continue
+        d_iso = _weeg_iso(r)
+        netto = parse_hoeveelheid_getal(r.get("netto_gewicht","")) / 1000
+        if d_iso >= _30d_geleden:
+            per_leverancier_recent[r["leverancier"]] = per_leverancier_recent.get(r["leverancier"], 0) + netto
+        elif d_iso >= _60d_geleden:
+            per_leverancier_vorige[r["leverancier"]] = per_leverancier_vorige.get(r["leverancier"], 0) + netto
+    leverancier_trend = []
+    for lev in sorted(set(per_leverancier_recent.keys()) | set(per_leverancier_vorige.keys())):
+        recent = per_leverancier_recent.get(lev, 0)
+        vorige = per_leverancier_vorige.get(lev, 0)
+        verschil_pct = round((recent - vorige) / vorige * 100, 1) if vorige > 0 else None
+        leverancier_trend.append({"leverancier": lev, "recent": round(recent,1), "vorige": round(vorige,1), "verschil_pct": verschil_pct})
+    leverancier_trend.sort(key=lambda x: (x["verschil_pct"] is None, -(x["verschil_pct"] or 0)))
+
+    # --- Transportkosten: per ton, per route (land->land), hoogste kosten ---
+    shipments_met_kosten = [s for s in alle_shipments if s.get("transportkosten") and s.get("werkelijk_hoeveelheid")]
+    totaal_kosten = sum(parse_hoeveelheid_getal(s["transportkosten"]) for s in shipments_met_kosten)
+    totaal_ton_kosten = sum(parse_hoeveelheid_getal(s["werkelijk_hoeveelheid"]) for s in shipments_met_kosten)
+    kosten_per_ton_gemiddeld = round(totaal_kosten / totaal_ton_kosten, 2) if totaal_ton_kosten > 0 else None
+
+    per_route = {}
+    for s in shipments_met_kosten:
+        route = f"{s.get('origin_land','?')} → {s.get('destination_land','?')}"
+        per_route.setdefault(route, {"kosten": 0, "ton": 0})
+        per_route[route]["kosten"] += parse_hoeveelheid_getal(s["transportkosten"])
+        per_route[route]["ton"] += parse_hoeveelheid_getal(s["werkelijk_hoeveelheid"])
+    route_overzicht = sorted(
+        [{"route": r, "totaal_kosten": round(v["kosten"],2), "kosten_per_ton": round(v["kosten"]/v["ton"],2) if v["ton"]>0 else None} for r, v in per_route.items()],
+        key=lambda x: -x["totaal_kosten"]
+    )[:10]
+
+    # --- Vertraagde inkomende orders (verwachte_aankomst verstreken, nog niet gekoppeld/uitgewogen) ---
+    vertraagde_inkomend = [
+        o for o in alle_logistieke_orders
+        if o.get("verwachte_aankomst","") and o["verwachte_aankomst"] < _vandaag.isoformat()
+        and o.get("status") in ("Order aangemaakt", "Transport verwacht", "Truck aangekomen")
+    ]
+
+    inhoud = """
+<div class="page-title">Logistieke Inzichten</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Operationele rapportages voor Logistiek — voorraad, vraag/aanbod, transportkosten.</p>
+
+<style>
+.li-sectie { border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:24px; }
+.li-kop { padding:12px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:12.5px; font-weight:700; color:var(--gray-700); }
+.li-rij { display:flex; align-items:center; padding:9px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
+</style>
+
+<div class="li-sectie">
+    <div class="li-kop">Beschikbaar volume — nu en verwacht binnenkomend</div>
+    {% for v in volume_overzicht %}
+    <div class="li-rij">
+        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ v.materiaal }}</span>
+        <span style="width:90px;text-align:right;">Nu: <b>{{ v.nu }}t</b></span>
+        <span style="width:100px;text-align:right;color:var(--gray-500);">+7d: {{ v.d7 }}t</span>
+        <span style="width:100px;text-align:right;color:var(--gray-500);">+14d: {{ v.d14 }}t</span>
+        <span style="width:100px;text-align:right;color:var(--gray-500);">+30d: {{ v.d30 }}t</span>
+    </div>
+    {% else %}
+    <div class="li-rij" style="color:var(--gray-300);">Geen voorraad- of orderdata.</div>
+    {% endfor %}
+</div>
+
+<div class="li-sectie">
+    <div class="li-kop">Openstaande vraag vs. beschikbaar aanbod (incl. binnenkomend)</div>
+    {% for v in vraag_vs_aanbod %}
+    <div class="li-rij">
+        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ v.materiaal }}</span>
+        <span style="width:100px;text-align:right;color:var(--gray-500);">Vraag: {{ v.vraag }}t</span>
+        <span style="width:100px;text-align:right;color:var(--gray-500);">Aanbod: {{ v.aanbod }}t</span>
+        {% if v.tekort > 0 %}<span style="width:110px;text-align:right;color:#dc2626;font-weight:700;">Tekort: {{ v.tekort }}t</span>{% else %}<span style="width:110px;text-align:right;color:#16a34a;">Voldoende</span>{% endif %}
+    </div>
+    {% else %}
+    <div class="li-rij" style="color:var(--gray-300);">Geen data.</div>
+    {% endfor %}
+</div>
+
+<div class="li-sectie">
+    <div class="li-kop">Klanten die binnenkort volume nodig hebben (komende 14 dagen)</div>
+    {% for o in klanten_binnenkort %}
+    <div class="li-rij">
+        <span style="flex:1;color:var(--gray-700);">{{ o.bedrijf }}</span>
+        <span style="width:100px;color:var(--gray-500);">{{ o.materiaal }}</span>
+        <span style="width:90px;text-align:right;color:var(--gray-500);">{{ o.hoeveelheid }}</span>
+        <span style="width:100px;text-align:right;color:var(--gray-600);">{{ o.verwachte_datum }}</span>
+    </div>
+    {% else %}
+    <div class="li-rij" style="color:var(--gray-300);">Geen openstaande orders met verwachte datum binnen 14 dagen.</div>
+    {% endfor %}
+</div>
+
+<div class="li-sectie">
+    <div class="li-kop">Leveranciers-volumetrend (laatste 30 dagen t.o.v. de 30 dagen daarvoor)</div>
+    {% for l in leverancier_trend %}
+    <div class="li-rij">
+        <span style="flex:1;color:var(--gray-700);">{{ l.leverancier }}</span>
+        <span style="width:90px;text-align:right;color:var(--gray-500);">{{ l.recent }}t</span>
+        {% if l.verschil_pct is not none %}<span style="width:90px;text-align:right;font-weight:700;color:{{ '#16a34a' if l.verschil_pct >= 0 else '#dc2626' }};">{{ '+' if l.verschil_pct >= 0 else '' }}{{ l.verschil_pct }}%</span>{% else %}<span style="width:90px;text-align:right;color:var(--gray-300);">nieuw</span>{% endif %}
+    </div>
+    {% else %}
+    <div class="li-rij" style="color:var(--gray-300);">Geen weegdata beschikbaar.</div>
+    {% endfor %}
+</div>
+
+<div class="li-sectie">
+    <div class="li-kop">Transportkosten {% if kosten_per_ton_gemiddeld %}— gemiddeld €{{ kosten_per_ton_gemiddeld }}/ton{% endif %}</div>
+    {% for r in route_overzicht %}
+    <div class="li-rij">
+        <span style="flex:1;color:var(--gray-700);">{{ r.route }}</span>
+        <span style="width:120px;text-align:right;color:var(--gray-500);">€{{ "{:,.0f}".format(r.totaal_kosten) }} totaal</span>
+        <span style="width:120px;text-align:right;color:var(--gray-600);">{% if r.kosten_per_ton %}€{{ r.kosten_per_ton }}/ton{% else %}—{% endif %}</span>
+    </div>
+    {% else %}
+    <div class="li-rij" style="color:var(--gray-300);">Geen shipments met ingevulde transportkosten.</div>
+    {% endfor %}
+</div>
+
+{% if vertraagde_inkomend %}
+<div class="li-sectie">
+    <div class="li-kop" style="color:#dc2626;">Vertraagde inkomende orders ({{ vertraagde_inkomend|length }})</div>
+    {% for o in vertraagde_inkomend %}
+    <div class="li-rij"><a href="/logistiek/orders/{{ o.id }}" style="flex:1;color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a><span style="color:var(--gray-500);">{{ o.leverancier or '—' }}</span><span style="width:110px;text-align:right;color:#dc2626;">Verwacht: {{ o.verwachte_aankomst }}</span></div>
+    {% endfor %}
+</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Logistieke Inzichten", "inzichten_logistiek", inhoud)
+    return render_template_string(pagina, volume_overzicht=volume_overzicht, vraag_vs_aanbod=vraag_vs_aanbod,
+                                    klanten_binnenkort=klanten_binnenkort, leverancier_trend=leverancier_trend,
+                                    route_overzicht=route_overzicht, kosten_per_ton_gemiddeld=kosten_per_ton_gemiddeld,
+                                    vertraagde_inkomend=vertraagde_inkomend)
