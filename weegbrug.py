@@ -15,13 +15,16 @@ Registratie in app.py met: app.register_blueprint(weegbrug_bp)
 """
 import uuid
 import datetime
-from flask import Blueprint, request, session, redirect, url_for, render_template_string
+import os
+import io
+from flask import Blueprint, request, session, redirect, url_for, render_template_string, Response
 
 from core import (
     laad_weegbrug, bewaar_weegbrug, genereer_weegnummer, WEEGBRUG_STATUS_BADGES,
     laad_accountmanagers, ENF_BEDRIJVEN, is_huidige_gebruiker_admin,
     vereist_afdeling_of_403, render_simple_page, parse_hoeveelheid_getal,
     laad_logistieke_orders, bewaar_logistieke_orders,
+    DOCUMENTEN_MAP, laad_documenten, bewaar_documenten,
 )
 
 weegbrug_bp = Blueprint("weegbrug", __name__)
@@ -74,6 +77,20 @@ def weegbrug_pagina():
     <div class="dg-kaart"><div class="dg-icoon">🔵</div><div class="dg-getal">{{ kpi_wacht_op_koppeling|length }}</div><div class="dg-label">Wacht op orderkoppeling</div></div>
 </div>
 
+{% if voertuigen_op_locatie %}
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Voertuigen nu op locatie — klik om af te handelen</div>
+<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:24px;">
+    {% for r in voertuigen_op_locatie %}
+    <a href="/weegbrug/uitwegen/{{ r.id }}" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--gray-200);border-left:3px solid #f59e0b;border-radius:8px;padding:10px 14px;text-decoration:none;">
+        <span style="font-weight:700;color:var(--gray-800);font-family:var(--font-mono);width:100px;">{{ r.kenteken }}</span>
+        <span style="color:var(--gray-600);flex:1;">{{ r.leverancier or '—' }} — {{ r.materiaal or '—' }}</span>
+        <span style="color:var(--gray-400);font-size:11.5px;">{{ r.weegnummer }}</span>
+        <span style="color:var(--brand-600);font-weight:700;font-size:12px;">Uitwegen →</span>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
 <a href="/weegbrug/inwegen" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:8px 16px;border-radius:6px;">+ Nieuw voertuig inwegen</a>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;">
@@ -105,7 +122,7 @@ def weegbrug_pagina():
         <span style="flex:1;">Materiaal</span>
         <span style="width:130px;text-align:right;">Netto</span>
         <span style="width:160px;">Status</span>
-        <span style="width:90px;"></span>
+        <span style="width:150px;"></span>
     </div>
     {% for r in getoonde %}
     <div class="wb-tabel-rij">
@@ -119,14 +136,20 @@ def weegbrug_pagina():
         <span style="width:160px;">
             <span style="color:{{ badges[r.status].kleur }};font-size:11.5px;font-weight:700;">{{ badges[r.status].bol }} {{ badges[r.status].label }}</span>
         </span>
-        <span style="width:90px;">
+        <span style="width:150px;">
             {% if r.status == "Ingewogen" %}
             <a href="/weegbrug/uitwegen/{{ r.id }}" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Uitwegen →</a>
             <form method="POST" action="/weegbrug/annuleren" onsubmit="return confirm('Weegrecord annuleren?');" style="display:inline;margin:0;margin-left:6px;">
                 <input type="hidden" name="record_id" value="{{ r.id }}">
                 <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:11px;" title="Annuleren">✕</button>
             </form>
+            {% elif r.status == "Compleet" %}
+            <a href="/weegbrug/weegbon/{{ r.id }}" target="_blank" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Weegbon →</a>
             {% endif %}
+            <form method="POST" action="/weegbrug/verwijderen" onsubmit="return confirm('Deze weging definitief verwijderen? Dit kan niet ongedaan gemaakt worden.');" style="display:inline;margin:0;margin-left:6px;">
+                <input type="hidden" name="record_id" value="{{ r.id }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:11px;" title="Verwijderen">Verwijderen</button>
+            </form>
         </span>
     </div>
     {% endfor %}
@@ -296,6 +319,11 @@ def weegbrug_uitwegen(record_id):
                 gekoppelde_order["status"] = "Weegbon compleet"
                 bewaar_logistieke_orders(orders)
 
+        # Weegbon automatisch genereren en in het orderdossier opslaan zodra de weging compleet is.
+        if status == "Compleet":
+            pdf_bytes = _genereer_weegbon_pdf(record)
+            _bewaar_weegbon_bij_document(record, pdf_bytes)
+
         return redirect(url_for("weegbrug.weegbrug_pagina"))
 
     inhoud = """
@@ -332,3 +360,123 @@ def weegbrug_annuleren():
         record["status"] = "Geannuleerd"
         bewaar_weegbrug(records)
     return redirect(url_for("weegbrug.weegbrug_pagina"))
+
+@weegbrug_bp.route("/weegbrug/verwijderen", methods=["POST"])
+def weegbrug_verwijderen():
+    """Verwijdert een weegrecord definitief (anders dan annuleren, dat de status wijzigt maar het record behoudt).
+    Alleen de eigen medewerker of een admin mag dit. Als het record gekoppeld was aan een order, wordt de
+    koppeling ook aan die kant losgemaakt zodat er geen dode verwijzing achterblijft."""
+    _guard = vereist_afdeling_of_403("weegbrug")
+    if _guard: return _guard
+    record_id = request.form.get("record_id", "")
+    records = laad_weegbrug()
+    record = next((r for r in records if r["id"] == record_id), None)
+    if record and (record.get("weegbrugmedewerker_in") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()):
+        if record.get("ordernummer"):
+            orders = laad_logistieke_orders()
+            gekoppelde_order = next((o for o in orders if o.get("ordernummer") == record["ordernummer"]), None)
+            if gekoppelde_order and gekoppelde_order.get("gekoppeld_weegbrug_id") == record_id:
+                gekoppelde_order["gekoppeld_weegbrug_id"] = ""
+                bewaar_logistieke_orders(orders)
+        records = [r for r in records if r["id"] != record_id]
+        bewaar_weegbrug(records)
+    return redirect(url_for("weegbrug.weegbrug_pagina"))
+
+def _genereer_weegbon_pdf(record):
+    """Bouwt de weegbon als PDF-bytes met reportlab. Geeft alleen echte, ingevoerde data weer."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=20*mm, bottomMargin=20*mm, leftMargin=20*mm, rightMargin=20*mm)
+    stijlen = getSampleStyleSheet()
+    titel_stijl = ParagraphStyle("WeegbonTitel", parent=stijlen["Title"], fontSize=18, textColor=colors.HexColor("#0d5c62"))
+    label_stijl = ParagraphStyle("Label", parent=stijlen["Normal"], fontSize=9, textColor=colors.HexColor("#64748b"))
+
+    elementen = []
+    elementen.append(Paragraph("Weegbon", titel_stijl))
+    elementen.append(Paragraph(f"Weegnummer: <b>{record['weegnummer']}</b>", stijlen["Normal"]))
+    elementen.append(Spacer(1, 14))
+
+    def rij(label, waarde):
+        return [Paragraph(label, label_stijl), Paragraph(str(waarde) if waarde else "—", stijlen["Normal"])]
+
+    netto_kg = record.get("netto_gewicht", "")
+    netto_ton = f"{float(netto_kg)/1000:.3f} ton" if netto_kg else "—"
+
+    data = [
+        rij("Datum/tijd inwegen", record.get("aangemaakt", "")),
+        rij("Datum/tijd uitwegen", record.get("uitweegmoment", "").replace("T", " ") if record.get("uitweegmoment") else ""),
+        rij("Kenteken", record.get("kenteken", "")),
+        rij("Leverancier", record.get("leverancier", "")),
+        rij("Transporteur", record.get("transporteur", "")),
+        rij("Chauffeur", record.get("chauffeur", "")),
+        rij("Ordernummer", record.get("ordernummer", "")),
+        rij("Materiaal", record.get("materiaal", "")),
+        rij("Kwaliteit/product", record.get("kwaliteit", "")),
+        rij("Herkomst", record.get("herkomst", "")),
+        rij("Bestemming", record.get("bestemming", "")),
+        rij("Referentienummer leverancier", record.get("referentienummer_leverancier", "")),
+        rij("Bruto gewicht", f"{record.get('bruto_gewicht','')} kg" if record.get("bruto_gewicht") else ""),
+        rij("Tarra gewicht", f"{record.get('tarra_gewicht','')} kg" if record.get("tarra_gewicht") else ""),
+        rij("Netto gewicht", f"{netto_kg} kg  /  {netto_ton}" if netto_kg else ""),
+        rij("Weegbrugmedewerker (in)", record.get("weegbrugmedewerker_in", "")),
+        rij("Weegbrugmedewerker (uit)", record.get("weegbrugmedewerker_uit", "")),
+    ]
+    if record.get("opmerkingen"):
+        data.append(rij("Opmerkingen", record["opmerkingen"]))
+
+    tabel = Table(data, colWidths=[55*mm, 105*mm])
+    tabel.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("LINEBELOW", (0,0), (-1,-2), 0.4, colors.HexColor("#e2e8f0")),
+    ]))
+    elementen.append(tabel)
+    elementen.append(Spacer(1, 20))
+    elementen.append(Paragraph(f"Netto gewicht = bruto gewicht - tarra gewicht = {netto_kg} kg ({netto_ton})" if netto_kg else "", stijlen["Normal"]))
+
+    doc.build(elementen)
+    buffer.seek(0)
+    return buffer.read()
+
+def _bewaar_weegbon_bij_document(record, pdf_bytes):
+    """Slaat de weegbon-PDF op via het bestaande documentensysteem, gekoppeld aan het ordernummer als bekend."""
+    if not record.get("ordernummer"):
+        return
+    if not os.path.exists(DOCUMENTEN_MAP):
+        os.makedirs(DOCUMENTEN_MAP)
+    bestandsnaam = f"{uuid.uuid4()}.pdf"
+    with open(os.path.join(DOCUMENTEN_MAP, bestandsnaam), "wb") as f:
+        f.write(pdf_bytes)
+    alle = laad_documenten()
+    alle.setdefault(record["ordernummer"], [])
+    # Voorkom dubbele opslag als de weegbon al eerder gegenereerd/opgeslagen is voor dit weegnummer
+    al_opgeslagen = any(d.get("originele_naam","").startswith(f"Weegbon_{record['weegnummer']}") for d in alle[record["ordernummer"]])
+    if not al_opgeslagen:
+        alle[record["ordernummer"]].append({
+            "bestandsnaam": bestandsnaam,
+            "originele_naam": f"Weegbon_{record['weegnummer']}.pdf",
+            "geupload_door": "systeem (automatisch bij uitwegen)",
+            "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+        })
+        bewaar_documenten(alle)
+
+@weegbrug_bp.route("/weegbrug/weegbon/<record_id>")
+def weegbrug_weegbon(record_id):
+    _guard = vereist_afdeling_of_403("weegbrug")
+    if _guard: return _guard
+
+    records = laad_weegbrug()
+    record = next((r for r in records if r["id"] == record_id), None)
+    if not record or record.get("status") != "Compleet":
+        pagina = render_simple_page("Weegbon niet beschikbaar", "weegbrug", '<div class="page-title">Weegbon nog niet beschikbaar</div><div class="lege-staat">Deze weegbon kan pas gegenereerd worden zodra het voertuig volledig in- én uitgewogen is. <a href="/weegbrug">Terug naar Weegbrug</a></div>')
+        return render_template_string(pagina), 404
+
+    pdf_bytes = _genereer_weegbon_pdf(record)
+    return Response(pdf_bytes, mimetype="application/pdf",
+                     headers={"Content-Disposition": f'inline; filename="weegbon_{record["weegnummer"]}.pdf"'})
