@@ -10,12 +10,13 @@ Registratie in app.py met: app.register_blueprint(transport_planning_bp)
 """
 import uuid
 import datetime
-from flask import Blueprint, request, session, redirect, url_for, render_template_string
+from flask import Blueprint, request, session, redirect, url_for, render_template_string, jsonify
 
 from core import (
     laad_transport_planning, bewaar_transport_planning, genereer_transport_referentie,
     TRANSPORT_PLANNING_STATUSSEN, PAPIERFABRIEKEN, is_huidige_gebruiker_admin,
-    vereist_afdeling_of_403, render_simple_page,
+    vereist_afdeling_of_403, render_simple_page, TRANSPORT_DATA,
+    vind_transport_tarieven_dichtbij, laad_documenten,
 )
 
 transport_planning_bp = Blueprint("transport_planning", __name__)
@@ -173,8 +174,9 @@ def transport_planning_nieuw():
 <form method="POST" style="max-width:680px;">
     <div style="margin-bottom:10px;">
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Fabriek</label>
-        <input type="text" name="fabriek" list="fabrieken_lijst" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+        <input type="text" name="fabriek" list="fabrieken_lijst" onblur="toonTariefSuggestie(this.value)" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         <datalist id="fabrieken_lijst">{% for naam in fabriek_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
+        <div id="tarief_suggestie" style="margin-top:6px;font-size:11.5px;"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
@@ -245,6 +247,25 @@ def transport_planning_nieuw():
     <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Transport aanmaken</button>
     <a href="/transport-planning" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
 </form>
+
+<script>
+async function toonTariefSuggestie(fabriekNaam) {
+    var doel = document.getElementById("tarief_suggestie");
+    if (!fabriekNaam) { doel.innerHTML = ""; return; }
+    doel.innerHTML = '<span style="color:var(--gray-300);">Tarieven zoeken...</span>';
+    try {
+        const res = await fetch("/api/transport-tarieven-fabriek?fabriek=" + encodeURIComponent(fabriekNaam));
+        const data = await res.json();
+        const forwarders = Object.keys(data);
+        if (!forwarders.length) { doel.innerHTML = '<span style="color:var(--gray-300);">Geen bekende tarieven in de buurt van deze fabriek.</span>'; return; }
+        doel.innerHTML = '<span style="color:var(--gray-500);">Beschikbare tarieven in de buurt: </span>' + forwarders.map(function(fw) {
+            var info = data[fw];
+            var tariefTekst = Object.entries(info.tarieven).map(function(kv) { return kv[0] + ": " + kv[1]; }).join(", ");
+            return '<b style="color:var(--gray-800);">' + fw + '</b> (' + info.stad + ', ' + info.afstand + ' km) — ' + tariefTekst;
+        }).join(' &nbsp;|&nbsp; ');
+    } catch (e) { doel.innerHTML = ""; }
+}
+</script>
     """
     pagina = render_simple_page("Transport plannen", "transport_planning", inhoud)
     return render_template_string(pagina, fabriek_namen=fabriek_namen)
@@ -350,3 +371,170 @@ def transport_planning_status(transport_id):
         transport["status"] = nieuwe_status
         bewaar_transport_planning(transporten)
     return redirect(url_for("transport_planning.transport_planning_detail", transport_id=transport_id))
+
+@transport_planning_bp.route("/transport-rates")
+def transport_rates_pagina():
+    _guard = vereist_afdeling_of_403("transport_rates")
+    if _guard: return _guard
+
+    filter_forwarder = request.args.get("forwarder", "")
+    forwarder_namen = sorted(TRANSPORT_DATA.keys())
+
+    inhoud = """
+<div class="page-title">Transport Rates</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">
+    Tarieven zoals geüpload door transporteurs zelf via de forwarder-portal.
+    {% if not forwarder_namen %}Nog geen tarieven geüpload.{% endif %}
+</p>
+
+<style>
+.tr-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
+.tr-tabel-rij { display:flex; align-items:flex-start; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
+</style>
+
+{% if forwarder_namen %}
+<form method="GET" style="margin-bottom:16px;">
+    <select name="forwarder" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Kies een transporteur</option>
+        {% for naam in forwarder_namen %}<option value="{{ naam }}" {% if filter_forwarder == naam %}selected{% endif %}>{{ naam }}</option>{% endfor %}
+    </select>
+</form>
+
+{% if filter_forwarder %}
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+    <div class="tr-tabel-kop">
+        <span style="width:160px;">Stad</span>
+        <span style="flex:1;">Tarieven</span>
+    </div>
+    {% for record in steden_van_forwarder %}
+    <div class="tr-tabel-rij">
+        <span style="width:160px;font-weight:600;color:var(--gray-800);">{{ record.stad }}</span>
+        <span style="flex:1;color:var(--gray-600);">
+            {% for kolom, waarde in record.tarieven.items() %}<span style="display:inline-block;margin-right:14px;">{{ kolom }}: <b style="color:var(--gray-800);">{{ waarde }}</b></span>{% endfor %}
+        </span>
+    </div>
+    {% endfor %}
+</div>
+<div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ steden_van_forwarder|length }} steden</div>
+{% else %}
+<div class="lege-staat">Kies hierboven een transporteur om de tarieven te bekijken.</div>
+{% endif %}
+{% else %}
+<div class="lege-staat">Nog geen tarieven geüpload. Transporteurs kunnen dit zelf doen via <a href="/forwarder-upload" style="color:var(--brand-600);">de forwarder-portal</a>.</div>
+{% endif %}
+    """
+    steden_van_forwarder = TRANSPORT_DATA.get(filter_forwarder, []) if filter_forwarder else []
+    pagina = render_simple_page("Transport Rates", "transport_rates", inhoud)
+    return render_template_string(pagina, forwarder_namen=forwarder_namen, filter_forwarder=filter_forwarder,
+                                    steden_van_forwarder=steden_van_forwarder)
+
+@transport_planning_bp.route("/api/transport-tarieven-fabriek")
+def api_transport_tarieven_fabriek():
+    _guard = vereist_afdeling_of_403("transport_planning")
+    if _guard: return _guard
+    fabriek_naam = request.args.get("fabriek", "").strip()
+    fabriek = next((f for f in PAPIERFABRIEKEN if f["naam"] == fabriek_naam), None)
+    if not fabriek or not fabriek.get("lat") or not fabriek.get("lon"):
+        return jsonify({})
+    return jsonify(vind_transport_tarieven_dichtbij(fabriek["lat"], fabriek["lon"]))
+
+@transport_planning_bp.route("/transport-overview")
+def transport_overview_pagina():
+    _guard = vereist_afdeling_of_403("transport_overview")
+    if _guard: return _guard
+
+    alle_transporten = laad_transport_planning()
+    alle_documenten = laad_documenten()
+    fabriek_land_lookup = {f["naam"]: f.get("land", "") for f in PAPIERFABRIEKEN}
+    _vandaag = datetime.date.today().isoformat()
+
+    def is_vertraagd(t):
+        return t.get("laaddatum","") and t["laaddatum"] < _vandaag and t.get("status") in ("Te plannen", "Transport aangevraagd", "Transporteur toegewezen", "Bevestigd")
+
+    # --- Control tower-KPI's, exact zoals gevraagd ---
+    kpi_gepland = [t for t in alle_transporten if t.get("status") not in ("Te plannen",)]
+    kpi_nog_te_plannen = [t for t in alle_transporten if t.get("status") == "Te plannen"]
+    kpi_onderweg = [t for t in alle_transporten if t.get("status") == "Onderweg"]
+    kpi_vertraagd = [t for t in alle_transporten if is_vertraagd(t)]
+    kpi_geleverd = [t for t in alle_transporten if t.get("status") in ("Geleverd", "Afgerond")]
+    kpi_ontbrekende_docs = [t for t in alle_transporten if t.get("status") != "Te plannen" and not alle_documenten.get(t.get("referentienummer",""), [])]
+
+    # --- Per land/regio (sectie 10): aantal, volume, gem. kosten, transporteurs, openstaand/gepland ---
+    landen = sorted({fabriek_land_lookup.get(t.get("fabriek",""), "") for t in alle_transporten if fabriek_land_lookup.get(t.get("fabriek",""))})
+    per_land = []
+    for land in landen:
+        transporten_land = [t for t in alle_transporten if fabriek_land_lookup.get(t.get("fabriek","")) == land]
+        volumes = [float(t["hoeveelheid"]) for t in transporten_land if t.get("hoeveelheid") and t["hoeveelheid"].replace(".","",1).replace(",","").isdigit()]
+        kosten = [float(t["transporttarief"]) for t in transporten_land if t.get("transporttarief") and t["transporttarief"].replace(".","",1).replace(",","").isdigit()]
+        per_land.append({
+            "land": land,
+            "aantal": len(transporten_land),
+            "volume": round(sum(volumes), 1) if volumes else 0,
+            "gem_kosten": round(sum(kosten)/len(kosten), 2) if kosten else None,
+            "transporteurs": len({t.get("transporteur","") for t in transporten_land if t.get("transporteur")}),
+            "openstaand": len([t for t in transporten_land if t.get("status") not in ("Geleverd","Afgerond")]),
+            "gepland": len([t for t in transporten_land if t.get("status") not in ("Te plannen",)]),
+        })
+    per_land.sort(key=lambda l: l["aantal"], reverse=True)
+
+    inhoud = """
+<div class="page-title">Transport Overview</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Control tower voor alle uitgaande transporten.</p>
+
+<style>
+.tov-statustabel { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:24px; }
+.tov-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:14px 16px; }
+.tov-getal { font-size:1.5rem; font-weight:800; color:var(--gray-800); }
+.tov-label { font-size:0.7rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.6px; margin-top:2px; font-weight:600; }
+.tov-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
+.tov-tabel-rij { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
+</style>
+
+<div class="tov-statustabel">
+    <div class="tov-kaart"><div class="tov-getal">{{ kpi_gepland|length }}</div><div class="tov-label">Gepland</div></div>
+    <div class="tov-kaart"><div class="tov-getal">{{ kpi_nog_te_plannen|length }}</div><div class="tov-label">Nog te plannen</div></div>
+    <div class="tov-kaart"><div class="tov-getal">{{ kpi_onderweg|length }}</div><div class="tov-label">Onderweg</div></div>
+    <div class="tov-kaart" style="{% if kpi_vertraagd %}border-color:#fecaca;{% endif %}"><div class="tov-getal" style="{% if kpi_vertraagd %}color:#dc2626;{% endif %}">{{ kpi_vertraagd|length }}</div><div class="tov-label">Vertraagd</div></div>
+    <div class="tov-kaart"><div class="tov-getal">{{ kpi_geleverd|length }}</div><div class="tov-label">Geleverd</div></div>
+    <div class="tov-kaart"><div class="tov-getal">{{ kpi_ontbrekende_docs|length }}</div><div class="tov-label">Ontbrekende documenten</div></div>
+</div>
+
+{% if kpi_vertraagd %}
+<div style="font-size:11px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Vertraagde transporten</div>
+<div style="border:1px solid #fecaca;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+    {% for t in kpi_vertraagd %}
+    <div class="tov-tabel-rij"><a href="/transport-planning/{{ t.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;width:120px;">{{ t.referentienummer }}</a><span style="flex:1;">{{ t.fabriek }}</span><span style="color:#dc2626;">Laaddatum {{ t.laaddatum }} verstreken, nog niet geladen</span></div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if per_land %}
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Per land/regio</div>
+<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;margin-bottom:24px;">
+    <div class="tov-tabel-kop">
+        <span style="flex:1;">Land</span>
+        <span style="width:70px;text-align:right;">Aantal</span>
+        <span style="width:90px;text-align:right;">Volume (ton)</span>
+        <span style="width:110px;text-align:right;">Gem. kosten</span>
+        <span style="width:100px;text-align:right;">Transporteurs</span>
+        <span style="width:90px;text-align:right;">Openstaand</span>
+    </div>
+    {% for l in per_land %}
+    <div class="tov-tabel-rij">
+        <span style="flex:1;font-weight:600;color:var(--gray-800);"><a href="/transport-planning?fabriek=" style="color:inherit;text-decoration:none;">{{ l.land }}</a></span>
+        <span style="width:70px;text-align:right;color:var(--gray-600);">{{ l.aantal }}</span>
+        <span style="width:90px;text-align:right;color:var(--gray-600);">{{ l.volume }}</span>
+        <span style="width:110px;text-align:right;color:var(--gray-600);">{% if l.gem_kosten %}€{{ l.gem_kosten }}{% else %}—{% endif %}</span>
+        <span style="width:100px;text-align:right;color:var(--gray-600);">{{ l.transporteurs }}</span>
+        <span style="width:90px;text-align:right;color:var(--gray-600);">{{ l.openstaand }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">Nog geen transporten met een gekoppelde fabriek (land onbekend).</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Transport Overview", "transport_overview", inhoud)
+    return render_template_string(pagina, kpi_gepland=kpi_gepland, kpi_nog_te_plannen=kpi_nog_te_plannen,
+                                    kpi_onderweg=kpi_onderweg, kpi_vertraagd=kpi_vertraagd, kpi_geleverd=kpi_geleverd,
+                                    kpi_ontbrekende_docs=kpi_ontbrekende_docs, per_land=per_land)
