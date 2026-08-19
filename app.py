@@ -1941,6 +1941,19 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+@app.route("/wissel-weergave")
+def wissel_weergave():
+    """Laat een admin/directeur tijdelijk zien wat een specifieke afdeling ziet, zonder de
+    eigen rechten te wijzigen. Alleen bevoorrechte gebruikers mogen dit gebruiken."""
+    if not (is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur"):
+        return redirect(url_for("zoeken.index"))
+    gekozen = request.args.get("afdeling", "alles")
+    if gekozen == "alles" or gekozen in AFDELINGEN:
+        session["weergave_als"] = gekozen
+    terug_naar = request.referrer or url_for("zoeken.index")
+    return redirect(terug_naar)
+
 @app.route("/api/fotos", methods=["GET"])
 def get_fotos():
     bedrijf = request.args.get("bedrijf", "")

@@ -829,6 +829,7 @@ HTML = '''
 <div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
 <aside class="sidebar" id="mobielSidebar">
     <a href="/" class="sidebar-logo"><span class="sidebar-mark">FT</span><em>Next</em></a>
+    {{ weergave_balk|safe }}
     <nav class="sidebar-nav">
         <a href="/" class="sidebar-link active"><span class="icoon">ZK</span> Zoeken</a>
         <a href="/wereldkaart" class="sidebar-link"><span class="icoon">WM</span> World Map</a>
@@ -2147,6 +2148,24 @@ def company_analysis():
 
 PAGINA_GROOTTE = 200
 
+def _bouw_weergave_balk():
+    """Zelfde balk als in core.py's sidebar_html() — hier apart opgebouwd omdat de
+    zoekpagina een eigen, hardcoded zijbalk-template heeft (zie de LET OP in
+    core.py's sidebar_html-docstring)."""
+    if not (is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur"):
+        return ""
+    huidige_weergave = session.get("weergave_als", "alles")
+    opties_html = "".join(
+        f'<option value="{waarde}" {"selected" if huidige_weergave == waarde else ""}>{label}</option>'
+        for waarde, label in [("alles", "Alles"), ("accountmanager", "Commercieel"), ("logistiek", "Logistiek"), ("weegbrug", "Weegbrug"), ("backoffice", "Backoffice"), ("finance", "Finance")]
+    )
+    return f'''<div style="padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.1);">
+        <label style="font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.4);display:block;margin-bottom:4px;">Weergave als</label>
+        <select onchange="window.location.href='/wissel-weergave?afdeling='+this.value" style="width:100%;padding:5px 6px;border-radius:5px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:11.5px;">
+            {opties_html}
+        </select>
+    </div>'''
+
 @zoeken_bp.route("/", methods=["GET", "POST"])
 def index():
     zoekterm = land = regio = klanttype = materiaal = brontype = accountmanager = kwaliteiten = volume_filter = materiaal_min_volume = ""
@@ -2324,7 +2343,7 @@ def index():
         actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst,
         materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()),
         aantal_open_orders=sum(1 for o in laad_orders() if o.get("status") in ("Open", "Onderhandeling")),
-        mag_pagina_zien=mag_pagina_zien)
+        mag_pagina_zien=mag_pagina_zien, weergave_balk=_bouw_weergave_balk())
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 

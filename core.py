@@ -110,11 +110,21 @@ PAGINA_AFDELINGEN = {
 }
 
 def mag_pagina_zien(pagina_key):
-    """True als de ingelogde gebruiker deze pagina mag zien, o.b.v. afdeling/rol."""
-    if is_huidige_gebruiker_admin():
-        return True
-    if session.get("rol", "") == "directeur":
-        return True
+    """True als de ingelogde gebruiker deze pagina mag zien, o.b.v. afdeling/rol.
+
+    Admins/directeuren kunnen via session['weergave_als'] tijdelijk hun eigen
+    view beperken tot een specifieke afdeling (bv. om te testen wat Logistiek
+    ziet), zonder dat hun echte rechten wijzigen. 'weergave_als' leeg of
+    'alles' betekent: normale volledige toegang."""
+    _is_bevoorrecht = is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur"
+    if _is_bevoorrecht:
+        weergave_als = session.get("weergave_als", "")
+        if not weergave_als or weergave_als == "alles":
+            return True
+        vereiste_afdelingen = PAGINA_AFDELINGEN.get(pagina_key)
+        if not vereiste_afdelingen:
+            return True
+        return weergave_als in vereiste_afdelingen
     vereiste_afdelingen = PAGINA_AFDELINGEN.get(pagina_key)
     if not vereiste_afdelingen:
         return True
@@ -1646,10 +1656,26 @@ def sidebar_html(actief):
         if key == "orders" and aantal_open_orders > 0:
             badge_html = f'<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{aantal_open_orders}</span>'
         links += "<a href=\"" + href + "\" class=\"" + cls + "\" style=\"display:flex;align-items:center;\"><span class=\"icoon\">" + icoon + "</span> " + label + badge_html + "</a>\n        "
+
+    weergave_balk = ""
+    if is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur":
+        huidige_weergave = session.get("weergave_als", "alles")
+        opties_html = "".join(
+            f'<option value="{waarde}" {"selected" if huidige_weergave == waarde else ""}>{label}</option>'
+            for waarde, label in [("alles", "Alles"), ("accountmanager", "Commercieel"), ("logistiek", "Logistiek"), ("weegbrug", "Weegbrug"), ("backoffice", "Backoffice"), ("finance", "Finance")]
+        )
+        weergave_balk = f'''<div style="padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.1);">
+        <label style="font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.4);display:block;margin-bottom:4px;">Weergave als</label>
+        <select onchange="window.location.href='/wissel-weergave?afdeling='+this.value" style="width:100%;padding:5px 6px;border-radius:5px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:11.5px;">
+            {opties_html}
+        </select>
+    </div>'''
+
     return '''<button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
 <div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
 <aside class="sidebar" id="mobielSidebar">
     <a href="/" class="sidebar-logo"><span class="sidebar-mark">FT</span><em>Next</em></a>
+    WEERGAVE_BALK_HIER
     <nav class="sidebar-nav">
         ITEMS_HIER
     </nav>
@@ -1668,6 +1694,7 @@ function toggleMobielMenu() {
     document.getElementById("mobielOverlay").classList.toggle("open");
 }
 </script>'''.replace("ITEMS_HIER", links) \
+             .replace("WEERGAVE_BALK_HIER", weergave_balk) \
              .replace("GEBRUIKERSNAAM_HIER", session.get("gebruikersnaam", "Gast")) \
              .replace("GEBRUIKERSNAAM_INITIALEN", (session.get("gebruikersnaam", "??")[:2]).upper()) \
              .replace("TEAM_HIER", session.get("team", "") or "Teamlid")
