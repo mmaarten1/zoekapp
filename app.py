@@ -2250,7 +2250,7 @@ def logistiek_pagina():
 .log-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
 .log-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; }
 .dg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; }
-.dg-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:16px 18px; }
+.dg-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); border-radius:0; padding:16px 4px; }
 .dg-icoon { font-size:1.2rem; margin-bottom:6px; }
 .dg-getal { font-size:1.7rem; font-weight:800; color:var(--brand-700); }
 .dg-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.8px; margin-top:4px; font-weight:600; }
@@ -2283,7 +2283,7 @@ def logistiek_pagina():
 </form>
 
 {% if getoonde_shipments_log %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="log-tabel-kop">
         <span style="width:100px;">Datum</span>
         <span style="flex:1.6;">Route</span>
@@ -2473,7 +2473,7 @@ def containerbeheer_pagina():
 </div>
 <div class="page-title">Containerbeheer</div>
 
-<div class="info-kaart" style="max-width:560px;margin-bottom:20px;">
+<div class="info-kaart" style="max-width:560px;margin-bottom:20px;background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);border-radius:0;box-shadow:none;padding:16px 4px;">
     <div class="dg-kaart-titel">Container toevoegen</div>
     <form method="POST">
         <input type="hidden" name="actie" value="toevoegen">
@@ -2541,7 +2541,7 @@ def containerbeheer_pagina():
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Per land van herkomst</div>
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
     {% for l in per_land %}
-    <a href="/logistiek/containers?filter_land={{ l.land|urlencode }}" style="text-decoration:none;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px 16px;min-width:180px;">
+    <a href="/logistiek/containers?filter_land={{ l.land|urlencode }}" style="text-decoration:none;background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;min-width:180px;">
         <div style="font-size:12.5px;font-weight:700;color:var(--gray-800);margin-bottom:8px;">{{ l.land }}</div>
         <span style="display:inline-block;margin-right:12px;font-size:11.5px;color:var(--gray-500);">Onderweg: <b>{{ l.onderweg }}</b></span>
         <span style="display:inline-block;margin-right:12px;font-size:11.5px;color:var(--gray-500);">Aangekomen: <b>{{ l.aangekomen }}</b></span>
@@ -2552,7 +2552,7 @@ def containerbeheer_pagina():
 {% endif %}
 
 {% if getoonde_containers %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="log-tabel-kop">
         <span style="flex:1.1;">Containernummer</span>
         <span style="width:90px;">Herkomst</span>
@@ -2802,7 +2802,7 @@ def facturen_logistieke_orders():
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Orders die logistiek heeft vrijgegeven, met alle gegevens die Finance nodig heeft voor de (inkoop)factuur.</p>
 
 <style>
-.flo-sectie { border:1px solid var(--gray-200); border-radius:10px; margin-bottom:18px; overflow:hidden; }
+.flo-sectie { border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:18px; }
 .flo-kop { padding:12px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:12.5px; font-weight:700; color:var(--gray-700); display:flex; justify-content:space-between; }
 .flo-rij { padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; display:flex; align-items:center; gap:16px; }
 </style>

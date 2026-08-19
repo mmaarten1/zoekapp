@@ -81,7 +81,7 @@ def weegbrug_pagina():
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Voertuigen nu op locatie — klik om af te handelen</div>
 <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:24px;">
     {% for r in voertuigen_op_locatie %}
-    <a href="/weegbrug/uitwegen/{{ r.id }}" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--gray-200);border-left:3px solid #f59e0b;border-radius:8px;padding:10px 14px;text-decoration:none;">
+    <a href="/weegbrug/uitwegen/{{ r.id }}" style="display:flex;align-items:center;gap:14px;background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:10px 4px;text-decoration:none;">
         <span style="font-weight:700;color:var(--gray-800);font-family:var(--font-mono);width:100px;">{{ r.kenteken }}</span>
         <span style="color:var(--gray-600);flex:1;">{{ r.leverancier or '—' }} — {{ r.materiaal or '—' }}</span>
         <span style="color:var(--gray-400);font-size:11.5px;">{{ r.weegnummer }}</span>
@@ -106,7 +106,7 @@ def weegbrug_pagina():
 .wb-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
 .wb-tabel-rij { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
 .dg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; }
-.dg-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:16px 18px; }
+.dg-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); border-radius:0; padding:16px 4px; }
 .dg-icoon { font-size:1.2rem; margin-bottom:6px; }
 .dg-getal { font-size:1.7rem; font-weight:800; color:var(--brand-700); }
 .dg-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.8px; margin-top:4px; font-weight:600; }
@@ -114,7 +114,7 @@ def weegbrug_pagina():
 </style>
 
 {% if getoonde %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="wb-tabel-kop">
         <span style="width:110px;">Weegnummer</span>
         <span style="width:100px;">Kenteken</span>

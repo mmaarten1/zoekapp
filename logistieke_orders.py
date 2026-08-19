@@ -69,7 +69,7 @@ def logistieke_orders_pagina():
 
 <style>
 .lo-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
-.lo-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:14px 16px; }
+.lo-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:14px 4px; }
 .lo-getal { font-size:1.5rem; font-weight:800; color:var(--gray-800); }
 .lo-label { font-size:0.7rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.6px; margin-top:2px; font-weight:600; }
 .lo-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
@@ -98,7 +98,7 @@ def logistieke_orders_pagina():
 </form>
 
 {% if getoond %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="lo-tabel-kop">
         <span style="width:120px;">Ordernummer</span>
         <span style="flex:1;">Leverancier</span>
@@ -303,7 +303,7 @@ def logistieke_order_detail(order_id):
 </div>
 </div>
 
-<style>.dg-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:16px 18px; }</style>
+<style>.dg-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:16px 4px; }</style>
 <script>
 var ORDERNUMMER = "{{ order.ordernummer }}";
 async function laadOrderDocs() {
@@ -401,7 +401,7 @@ def afhandeling_pagina():
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Vrachten die fysiek zijn afgerond maar administratief nog verwerkt moeten worden — vóórdat ze naar Finance gaan.</p>
 
 <style>
-.af-sectie { border:1px solid var(--gray-200); border-radius:10px; margin-bottom:18px; overflow:hidden; }
+.af-sectie { border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:18px; }
 .af-sectie-kop { padding:12px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:12.5px; font-weight:700; color:var(--gray-700); display:flex; justify-content:space-between; align-items:center; }
 .af-rij { display:flex; align-items:center; padding:9px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
 </style>
@@ -538,7 +538,7 @@ def live_operations_pagina():
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Control tower: alle inkomende vrachten in één overzicht — Weegbrug en Orders gecombineerd.</p>
 
 <style>
-.lv-statustabel { width:100%; max-width:520px; border:1px solid var(--gray-200); border-radius:10px; overflow:hidden; margin-bottom:24px; }
+.lv-statustabel { width:100%; max-width:520px; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:24px; }
 .lv-statusrij { display:flex; justify-content:space-between; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:13px; }
 .lv-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
 .lv-tabel-rij { display:flex; align-items:center; padding:9px 16px; border-bottom:1px solid var(--gray-100); font-size:12px; }
@@ -568,7 +568,7 @@ def live_operations_pagina():
 </form>
 
 {% if getoond %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="lv-tabel-kop">
         <span style="width:90px;">Datum</span>
         <span style="width:110px;">Referentie</span>

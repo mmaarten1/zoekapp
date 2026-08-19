@@ -62,7 +62,7 @@ def transport_planning_pagina():
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Uitgaande transporten naar fabrieken in Europa.</p>
 
 <style>
-.tp-fabriek-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:14px 16px; min-width:200px; }
+.tp-fabriek-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:14px 4px; min-width:200px; }
 .tp-fabriek-naam { font-size:12.5px; font-weight:700; color:var(--gray-800); margin-bottom:8px; }
 .tp-fabriek-statje { display:inline-block; margin-right:12px; font-size:11.5px; color:var(--gray-500); }
 .tp-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
@@ -98,7 +98,7 @@ def transport_planning_pagina():
 </form>
 
 {% if getoond %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="tp-tabel-kop">
         <span style="width:120px;">Referentie</span>
         <span style="flex:1;">Fabriek</span>
@@ -289,7 +289,7 @@ def transport_planning_detail(transport_id):
 
 <div style="display:flex;gap:24px;flex-wrap:wrap;">
 <div style="flex:1;min-width:340px;">
-    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:16px 18px;margin-bottom:16px;">
+    <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:16px 4px;margin-bottom:16px;">
         <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Status</div>
         <form method="POST" action="/transport-planning/{{ transport.id }}/status">
             <select name="nieuwe_status" onchange="this.form.submit()" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-weight:600;">
@@ -317,7 +317,7 @@ def transport_planning_detail(transport_id):
 </div>
 
 <div style="flex:1;min-width:300px;">
-    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:16px 18px;">
+    <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:16px 4px;">
         <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Documenten (CMR, POD, etc.)</div>
         <div id="docslijst" style="margin-bottom:8px;font-size:12.5px;color:var(--gray-400);">Laden...</div>
         <input type="file" id="docupload" accept=".pdf,.doc,.docx" style="font-size:12px;">
@@ -401,7 +401,7 @@ def transport_rates_pagina():
 </form>
 
 {% if filter_forwarder %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="tr-tabel-kop">
         <span style="width:160px;">Stad</span>
         <span style="flex:1;">Tarieven</span>
@@ -483,7 +483,7 @@ def transport_overview_pagina():
 
 <style>
 .tov-statustabel { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:24px; }
-.tov-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:14px 16px; }
+.tov-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:14px 4px; }
 .tov-getal { font-size:1.5rem; font-weight:800; color:var(--gray-800); }
 .tov-label { font-size:0.7rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.6px; margin-top:2px; font-weight:600; }
 .tov-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
@@ -501,7 +501,7 @@ def transport_overview_pagina():
 
 {% if kpi_vertraagd %}
 <div style="font-size:11px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Vertraagde transporten</div>
-<div style="border:1px solid #fecaca;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+<div style="border:none;border-top:2px solid #fecaca;border-bottom:2px solid #fecaca;margin-bottom:24px;">
     {% for t in kpi_vertraagd %}
     <div class="tov-tabel-rij"><a href="/transport-planning/{{ t.id }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;width:120px;">{{ t.referentienummer }}</a><span style="flex:1;">{{ t.fabriek }}</span><span style="color:#dc2626;">Laaddatum {{ t.laaddatum }} verstreken, nog niet geladen</span></div>
     {% endfor %}
@@ -510,7 +510,7 @@ def transport_overview_pagina():
 
 {% if per_land %}
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Per land/regio</div>
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;margin-bottom:24px;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:24px;">
     <div class="tov-tabel-kop">
         <span style="flex:1;">Land</span>
         <span style="width:70px;text-align:right;">Aantal</span>
