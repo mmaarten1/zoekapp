@@ -144,9 +144,11 @@ def weegbrug_pagina():
         <span style="flex:1;">Materiaal</span>
         <span style="width:130px;text-align:right;">Netto</span>
         <span style="width:140px;">Status</span>
+        <span style="width:110px;"></span>
     </div>
     {% for r in getoonde %}
-    <a href="/weegbrug/{{ r.id }}" class="wb-tabel-rij">
+    <div class="wb-tabel-rij" style="cursor:default;">
+        <a href="/weegbrug/{{ r.id }}" style="display:contents;color:inherit;text-decoration:none;">
         <span style="width:110px;font-family:var(--font-mono);color:var(--gray-500);">{{ r.weegnummer }}</span>
         <span style="width:100px;font-weight:700;color:var(--gray-800);">{{ r.kenteken or "—" }}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.leverancier or '—' }}</span>
@@ -158,7 +160,17 @@ def weegbrug_pagina():
             <span class="wb-statuspunt" style="background:{{ badges[r.status].kleur }};"></span>
             <span style="font-size:12px;font-weight:600;color:var(--gray-700);">{{ badges[r.status].kort }}</span>
         </span>
-    </a>
+        </a>
+        <span style="width:110px;">
+            {% if r.status == "Opdracht" %}<a href="/weegbrug/inwegen/{{ r.id }}" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Inwegen</a>
+            {% elif r.status == "Ingewogen" %}<a href="/weegbrug/uitwegen/{{ r.id }}" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Uitwegen</a>
+            {% elif r.status == "Compleet" %}<a href="/weegbrug/weegbon/{{ r.id }}" target="_blank" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Weegbon</a>{% endif %}
+            <form method="POST" action="/weegbrug/verwijderen" onsubmit="return confirm('Deze weging definitief verwijderen? Dit kan niet ongedaan gemaakt worden.');" style="display:inline;margin:0;margin-left:6px;">
+                <input type="hidden" name="record_id" value="{{ r.id }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:11px;" title="Verwijderen">Verwijderen</button>
+            </form>
+        </span>
+    </div>
     {% endfor %}
 </div>
 <div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoonde|length }} weegrecords</div>
@@ -251,25 +263,20 @@ def _opdracht_formulier_html():
 <form method="POST" style="max-width:640px;">
     <div style="margin-bottom:12px;">
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Leverancier *</label>
-        <select name="leverancier" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
-            <option value="">Kies leverancier...</option>
-            {% for naam in leverancier_namen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
-        </select>
+        <input type="text" name="leverancier" list="leveranciers_datalist" required autocomplete="off" placeholder="Begin te typen..." style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+        <datalist id="leveranciers_datalist">{% for naam in leverancier_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
         <div style="font-size:10.5px;color:var(--gray-300);margin-top:2px;">Alleen bestaande, erkende leveranciers. Nieuwe leverancier? Vraag Backoffice.</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Materiaal *</label>
-            <select name="materiaal" id="materiaal_select" required onchange="verversKwaliteiten()" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
-                <option value="">Kies materiaal...</option>
-                {% for m in materiaal_namen %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
-            </select>
+            <input type="text" name="materiaal" id="materiaal_input" list="materiaal_datalist" required autocomplete="off" placeholder="Begin te typen..." oninput="verversKwaliteiten()" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <datalist id="materiaal_datalist">{% for m in materiaal_namen %}<option value="{{ m }}">{% endfor %}</datalist>
         </div>
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Kwaliteit *</label>
-            <select name="kwaliteit" id="kwaliteit_select" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
-                <option value="">Kies eerst materiaal...</option>
-            </select>
+            <input type="text" name="kwaliteit" id="kwaliteit_input" list="kwaliteit_datalist" required autocomplete="off" placeholder="Kies eerst materiaal..." style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <datalist id="kwaliteit_datalist"></datalist>
         </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
@@ -317,16 +324,17 @@ def _opdracht_formulier_html():
 <script>
 var TAXONOMIE = {{ taxonomie_json|safe }};
 function verversKwaliteiten() {
-    var materiaal = document.getElementById("materiaal_select").value;
-    var kwaliteitSelect = document.getElementById("kwaliteit_select");
+    var materiaal = document.getElementById("materiaal_input").value;
+    var kwaliteitDatalist = document.getElementById("kwaliteit_datalist");
+    var kwaliteitInput = document.getElementById("kwaliteit_input");
     var kwaliteiten = TAXONOMIE[materiaal] || [];
-    kwaliteitSelect.innerHTML = '<option value="">Kies kwaliteit...</option>';
+    kwaliteitDatalist.innerHTML = "";
     kwaliteiten.forEach(function(k) {
         var optie = document.createElement("option");
         optie.value = k;
-        optie.textContent = k;
-        kwaliteitSelect.appendChild(optie);
+        kwaliteitDatalist.appendChild(optie);
     });
+    kwaliteitInput.placeholder = kwaliteiten.length ? "Begin te typen..." : "Kies eerst een geldig materiaal...";
 }
 </script>
     """
@@ -502,6 +510,24 @@ def weegbrug_detail(record_id):
         {% if record.status == "Compleet" %}<div style="margin-top:10px;"><a href="/weegbrug/weegbon/{{ record.id }}" target="_blank" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Weegbon bekijken (PDF) →</a></div>{% endif %}
     </div>
 </div>
+</div>
+
+<div style="margin-top:20px;display:flex;gap:10px;align-items:center;">
+    {% if record.status == "Opdracht" %}
+    <a href="/weegbrug/inwegen/{{ record.id }}" style="padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Inwegen</a>
+    {% elif record.status == "Ingewogen" %}
+    <a href="/weegbrug/uitwegen/{{ record.id }}" style="padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Uitwegen</a>
+    {% endif %}
+    {% if record.status in ("Opdracht", "Ingewogen") %}
+    <form method="POST" action="/weegbrug/annuleren" onsubmit="return confirm('Deze weegopdracht annuleren?');" style="margin:0;">
+        <input type="hidden" name="record_id" value="{{ record.id }}">
+        <button type="submit" style="padding:9px 16px;background:#fff;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;font-size:13px;cursor:pointer;">Annuleren</button>
+    </form>
+    {% endif %}
+    <form method="POST" action="/weegbrug/verwijderen" onsubmit="return confirm('Deze weging definitief verwijderen? Dit kan niet ongedaan gemaakt worden.');" style="margin:0;">
+        <input type="hidden" name="record_id" value="{{ record.id }}">
+        <button type="submit" style="padding:9px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:13px;cursor:pointer;">Verwijderen</button>
+    </form>
 </div>
     """
     pagina = render_simple_page(record["weegnummer"], "weegbrug", inhoud)
