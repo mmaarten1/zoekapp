@@ -625,6 +625,8 @@ def live_operations_pagina():
                 {% if r.contract_referentie %}<span style="font-size:11px;color:var(--gray-600);">{{ r.contract_referentie }}</span>
                 {% elif r.prijstype %}<span style="font-size:11px;color:var(--gray-500);">{{ r.prijstype }}</span>
                 {% else %}<a href="/logistiek/orders/{{ r.id }}/koppel-contract" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Contract koppelen</a>{% endif %}
+            {% elif r.type == "weegbrug" and r.status == "Compleet" %}
+            <a href="/weegbrug/{{ r.id }}/afhandelen" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Afhandelen</a>
             {% endif %}
         </span>
     </div>
@@ -862,6 +864,60 @@ def _contract_geleverd_volume(contract_referentie, alle_orders=None):
         if o.get("contract_referentie") == contract_referentie and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
     )
     return round(geleverd, 3)
+
+@logistieke_orders_bp.route("/weegbrug/<record_id>/afhandelen")
+def weegrecord_afhandelen(record_id):
+    """Startpunt voor het afhandelen van een COMPLETE weging die nog geen eigen
+    'logistieke order' heeft (bv. rechtstreeks aangemaakt via de Weegbrug-knoppen,
+    zonder eerst apart een order aan te maken). Maakt die order alsnog automatisch
+    aan — met de gegevens van de weging — en stuurt door naar 'Contract koppelen'."""
+    _guard = vereist_afdeling_of_403("live_operations")
+    if _guard: return _guard
+
+    weegrecords = laad_weegbrug()
+    record = next((r for r in weegrecords if r["id"] == record_id), None)
+    if not record or record.get("status") != "Compleet":
+        pagina = render_simple_page("Niet beschikbaar", "live_operations", '<div class="page-title">Nog niet beschikbaar</div><div class="lege-staat">Deze weging is nog niet volledig afgerond (in- én uitgewogen). <a href="/live-operations">Terug naar Live Operaties</a></div>')
+        return render_template_string(pagina), 404
+
+    orders = laad_logistieke_orders()
+    # Bestaat er al een order voor deze weging? (bv. via het ordernummer-veld gekoppeld)
+    bestaande_order = next((o for o in orders if o.get("gekoppeld_weegbrug_id") == record_id), None)
+    if bestaande_order:
+        return redirect(url_for("logistieke_orders.logistieke_order_koppel_contract", order_id=bestaande_order["id"]))
+
+    nu = datetime.datetime.now()
+    netto_ton = round(float(record["netto_gewicht"]) / 1000, 3) if record.get("netto_gewicht") else ""
+    nieuwe_order = {
+        "id": str(uuid.uuid4()),
+        "ordernummer": genereer_logistiek_ordernummer(orders),
+        "leverancier": record.get("leverancier", ""),
+        "transporteur": record.get("transporteur", ""),
+        "kenteken": record.get("kenteken", ""),
+        "materiaal": record.get("materiaal", ""),
+        "kwaliteit": record.get("kwaliteit", ""),
+        "verwachte_hoeveelheid": "",
+        "werkelijke_hoeveelheid": str(netto_ton),
+        "datum": nu.date().isoformat(),
+        "verwachte_aankomst": "",
+        "werkelijke_aankomst": record.get("aangemaakt","").split(" ")[0] if record.get("aangemaakt") else "",
+        "gekoppeld_weegbrug_id": record_id,
+        "contract_referentie": "", "prijstype": "", "prijs_per_ton": None, "totale_waarde": None,
+        "verantwoordelijke_afdeling": "",
+        "status": "Weegbon compleet",
+        "opmerkingen": "Automatisch aangemaakt bij afhandelen van weegnummer " + record.get("weegnummer",""),
+        "aangemaakt_door": session.get("gebruikersnaam", ""),
+        "aangemaakt": nu.strftime("%d-%m-%Y %H:%M"),
+    }
+    orders.append(nieuwe_order)
+    bewaar_logistieke_orders(orders)
+
+    # Koppel ook terug: het weegrecord krijgt nu het ordernummer, zodat de rest van
+    # het systeem (weegbon-opslag bij documenten, etc.) deze order herkent.
+    record["ordernummer"] = nieuwe_order["ordernummer"]
+    bewaar_weegbrug(weegrecords)
+
+    return redirect(url_for("logistieke_orders.logistieke_order_koppel_contract", order_id=nieuwe_order["id"]))
 
 @logistieke_orders_bp.route("/logistiek/orders/<order_id>/koppel-contract", methods=["GET", "POST"])
 def logistieke_order_koppel_contract(order_id):
