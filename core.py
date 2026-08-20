@@ -44,7 +44,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json", "cert_vervaldatums.json",
         "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json", "transport_planning.json",
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
-        "logo_instelling.json", "leverancier_instellingen.json",
+        "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -101,6 +101,7 @@ PAGINA_AFDELINGEN = {
     "leveranciers": ["accountmanager", "backoffice"],
     "contacten": ["accountmanager", "backoffice"],
     "orders": ["accountmanager"],
+    "handelsorders": ["accountmanager"],
     "marktprijzen": ["accountmanager"],
     "materialen": ["accountmanager", "backoffice"],
     "certificeringen": ["accountmanager", "backoffice"],
@@ -1661,6 +1662,7 @@ def sidebar_html(actief):
         ("certificeringen", "/certificeringen", "CF", "Certifications"),
         ("contacten", "/contacten", "CT", "Contacten"),
         ("orders", "/orders", "OR", "Orders"),
+        ("handelsorders", "/handelsorders", "HO", "Handelsorders"),
         ("logistiek", "/logistiek", "LG", "Logistiek"),
         ("transport_overview", "/transport-overview", "TO", "Transport Overview"),
         ("transport_planning", "/transport-planning", "TP", "Transport Planning"),
@@ -1922,3 +1924,34 @@ def genereer_supplier_reference(leverancier_naam):
     instelling["referentie_teller"] = instelling.get("referentie_teller", 0) + 1
     bewaar_leverancier_instellingen(alle)
     return f"{code}-{instelling['referentie_teller']:04d}"
+
+# ============================================================
+# Handelsorders (Inkoop-/Verkooporders) — het nieuwe, professionele
+# commerciële ordersysteem. Bewust een ANDER bestand dan het oude, simpele
+# orders.json (dat blijft ongewijzigd bestaan als eenvoudige pipeline-
+# tracking voor accountmanagers; dit hier is het volwaardige contract-
+# systeem met alle velden, workflow en PDF/e-mail/boekhoud-koppeling).
+# ============================================================
+HANDELSORDERS_FILE = datapad("handelsorders.json")
+HANDELSORDER_STATUSSEN = ["Concept", "Definitief"]
+TRANSPORTMODI = ["Vrachtwagen", "Schip"]
+
+def laad_handelsorders():
+    try:
+        with open(HANDELSORDERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_handelsorders(data):
+    with open(HANDELSORDERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def genereer_contractnummer(bestaande_orders, order_type):
+    """CN-IN-YYYYMMDD-NNN voor inkoop, CN-VK-YYYYMMDD-NNN voor verkoop."""
+    prefix_type = "IN" if order_type == "inkoop" else "VK"
+    vandaag_str = datetime.date.today().strftime("%Y%m%d")
+    prefix = f"CN-{prefix_type}-{vandaag_str}-"
+    vandaag_nummers = [int(o["contractnummer"].replace(prefix, "")) for o in bestaande_orders if o.get("contractnummer","").startswith(prefix) and o["contractnummer"].replace(prefix,"").isdigit()]
+    volgnummer = (max(vandaag_nummers) + 1) if vandaag_nummers else 1
+    return f"{prefix}{volgnummer:03d}"

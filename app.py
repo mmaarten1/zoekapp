@@ -89,6 +89,9 @@ app.register_blueprint(transport_planning_bp)
 from commercieel_instellingen import commercieel_instellingen_bp
 app.register_blueprint(commercieel_instellingen_bp)
 
+from handelsorders import handelsorders_bp
+app.register_blueprint(handelsorders_bp)
+
 # ============================================================
 # GEDEELD FORMULIER-FRAGMENT: bedrijfsprofiel (uitgebreid, naar
 # voorbeeld van het externe Zoho-formulier: algemeen, financieel,
