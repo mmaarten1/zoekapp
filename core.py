@@ -43,6 +43,8 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "orders.json", "accountmanagers.json", "fotomappen.json", "materiaal_taxonomie.json", "voorraad_transacties.json",
         "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json", "cert_vervaldatums.json",
         "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json", "transport_planning.json",
+        "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
+        "logo_instelling.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -1829,3 +1831,58 @@ def laad_bedrijfslogo_instelling():
 def bewaar_bedrijfslogo_instelling(instelling):
     with open(LOGO_INSTELLING_FILE, "w", encoding="utf-8") as f:
         json.dump(instelling, f, ensure_ascii=False, indent=2)
+
+# ============================================================
+# Commerciële instellingen voor Inkoop-/Verkooporders: eenvoudige,
+# beheerbare lijsten (Incoterms, Betalingstermijnen, Valuta, POD-havens,
+# Bedrijfseenheden). Let op: BEDRIJFSEENHEDEN is een ANDER concept dan de
+# bestaande AFDELINGEN (die zijn voor gebruikersrechten/RBAC — accountmanager/
+# backoffice/logistiek/weegbrug/finance). Dit hier is de commerciële
+# indeling papier/plastic/Spanje/Portugal/UK, voor op de order zelf.
+# ============================================================
+INCOTERMS_FILE = datapad("incoterms.json")
+BETALINGSTERMIJNEN_FILE = datapad("betalingstermijnen.json")
+VALUTA_FILE = datapad("valuta.json")
+POD_HAVENS_FILE = datapad("pod_havens.json")
+BEDRIJFSEENHEDEN_FILE = datapad("bedrijfseenheden.json")
+
+_STANDAARD_INCOTERMS = ["EXW", "FCA", "FOB", "CFR", "CIF", "DAP", "DDP"]
+_STANDAARD_BETALINGSTERMIJNEN = ["Vooruitbetaling", "14 dagen", "30 dagen", "60 dagen", "90 dagen"]
+_STANDAARD_VALUTA = ["EUR", "USD", "GBP"]
+
+def _laad_eenvoudige_lijst(bestandspad, standaard):
+    try:
+        with open(bestandspad, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        _bewaar_eenvoudige_lijst(bestandspad, standaard)
+        return list(standaard)
+
+def _bewaar_eenvoudige_lijst(bestandspad, lijst):
+    with open(bestandspad, "w", encoding="utf-8") as f:
+        json.dump(lijst, f, ensure_ascii=False, indent=2)
+
+def laad_incoterms():
+    return _laad_eenvoudige_lijst(INCOTERMS_FILE, _STANDAARD_INCOTERMS)
+def bewaar_incoterms(lijst):
+    _bewaar_eenvoudige_lijst(INCOTERMS_FILE, lijst)
+
+def laad_betalingstermijnen():
+    return _laad_eenvoudige_lijst(BETALINGSTERMIJNEN_FILE, _STANDAARD_BETALINGSTERMIJNEN)
+def bewaar_betalingstermijnen(lijst):
+    _bewaar_eenvoudige_lijst(BETALINGSTERMIJNEN_FILE, lijst)
+
+def laad_valuta():
+    return _laad_eenvoudige_lijst(VALUTA_FILE, _STANDAARD_VALUTA)
+def bewaar_valuta(lijst):
+    _bewaar_eenvoudige_lijst(VALUTA_FILE, lijst)
+
+def laad_pod_havens():
+    return _laad_eenvoudige_lijst(POD_HAVENS_FILE, [])
+def bewaar_pod_havens(lijst):
+    _bewaar_eenvoudige_lijst(POD_HAVENS_FILE, lijst)
+
+def laad_bedrijfseenheden():
+    return _laad_eenvoudige_lijst(BEDRIJFSEENHEDEN_FILE, [])
+def bewaar_bedrijfseenheden(lijst):
+    _bewaar_eenvoudige_lijst(BEDRIJFSEENHEDEN_FILE, lijst)

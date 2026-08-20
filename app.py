@@ -86,6 +86,9 @@ app.register_blueprint(logistieke_orders_bp)
 from transport_planning import transport_planning_bp
 app.register_blueprint(transport_planning_bp)
 
+from commercieel_instellingen import commercieel_instellingen_bp
+app.register_blueprint(commercieel_instellingen_bp)
+
 # ============================================================
 # GEDEELD FORMULIER-FRAGMENT: bedrijfsprofiel (uitgebreid, naar
 # voorbeeld van het externe Zoho-formulier: algemeen, financieel,
@@ -3252,6 +3255,7 @@ def instellingen():
         <a href="/export-data" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
         <a href="/gebruikers-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
         <a href="/materialen-beheer" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Materialen beheren</a>
+        <a href="/instellingen/commercieel" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;margin-top:8px;">→ Commerciële instellingen (Incoterms, Betalingstermijnen, Valuta, POD, Bedrijfseenheden)</a>
     </div>
     <div class="info-kaart" style="max-width:400px;margin-top:16px;">
         <div class="dg-kaart-titel">Bedrijfslogo (op de weegbon)</div>
