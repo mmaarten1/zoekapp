@@ -28,6 +28,7 @@ from core import (
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
     laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien, vereist_afdeling_of_403,
+    leverancier_instelling_voor,
 )
 
 zoeken_bp = Blueprint("zoeken", __name__)
@@ -2048,17 +2049,27 @@ def set_bedrijf_veld():
     for b in ENF_BEDRIJVEN:
         if b["naam"] == bedrijf_naam:
             b[veld] = waarde
+            if veld == "adres" and waarde.strip():
+                _geo = geocode_adres(waarde, b.get("regio", ""))
+                if _geo:
+                    b["lat"] = _geo["lat"]
+                    b["lon"] = _geo["lon"]
             bewaar_bedrijven()
             if veld == "contactpersoon" and waarde:
                 sync_contactpersoon_naar_contacten(bedrijf_naam, waarde, email=b.get("email_algemeen",""), telefoon=b.get("telefoon",""), gebruiker=session.get("gebruikersnaam",""))
-            return jsonify({"veld": veld, "waarde": waarde})
+            return jsonify({"veld": veld, "waarde": waarde, "lat": b.get("lat"), "lon": b.get("lon")})
     for f_item in PAPIERFABRIEKEN:
         if f_item["naam"] == bedrijf_naam:
             f_item[veld] = waarde
+            if veld == "adres" and waarde.strip():
+                _geo = geocode_adres(waarde, f_item.get("stad", ""))
+                if _geo:
+                    f_item["lat"] = _geo["lat"]
+                    f_item["lon"] = _geo["lon"]
             bewaar_papierfabrieken()
             if veld == "contactpersoon" and waarde:
                 sync_contactpersoon_naar_contacten(bedrijf_naam, waarde, email=f_item.get("email_algemeen",""), telefoon=f_item.get("telefoon",""), gebruiker=session.get("gebruikersnaam",""))
-            return jsonify({"veld": veld, "waarde": waarde})
+            return jsonify({"veld": veld, "waarde": waarde, "lat": f_item.get("lat"), "lon": f_item.get("lon")})
     return jsonify({"error": "Bedrijf niet gevonden"}), 404
 
 @zoeken_bp.route("/api/materiaal-volume", methods=["POST"])
@@ -2537,6 +2548,7 @@ def bedrijf_profiel(naam):
     status = status_alle.get(bedrijf["naam"], "")
     opgeslagen = bedrijf["naam"] in set(laad_opgeslagen())
     geverifieerd = bool(bedrijf.get("adres") or bedrijf.get("telefoon"))
+    afhaallocaties = [] if is_fabriek_profiel else leverancier_instelling_voor(naam).get("afhaallocaties", [])
 
     inhoud = """
 {% if is_fabriek_profiel %}<input type="hidden" id="isFabriekProfiel" value="1">{% endif %}
@@ -2588,7 +2600,7 @@ select.klik-bewerken-veld { cursor:pointer; }
         <span class="star-btn {% if opgeslagen %}opgeslagen{% endif %}" id="profielSterBtn" onclick="toggleOpslaanProfiel(this)" style="font-size:1.3rem;margin-right:4px;">{% if opgeslagen %}★{% else %}☆{% endif %}</span>
         <a href="#notitiesSectie" onclick="document.getElementById('nieuweNotitieTekst').focus();" style="font-size:13px;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);padding:8px 14px;border-radius:6px;text-decoration:none;">Notitie</a>
         <a href="/export-csv?zoekterm={{ bedrijf.naam|urlencode }}" style="font-size:13px;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);padding:8px 14px;border-radius:6px;text-decoration:none;">Export</a>
-        <a href="/orders?bedrijf={{ bedrijf.naam|urlencode }}" style="font-size:13px;font-weight:600;color:#fff;background:var(--brand-600);padding:8px 14px;border-radius:6px;text-decoration:none;">Order aanmaken</a>
+        <a href="/handelsorders/nieuw" style="font-size:13px;font-weight:600;color:#fff;background:var(--brand-600);padding:8px 14px;border-radius:6px;text-decoration:none;">Order aanmaken</a>
     </div>
 </div>
 <div style="display:flex;align-items:center;gap:10px;margin-top:-14px;margin-bottom:20px;font-size:13px;color:var(--gray-500);">
@@ -2768,7 +2780,7 @@ select.klik-bewerken-veld { cursor:pointer; }
             <input type="text" value="{{ bedrijf.contactpersoon or '' }}" data-veld="contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="Naam invullen..." class="klik-bewerken-veld">
         </div>
         <div>
-            <div class="veld-label">Adres</div>
+            <div class="veld-label">Adres hoofdvestiging</div>
             <input type="text" value="{{ bedrijf.adres or '' }}" data-veld="adres" onblur="wijzigBedrijfVeld(this)" placeholder="—" class="klik-bewerken-veld">
         </div>
         <div>
@@ -2783,6 +2795,31 @@ select.klik-bewerken-veld { cursor:pointer; }
     <div style="margin-top:10px;font-size:13px;">
         <span id="echteWebsiteWrap" style="display:none;">🌐 <a id="echteWebsiteLink" href="#" target="_blank" style="color:var(--brand-600);font-weight:600;text-decoration:none;"></a></span>
     </div>
+
+    {% if not is_fabriek_profiel %}
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100);">
+        <div class="veld-label" style="margin-bottom:8px;">Afhaallocaties</div>
+        {% for loc in afhaallocaties %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;color:var(--gray-700);border-bottom:1px solid var(--gray-100);">
+            <span>{{ loc.naam or loc.stad }} — {{ loc.adres }}, {{ loc.postcode }} {{ loc.stad }}, {{ loc.land }}{% if not loc.lat %} <span style="color:var(--gray-300);font-size:11px;">(niet op kaart — adres kon niet gevonden worden)</span>{% endif %}</span>
+        </div>
+        {% endfor %}
+        <button type="button" onclick="document.getElementById('afhaalToevoegForm').style.display='block';this.style.display='none';" id="afhaalPlusBtn" style="margin-top:8px;font-size:12px;font-weight:600;color:var(--brand-600);background:none;border:none;cursor:pointer;padding:0;">+ Afhaallocatie toevoegen</button>
+        <form id="afhaalToevoegForm" method="POST" action="/leverancier/{{ bedrijf.naam|urlencode }}/commercieel" style="display:none;margin-top:10px;max-width:420px;">
+            <input type="hidden" name="actie" value="locatie_toevoegen">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <input type="text" name="locatie_naam" placeholder="Naam (optioneel)" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+                <input type="text" name="land" placeholder="Land" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            </div>
+            <input type="text" name="adres" placeholder="Adres *" required style="width:100%;padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;margin-bottom:8px;box-sizing:border-box;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <input type="text" name="postcode" placeholder="Postcode" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+                <input type="text" name="stad" placeholder="Stad *" required style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            </div>
+            <button type="submit" style="padding:6px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Toevoegen</button>
+        </form>
+    </div>
+    {% endif %}
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100);">
         <button type="button" onclick="toggleMeerInfo()" id="meerInfoToggleBtn" style="font-size:12px;font-weight:600;color:var(--brand-600);background:none;border:none;cursor:pointer;padding:0;">+ Meer informatie (bank, VAT, contact per afdeling)</button>
         <div id="meerInfoPaneel" style="display:none;margin-top:12px;">
@@ -3031,9 +3068,16 @@ var BEDRIJF_MATERIAAL_VOLUMES = {{ (bedrijf.get('materiaal_volumes', {}))|tojson
 var BEDRIJF_URL = {{ (bedrijf.url or "")|tojson }};
 var pKaart = L.map("profielKaart", {zoomControl:true}).setView([{{ bedrijf.lat or 20 }}, {{ bedrijf.lon or 0 }}], {{ 12 if bedrijf.lat else 2 }});
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {attribution:"© OpenStreetMap, © CARTO", subdomains:"abcd", maxZoom:19}).addTo(pKaart);
+var pMarker = null;
 {% if bedrijf.lat and bedrijf.lon %}
-L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(pKaart).bindPopup({{ bedrijf.naam|tojson }});
+pMarker = L.marker([{{ bedrijf.lat }}, {{ bedrijf.lon }}]).addTo(pKaart).bindPopup({{ bedrijf.naam|tojson }} + " (hoofdvestiging)");
 {% endif %}
+var afhaalMarkers = [];
+{% for loc in afhaallocaties %}
+{% if loc.lat and loc.lon %}
+afhaalMarkers.push(L.marker([{{ loc.lat }}, {{ loc.lon }}], {icon: L.divIcon({className:"", html:'<div style="background:#f59e0b;width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #f59e0b;"></div>', iconSize:[12,12]})}).addTo(pKaart).bindPopup({{ (loc.naam or loc.stad)|tojson }} + " (afhaallocatie)"));
+{% endif %}
+{% endfor %}
 
 function vulContact(data) {
     var telInput = document.querySelector('[data-veld="telefoon"]');
@@ -3117,8 +3161,17 @@ async function wijzigBedrijfVeld(input) {
     if (input.value === origineel) return;
     input.style.opacity = "0.5";
     try {
-        await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: veld, waarde: input.value})});
+        const res = await fetch("/api/bedrijf-veld", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({bedrijf: BEDRIJF_NAAM, veld: veld, waarde: input.value})});
+        const data = await res.json();
         input.dataset.origineel = input.value;
+        if (veld === "adres" && data.lat && data.lon) {
+            if (pMarker) {
+                pMarker.setLatLng([data.lat, data.lon]);
+            } else {
+                pMarker = L.marker([data.lat, data.lon]).addTo(pKaart).bindPopup(BEDRIJF_NAAM + " (hoofdvestiging)");
+            }
+            pKaart.setView([data.lat, data.lon], 12);
+        }
     } finally {
         input.style.opacity = "1";
     }
@@ -3543,7 +3596,7 @@ herbouwVolumeRijen();
         bestemmingen_lijst = sorted(_bestemmingen_dict.values(), key=lambda x: -x["totaal_volume"])
 
     return render_template_string(pagina, bedrijf=bedrijf, status=status, opgeslagen=opgeslagen, geverifieerd=geverifieerd,
-                                    is_fabriek_profiel=is_fabriek_profiel,
+                                    is_fabriek_profiel=is_fabriek_profiel, afhaallocaties=afhaallocaties,
                                     open_orders_aantal=open_orders_aantal, open_orders_ton=open_orders_ton,
                                     laatst_contact_profiel=laatst_contact_profiel, afstand_alblasserdam=afstand_alblasserdam,
                                     materialen_volume_lijst=materialen_volume_lijst, inkoop_voortgang_lijst=inkoop_voortgang_lijst,

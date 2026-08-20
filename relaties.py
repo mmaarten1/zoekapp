@@ -15,7 +15,7 @@ from core import (
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_accountmanagers,
     laad_users, render_simple_page, vereist_afdeling_of_403,
     laad_leverancier_instellingen, bewaar_leverancier_instellingen, leverancier_instelling_voor,
-    laad_betalingstermijnen,
+    laad_betalingstermijnen, geocode_adres,
 )
 
 relaties_bp = Blueprint("relaties", __name__)
@@ -437,6 +437,10 @@ def leverancier_commercieel_instellingen(naam):
                 "land": request.form.get("land", "").strip(),
             }
             if nieuwe_locatie["adres"] and nieuwe_locatie["stad"]:
+                _geo = geocode_adres(nieuwe_locatie["adres"], nieuwe_locatie["stad"])
+                if _geo:
+                    nieuwe_locatie["lat"] = _geo["lat"]
+                    nieuwe_locatie["lon"] = _geo["lon"]
                 instelling["afhaallocaties"].append(nieuwe_locatie)
                 bewaar_leverancier_instellingen(alle_instellingen)
         elif actie == "locatie_verwijderen":
