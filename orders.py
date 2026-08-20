@@ -14,7 +14,7 @@ from core import (
     laad_orders, bewaar_orders, laad_accountmanagers, laad_meldingen, bewaar_meldingen,
     laad_marktprijzen, bewaar_marktprijzen, parse_hoeveelheid_getal, laad_shipments,
     laad_status, laad_materiaal_taxonomie, render_simple_page,
-    ORDER_STATUSSEN, ORDER_KLEUREN, vereist_afdeling_of_403,
+    ORDER_STATUSSEN, ORDER_KLEUREN, vereist_afdeling_of_403, laad_handelsorders,
 )
 
 orders_bp = Blueprint("orders", __name__)
@@ -193,6 +193,36 @@ def orders_pagina():
             except (ValueError, TypeError):
                 pass
 
+    # --- Gecombineerd overzicht: pipeline-orders (dit bestand) + Handelsorders
+    # (het nieuwe inkoop/verkoop-contractsysteem) samen, met twee indelingen. ---
+    alle_handelsorders = laad_handelsorders()
+    gecombineerde_lijst = []
+    for o in alle_orders:
+        gecombineerde_lijst.append({
+            "bron": "pipeline", "id": o["id"], "naam": o.get("bedrijf",""), "materiaal": o.get("materiaal",""),
+            "status": o.get("status",""), "verantwoordelijke": o.get("verantwoordelijke",""),
+            "bedrijfseenheid": "", "link": "/orders",
+        })
+    for o in alle_handelsorders:
+        gecombineerde_lijst.append({
+            "bron": "handelsorder", "id": o["id"], "naam": o.get("tegenpartij_naam",""), "materiaal": o.get("materiaal",""),
+            "status": o.get("status",""), "verantwoordelijke": o.get("aangemaakt_door",""),
+            "bedrijfseenheid": o.get("bedrijfseenheid","") or "Niet ingedeeld", "link": f"/handelsorders/{o['id']}",
+        })
+
+    per_accountmanager = {}
+    for o in gecombineerde_lijst:
+        sleutel = o["verantwoordelijke"] or "Onbekend"
+        per_accountmanager.setdefault(sleutel, []).append(o)
+    per_bedrijfseenheid = {}
+    for o in gecombineerde_lijst:
+        sleutel = o["bedrijfseenheid"] or "Niet ingedeeld"
+        per_bedrijfseenheid.setdefault(sleutel, []).append(o)
+
+    kpi_totaal_gecombineerd = len(gecombineerde_lijst)
+    kpi_handelsorders_definitief = len([o for o in alle_handelsorders if o.get("status") == "Definitief"])
+    kpi_handelsorders_concept = len([o for o in alle_handelsorders if o.get("status") == "Concept"])
+
     inhoud = """
 <style>
 .order-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:16px 18px; margin-bottom:10px; }
@@ -209,6 +239,71 @@ def orders_pagina():
 .kpi-mini .label { font-size:0.75rem; color:var(--gray-400); }
 </style>
 <div class="page-title">Orders</div>
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Overzicht — alle orders</div>
+<style>
+.oo-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:20px; }
+.oo-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:14px 4px; }
+.oo-getal { font-size:1.5rem; font-weight:800; color:var(--gray-800); }
+.oo-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.6px; margin-top:4px; font-weight:600; }
+.oo-tabs { display:flex; gap:4px; margin-bottom:12px; }
+.oo-tab { padding:6px 14px; font-size:12px; font-weight:600; color:var(--gray-400); cursor:pointer; border:none; background:none; border-bottom:2px solid transparent; }
+.oo-tab.actief { color:var(--brand-600); border-bottom-color:var(--brand-600); }
+.oo-groep-kop { font-size:12.5px; font-weight:700; color:var(--gray-700); padding:8px 4px; background:var(--gray-50); }
+.oo-rij { display:flex; align-items:center; padding:8px 4px; border-bottom:1px solid var(--gray-100); font-size:12px; text-decoration:none; color:inherit; }
+</style>
+
+<div class="oo-grid">
+    <div class="oo-kaart"><div class="oo-getal">{{ kpi_totaal_gecombineerd }}</div><div class="oo-label">Totaal orders (beide systemen)</div></div>
+    <div class="oo-kaart"><div class="oo-getal">{{ kpi_handelsorders_concept }}</div><div class="oo-label">Handelsorders — concept</div></div>
+    <div class="oo-kaart"><div class="oo-getal">{{ kpi_handelsorders_definitief }}</div><div class="oo-label">Handelsorders — definitief</div></div>
+</div>
+
+<a href="/handelsorders/nieuw" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:9px 18px;border-radius:6px;">+ Nieuwe order</a>
+
+<div class="oo-tabs">
+    <button type="button" class="oo-tab actief" onclick="wisselIndeling('am')" id="tab_am">Per accountmanager</button>
+    <button type="button" class="oo-tab" onclick="wisselIndeling('be')" id="tab_be">Per bedrijfseenheid</button>
+</div>
+
+<div id="indeling_am" style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:32px;">
+    {% for groep, items in per_accountmanager.items() %}
+    <div class="oo-groep-kop">{{ groep }} ({{ items|length }})</div>
+    {% for o in items %}
+    <a href="{{ o.link }}" class="oo-rij">
+        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ o.naam or '—' }}</span>
+        <span style="flex:1;color:var(--gray-500);">{{ o.materiaal or '—' }}</span>
+        <span style="width:90px;color:var(--gray-400);">{{ "Handelsorder" if o.bron == "handelsorder" else "Pipeline" }}</span>
+        <span style="width:100px;color:var(--gray-600);">{{ o.status }}</span>
+    </a>
+    {% endfor %}
+    {% endfor %}
+</div>
+
+<div id="indeling_be" style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:32px;display:none;">
+    {% for groep, items in per_bedrijfseenheid.items() %}
+    <div class="oo-groep-kop">{{ groep }} ({{ items|length }})</div>
+    {% for o in items %}
+    <a href="{{ o.link }}" class="oo-rij">
+        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ o.naam or '—' }}</span>
+        <span style="flex:1;color:var(--gray-500);">{{ o.materiaal or '—' }}</span>
+        <span style="width:90px;color:var(--gray-400);">{{ "Handelsorder" if o.bron == "handelsorder" else "Pipeline" }}</span>
+        <span style="width:100px;color:var(--gray-600);">{{ o.status }}</span>
+    </a>
+    {% endfor %}
+    {% endfor %}
+</div>
+
+<script>
+function wisselIndeling(welke) {
+    document.getElementById("indeling_am").style.display = welke === "am" ? "block" : "none";
+    document.getElementById("indeling_be").style.display = welke === "be" ? "block" : "none";
+    document.getElementById("tab_am").classList.toggle("actief", welke === "am");
+    document.getElementById("tab_be").classList.toggle("actief", welke === "be");
+}
+</script>
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Pipeline-orders (los, kort proces)</div>
 
 <div class="kpi-mini">
     <div><div class="getal">€{{ "{:,.0f}".format(open_waarde) }}</div><div class="label">Openstaande waarde</div></div>
@@ -338,4 +433,8 @@ def orders_pagina():
                                     alle_materialen_in_orders=alle_materialen_in_orders, alle_verantwoordelijken=alle_verantwoordelijken,
                                     vooringevuld_bedrijf=vooringevuld_bedrijf, materiaal_taxonomie=laad_materiaal_taxonomie(),
                                     alle_bedrijfsnamen=alle_bedrijfsnamen, aantal_verlopen=aantal_verlopen,
-                                    gebruikersnaam=session.get("gebruikersnaam", ""))
+                                    gebruikersnaam=session.get("gebruikersnaam", ""),
+                                    per_accountmanager=per_accountmanager, per_bedrijfseenheid=per_bedrijfseenheid,
+                                    kpi_totaal_gecombineerd=kpi_totaal_gecombineerd,
+                                    kpi_handelsorders_concept=kpi_handelsorders_concept,
+                                    kpi_handelsorders_definitief=kpi_handelsorders_definitief)
