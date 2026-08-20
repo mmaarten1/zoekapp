@@ -44,7 +44,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json", "cert_vervaldatums.json",
         "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json", "transport_planning.json",
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
-        "logo_instelling.json",
+        "logo_instelling.json", "leverancier_instellingen.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -1886,3 +1886,39 @@ def laad_bedrijfseenheden():
     return _laad_eenvoudige_lijst(BEDRIJFSEENHEDEN_FILE, [])
 def bewaar_bedrijfseenheden(lijst):
     _bewaar_eenvoudige_lijst(BEDRIJFSEENHEDEN_FILE, lijst)
+
+# ============================================================
+# Leverancier-specifieke commerciële instellingen: afhaallocaties (kan
+# er meerdere hebben), standaard betalingstermijn, en een korte code voor
+# het genereren van unieke supplier-referentienummers per leverancier.
+# Los bestand (niet in ENF_BEDRIJVEN zelf) — zelfde patroon als status.json/
+# accountmanagers.json, gesleuteld op bedrijfsnaam.
+# ============================================================
+LEVERANCIER_INSTELLINGEN_FILE = datapad("leverancier_instellingen.json")
+
+def laad_leverancier_instellingen():
+    try:
+        with open(LEVERANCIER_INSTELLINGEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_leverancier_instellingen(data):
+    with open(LEVERANCIER_INSTELLINGEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def leverancier_instelling_voor(naam):
+    """Geeft de instellingen voor één leverancier terug, met veilige standaardwaarden
+    zodat de rest van de code nooit hoeft te checken of een sleutel bestaat."""
+    alle = laad_leverancier_instellingen()
+    return alle.get(naam, {"afhaallocaties": [], "standaard_betalingstermijn": "", "leverancier_code": "", "referentie_teller": 0})
+
+def genereer_supplier_reference(leverancier_naam):
+    """Genereert een unieke, oplopende referentiecode per leverancier: <CODE>-0001, -0002, etc.
+    Gebruikt de leverancier_code als die is ingesteld, anders de eerste 4 letters van de naam."""
+    alle = laad_leverancier_instellingen()
+    instelling = alle.setdefault(leverancier_naam, {"afhaallocaties": [], "standaard_betalingstermijn": "", "leverancier_code": "", "referentie_teller": 0})
+    code = instelling.get("leverancier_code","").strip() or "".join(c for c in leverancier_naam.upper() if c.isalnum())[:4] or "LEV"
+    instelling["referentie_teller"] = instelling.get("referentie_teller", 0) + 1
+    bewaar_leverancier_instellingen(alle)
+    return f"{code}-{instelling['referentie_teller']:04d}"

@@ -9,11 +9,13 @@ omdat ze functioneel vrijwel identiek zijn (zelfde UI-patroon, ander filter).
 Registratie in app.py met: app.register_blueprint(relaties_bp)
 """
 import requests
-from flask import Blueprint, request, session, render_template_string
+from flask import Blueprint, request, session, render_template_string, redirect, url_for
 
 from core import (
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_accountmanagers,
     laad_users, render_simple_page, vereist_afdeling_of_403,
+    laad_leverancier_instellingen, bewaar_leverancier_instellingen, leverancier_instelling_voor,
+    laad_betalingstermijnen,
 )
 
 relaties_bp = Blueprint("relaties", __name__)
@@ -168,7 +170,8 @@ def leveranciers_pagina():
             <span style="width:90px;text-align:right;"></span>
         </div>
         {% for b in leveranciers_lijst %}
-        <a class="data-row" href="/bedrijf/{{ b.naam|urlencode }}"
+        <div class="data-row" style="cursor:default;">
+        <a href="/bedrijf/{{ b.naam|urlencode }}" style="display:contents;color:inherit;text-decoration:none;"
            data-naam="{{ b.naam|e }}" data-locatie="{{ b.regio|default('',true)|e }}, {{ b.land|default('',true)|e }}" data-materialen="{{ b.materialen|default('',true)|e }}"
            data-status="{{ b.status|default('',true)|e }}" data-accountmanager="{{ b.accountmanager|default('',true)|e }}">
             <span style="flex:1.4;font-weight:600;color:var(--gray-800);">{{ b.naam }}</span>
@@ -186,6 +189,8 @@ def leveranciers_pagina():
                 <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Profiel →</span>
             </span>
         </a>
+        <a href="/leverancier/{{ b.naam|urlencode }}/commercieel" style="font-size:11px;color:var(--gray-400);text-decoration:none;margin-left:8px;white-space:nowrap;">Commercieel →</a>
+        </div>
         {% endfor %}
     </div>
 </div>
@@ -401,3 +406,107 @@ def klanten_pagina():
                                     alle_landen_fab=alle_landen_fab, landen_in_resultaat_fab=landen_in_resultaat_fab,
                                     filter_status_klant=filter_status_klant, aantal_per_status=aantal_per_status,
                                     bericht_klant=bericht_klant)
+
+
+@relaties_bp.route("/leverancier/<naam>/commercieel", methods=["GET", "POST"])
+def leverancier_commercieel_instellingen(naam):
+    """Beheert de commerciële instellingen van één leverancier: afhaallocatie(s),
+    standaard betalingstermijn, en de korte code voor supplier-referentienummers.
+    Bewust een aparte, kleine pagina — niet toegevoegd aan het al zeer grote
+    bedrijfsprofiel, om die pagina niet nog fragieler te maken."""
+    _guard = vereist_afdeling_of_403("leveranciers")
+    if _guard: return _guard
+
+    bedrijf = next((b for b in ENF_BEDRIJVEN if b["naam"] == naam), None)
+    if not bedrijf:
+        inhoud = '<div class="page-title">Niet gevonden</div><div class="lege-staat">Deze leverancier bestaat niet (meer).</div>'
+        pagina = render_simple_page("Niet gevonden", "leveranciers", inhoud)
+        return render_template_string(pagina), 404
+
+    alle_instellingen = laad_leverancier_instellingen()
+    instelling = alle_instellingen.setdefault(naam, {"afhaallocaties": [], "standaard_betalingstermijn": "", "leverancier_code": "", "referentie_teller": 0})
+
+    if request.method == "POST":
+        actie = request.form.get("actie", "")
+        if actie == "locatie_toevoegen":
+            nieuwe_locatie = {
+                "naam": request.form.get("locatie_naam", "").strip(),
+                "adres": request.form.get("adres", "").strip(),
+                "postcode": request.form.get("postcode", "").strip(),
+                "stad": request.form.get("stad", "").strip(),
+                "land": request.form.get("land", "").strip(),
+            }
+            if nieuwe_locatie["adres"] and nieuwe_locatie["stad"]:
+                instelling["afhaallocaties"].append(nieuwe_locatie)
+                bewaar_leverancier_instellingen(alle_instellingen)
+        elif actie == "locatie_verwijderen":
+            index = int(request.form.get("index", "-1"))
+            if 0 <= index < len(instelling["afhaallocaties"]):
+                instelling["afhaallocaties"].pop(index)
+                bewaar_leverancier_instellingen(alle_instellingen)
+        elif actie == "instellingen_opslaan":
+            instelling["standaard_betalingstermijn"] = request.form.get("standaard_betalingstermijn", "").strip()
+            instelling["leverancier_code"] = request.form.get("leverancier_code", "").strip().upper()
+            bewaar_leverancier_instellingen(alle_instellingen)
+        return redirect(url_for("relaties.leverancier_commercieel_instellingen", naam=naam))
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/leveranciers" style="color:var(--gray-400);text-decoration:none;">Leveranciers</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ naam }}</span> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Commercieel</span>
+</div>
+<div class="page-title">{{ naam }} — Commerciële instellingen</div>
+
+<div style="display:flex;gap:24px;flex-wrap:wrap;">
+<div style="flex:1;min-width:320px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Algemeen</div>
+    <form method="POST" style="margin-bottom:24px;">
+        <input type="hidden" name="actie" value="instellingen_opslaan">
+        <div style="margin-bottom:10px;">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Standaard betalingstermijn</label>
+            <select name="standaard_betalingstermijn" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+                <option value="">— geen —</option>
+                {% for termijn in betalingstermijnen %}<option value="{{ termijn }}" {% if instelling.standaard_betalingstermijn == termijn %}selected{% endif %}>{{ termijn }}</option>{% endfor %}
+            </select>
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Leverancier-code (voor referentienummers, bv. 'ACME')</label>
+            <input type="text" name="leverancier_code" value="{{ instelling.leverancier_code }}" placeholder="Automatisch als leeg" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+        </div>
+        <button type="submit" style="padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Opslaan</button>
+    </form>
+</div>
+
+<div style="flex:1;min-width:340px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Afhaallocaties</div>
+    <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:16px;">
+        {% for loc in instelling.afhaallocaties %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+            <span style="color:var(--gray-700);">{{ loc.naam or loc.stad }} — {{ loc.adres }}, {{ loc.postcode }} {{ loc.stad }}, {{ loc.land }}</span>
+            <form method="POST" onsubmit="return confirm('Deze locatie verwijderen?');" style="margin:0;">
+                <input type="hidden" name="actie" value="locatie_verwijderen">
+                <input type="hidden" name="index" value="{{ loop.index0 }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:12px;">✕</button>
+            </form>
+        </div>
+        {% else %}
+        <div style="padding:10px 4px;color:var(--gray-300);font-size:12px;">Nog geen afhaallocaties toegevoegd.</div>
+        {% endfor %}
+    </div>
+    <form method="POST" style="max-width:400px;">
+        <input type="hidden" name="actie" value="locatie_toevoegen">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="locatie_naam" placeholder="Naam (optioneel, bv. 'Hoofdmagazijn')" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="land" placeholder="Land" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+        </div>
+        <input type="text" name="adres" placeholder="Adres *" required style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;margin-bottom:8px;box-sizing:border-box;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" name="postcode" placeholder="Postcode" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+            <input type="text" name="stad" placeholder="Stad *" required style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+        </div>
+        <button type="submit" style="padding:7px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">+ Locatie toevoegen</button>
+    </form>
+</div>
+</div>
+    """
+    pagina = render_simple_page(f"{naam} — Commercieel", "leveranciers", inhoud)
+    return render_template_string(pagina, naam=naam, instelling=instelling, betalingstermijnen=laad_betalingstermijnen())
