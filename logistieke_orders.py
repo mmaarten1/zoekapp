@@ -18,7 +18,7 @@ Registratie in app.py met: app.register_blueprint(logistieke_orders_bp)
 """
 import uuid
 import datetime
-from flask import Blueprint, request, session, redirect, url_for, render_template_string
+from flask import Blueprint, request, session, redirect, url_for, render_template_string, jsonify
 
 from core import (
     laad_logistieke_orders, bewaar_logistieke_orders, genereer_logistiek_ordernummer,
@@ -624,9 +624,9 @@ def live_operations_pagina():
             {% if r.type == "order" %}
                 {% if r.contract_referentie %}<span style="font-size:11px;color:var(--gray-600);">{{ r.contract_referentie }}</span>
                 {% elif r.prijstype %}<span style="font-size:11px;color:var(--gray-500);">{{ r.prijstype }}</span>
-                {% else %}<a href="/logistiek/orders/{{ r.id }}/koppel-contract" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Contract koppelen</a>{% endif %}
+                {% else %}<button type="button" onclick="openKoppelModal('{{ r.id }}', false)" style="font-size:11px;color:var(--brand-600);background:none;border:none;text-decoration:none;font-weight:600;cursor:pointer;padding:0;font-family:inherit;">Contract koppelen</button>{% endif %}
             {% elif r.type == "weegbrug" and r.status == "Compleet" %}
-            <a href="/weegbrug/{{ r.id }}/afhandelen" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Afhandelen</a>
+            <button type="button" onclick="openKoppelModal('{{ r.id }}', true)" style="font-size:11px;color:var(--brand-600);background:none;border:none;text-decoration:none;font-weight:600;cursor:pointer;padding:0;font-family:inherit;">Afhandelen</button>
             {% endif %}
         </span>
     </div>
@@ -636,6 +636,102 @@ def live_operations_pagina():
 {% else %}
 <div class="lege-staat">Geen vrachten gevonden voor deze filters.</div>
 {% endif %}
+
+<div id="koppelModalOverlay" onclick="if(event.target===this) sluitKoppelModal();" style="display:none;position:fixed;inset:0;background:rgba(15,23,32,0.4);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:24px 26px;max-width:560px;width:92%;max-height:85vh;overflow-y:auto;">
+        <div id="koppelModalTitel" style="font-size:15px;font-weight:800;color:var(--gray-800);margin-bottom:4px;">Contract koppelen</div>
+        <div id="koppelModalSub" style="font-size:12.5px;color:var(--gray-400);margin-bottom:16px;"></div>
+        <div id="koppelModalInhoud" style="font-size:12.5px;color:var(--gray-400);">Laden...</div>
+        <div style="display:flex;gap:10px;margin-top:18px;">
+            <button type="button" onclick="bevestigKoppeling()" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Koppelen</button>
+            <button type="button" onclick="sluitKoppelModal()" style="padding:9px 16px;background:#fff;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;font-size:13px;cursor:pointer;">Annuleren</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var HUIDIGE_ORDER_ID = null;
+async function openKoppelModal(id, isWeegbrug) {
+    var overlay = document.getElementById("koppelModalOverlay");
+    var inhoud = document.getElementById("koppelModalInhoud");
+    var sub = document.getElementById("koppelModalSub");
+    overlay.style.display = "flex";
+    inhoud.innerHTML = "Laden...";
+    sub.innerHTML = "";
+    HUIDIGE_ORDER_ID = null;
+
+    var orderId = id;
+    if (isWeegbrug) {
+        try {
+            const res = await fetch("/api/weegrecord/" + id + "/maak-order", {method: "POST"});
+            const data = await res.json();
+            if (data.error) { inhoud.innerHTML = '<span style="color:#dc2626;">' + data.error + '</span>'; return; }
+            orderId = data.order_id;
+        } catch (e) { inhoud.innerHTML = '<span style="color:#dc2626;">Kon de order niet aanmaken.</span>'; return; }
+    }
+    HUIDIGE_ORDER_ID = orderId;
+
+    try {
+        const res = await fetch("/api/logistieke-order/" + orderId + "/contract-opties");
+        const data = await res.json();
+        if (data.error) { inhoud.innerHTML = '<span style="color:#dc2626;">' + data.error + '</span>'; return; }
+
+        sub.innerHTML = data.order.leverancier + " — " + data.order.materiaal + " (" + data.order.kwaliteit + ")";
+
+        var html = '<label style="font-size:12.5px;color:var(--gray-500);font-weight:600;display:block;margin-bottom:8px;">' +
+            '<input type="radio" name="modalContractKeuze" value="spot" checked> Spot-transactie (dagprijs uit marktprijzen)</label>';
+
+        if (data.passend.length) {
+            html += '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 6px 0;">Passende contracten (' + data.order.materiaal + ' — ' + data.order.kwaliteit + ') — oudste eerst</div>';
+            data.passend.forEach(function(c) {
+                html += '<label style="font-size:12.5px;color:var(--gray-700);display:block;margin-bottom:8px;line-height:1.5;">' +
+                    '<input type="radio" name="modalContractKeuze" value="' + c.id + '"> ' + c.contractnummer + ' — ' + c.materiaal + ' (' + c.kwaliteit + ')' +
+                    (c.prijs ? ' à €' + c.prijs + '/MT' : '') +
+                    ' — <b>' + c.resterend_ton + ' MT open</b> van ' + c.totaal_ton + ' MT ' +
+                    '<span style="color:var(--gray-400);">(' + c.aangemaakt + ')</span></label>';
+            });
+        }
+        if (data.overig.length) {
+            html += '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 6px 0;">Overige goedgekeurde contracten (ander materiaal/kwaliteit/leverancier)</div>';
+            data.overig.forEach(function(c) {
+                html += '<label style="font-size:12.5px;color:var(--gray-600);display:block;margin-bottom:8px;line-height:1.5;">' +
+                    '<input type="radio" name="modalContractKeuze" value="' + c.id + '"> ' + c.contractnummer + ' — ' + c.tegenpartij_naam + ' (' + c.materiaal + ' — ' + c.kwaliteit + ')' +
+                    ' — <b>' + c.resterend_ton + ' MT open</b> van ' + c.totaal_ton + ' MT</label>';
+            });
+        }
+        if (!data.passend.length && !data.overig.length) {
+            html += '<div style="font-size:12px;color:var(--gray-300);margin-top:8px;">Nog geen goedgekeurde (Definitieve) inkoopcontracten beschikbaar.</div>';
+        }
+
+        html += '<div style="margin-top:16px;"><label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Verantwoordelijke afdeling</label>' +
+            '<select id="modalVerantwoordelijkeAfdeling" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;">' +
+            '<option value="">— geen specifieke afdeling —</option>' +
+            '<option value="backoffice">Backoffice</option><option value="logistiek">Logistiek</option><option value="finance">Finance</option>' +
+            '</select></div>';
+
+        inhoud.innerHTML = html;
+    } catch (e) { inhoud.innerHTML = '<span style="color:#dc2626;">Kon de contracten niet laden.</span>'; }
+}
+function sluitKoppelModal() {
+    document.getElementById("koppelModalOverlay").style.display = "none";
+    HUIDIGE_ORDER_ID = null;
+}
+async function bevestigKoppeling() {
+    if (!HUIDIGE_ORDER_ID) return;
+    var gekozen = document.querySelector('input[name="modalContractKeuze"]:checked');
+    if (!gekozen) { alert("Kies eerst een optie."); return; }
+    var afdeling = document.getElementById("modalVerantwoordelijkeAfdeling").value;
+    try {
+        const res = await fetch("/api/logistieke-order/" + HUIDIGE_ORDER_ID + "/koppel-contract", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({contract_keuze: gekozen.value, verantwoordelijke_afdeling: afdeling})
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        window.location.reload();
+    } catch (e) { alert("Koppelen mislukt, probeer het opnieuw."); }
+}
+</script>
     """
     pagina = render_simple_page("Live Operations", "live_operations", inhoud)
     return render_template_string(pagina, getoond=getoond, kpi_onderweg=kpi_onderweg, kpi_aangekomen=kpi_aangekomen,
@@ -865,6 +961,42 @@ def _contract_geleverd_volume(contract_referentie, alle_orders=None):
     )
     return round(geleverd, 3)
 
+def _contract_opties_voor_order(order):
+    """Geeft (passend, overig) terug: goedgekeurde inkoopcontracten die MATERIAAL ÉN
+    KWALITEIT exact matchen met de order komen als 'passend' — dus als er een SOP-weging
+    binnenkomt, zie je hier alleen SOP-contracten, geen andere papierkwaliteiten. Beide
+    lijsten zijn FIFO gesorteerd (oudste eerst) en elke optie krijgt het al-geleverde en
+    resterende tonnage mee, zodat je in één oogopslag ziet hoeveel er nog openstaat."""
+    alle_orders_voor_geleverd = laad_logistieke_orders()
+    alle_handelsorders = [
+        h for h in laad_handelsorders()
+        if h.get("order_type") == "inkoop" and h.get("status") == "Definitief"
+    ]
+
+    def _aangemaakt_sorteersleutel(h):
+        try:
+            return datetime.datetime.strptime(h.get("aangemaakt",""), "%d-%m-%Y %H:%M")
+        except (ValueError, TypeError):
+            return datetime.datetime.max
+    alle_handelsorders.sort(key=_aangemaakt_sorteersleutel)
+
+    def _verrijk(h):
+        try:
+            totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+        except (ValueError, TypeError):
+            totaal = 0.0
+        geleverd = _contract_geleverd_volume(h["contractnummer"], alle_orders_voor_geleverd)
+        h = dict(h)
+        h["totaal_ton"] = round(totaal, 1)
+        h["geleverd_ton"] = geleverd
+        h["resterend_ton"] = round(totaal - geleverd, 1)
+        return h
+
+    verrijkt = [_verrijk(h) for h in alle_handelsorders]
+    passend = [h for h in verrijkt if h.get("materiaal","") == order.get("materiaal","") and h.get("kwaliteit","") == order.get("kwaliteit","") and h.get("tegenpartij_naam","") == order.get("leverancier","")]
+    overig = [h for h in verrijkt if h not in passend]
+    return passend, overig
+
 @logistieke_orders_bp.route("/weegbrug/<record_id>/afhandelen")
 def weegrecord_afhandelen(record_id):
     """Startpunt voor het afhandelen van een COMPLETE weging die nog geen eigen
@@ -919,15 +1051,133 @@ def weegrecord_afhandelen(record_id):
 
     return redirect(url_for("logistieke_orders.logistieke_order_koppel_contract", order_id=nieuwe_order["id"]))
 
+@logistieke_orders_bp.route("/api/weegrecord/<record_id>/maak-order", methods=["POST"])
+def api_weegrecord_maak_order(record_id):
+    """AJAX-variant van weegrecord_afhandelen: maakt (indien nog niet aanwezig) een
+    logistieke order aan voor een complete weging, en geeft het order-id terug als JSON
+    i.p.v. door te verwijzen — zodat de aanroepende pagina (Live Operaties) niet hoeft
+    te verversen."""
+    _guard = vereist_afdeling_of_403("live_operations")
+    if _guard: return _guard
+
+    weegrecords = laad_weegbrug()
+    record = next((r for r in weegrecords if r["id"] == record_id), None)
+    if not record or record.get("status") != "Compleet":
+        return jsonify({"error": "Deze weging is nog niet volledig afgerond."}), 404
+
+    orders = laad_logistieke_orders()
+    bestaande_order = next((o for o in orders if o.get("gekoppeld_weegbrug_id") == record_id), None)
+    if bestaande_order:
+        return jsonify({"order_id": bestaande_order["id"]})
+
+    nu = datetime.datetime.now()
+    netto_ton = round(float(record["netto_gewicht"]) / 1000, 3) if record.get("netto_gewicht") else ""
+    nieuwe_order = {
+        "id": str(uuid.uuid4()),
+        "ordernummer": genereer_logistiek_ordernummer(orders),
+        "leverancier": record.get("leverancier", ""),
+        "transporteur": record.get("transporteur", ""),
+        "kenteken": record.get("kenteken", ""),
+        "materiaal": record.get("materiaal", ""),
+        "kwaliteit": record.get("kwaliteit", ""),
+        "verwachte_hoeveelheid": "",
+        "werkelijke_hoeveelheid": str(netto_ton),
+        "datum": nu.date().isoformat(),
+        "verwachte_aankomst": "",
+        "werkelijke_aankomst": record.get("aangemaakt","").split(" ")[0] if record.get("aangemaakt") else "",
+        "gekoppeld_weegbrug_id": record_id,
+        "contract_referentie": "", "prijstype": "", "prijs_per_ton": None, "totale_waarde": None,
+        "verantwoordelijke_afdeling": "",
+        "status": "Weegbon compleet",
+        "opmerkingen": "Automatisch aangemaakt bij afhandelen van weegnummer " + record.get("weegnummer",""),
+        "aangemaakt_door": session.get("gebruikersnaam", ""),
+        "aangemaakt": nu.strftime("%d-%m-%Y %H:%M"),
+    }
+    orders.append(nieuwe_order)
+    bewaar_logistieke_orders(orders)
+    record["ordernummer"] = nieuwe_order["ordernummer"]
+    bewaar_weegbrug(weegrecords)
+    return jsonify({"order_id": nieuwe_order["id"]})
+
+@logistieke_orders_bp.route("/api/logistieke-order/<order_id>/contract-opties")
+def api_contract_opties(order_id):
+    """Geeft de koppelbare contracten voor deze order terug als JSON, voor de
+    inline-koppel-popup op Live Operaties."""
+    _guard = vereist_afdeling_of_403("live_operations")
+    if _guard: return _guard
+
+    orders = laad_logistieke_orders()
+    order = next((o for o in orders if o["id"] == order_id), None)
+    if not order:
+        return jsonify({"error": "Order niet gevonden"}), 404
+
+    passend, overig = _contract_opties_voor_order(order)
+    return jsonify({
+        "order": {"ordernummer": order["ordernummer"], "leverancier": order.get("leverancier",""),
+                   "materiaal": order.get("materiaal",""), "kwaliteit": order.get("kwaliteit","")},
+        "passend": passend, "overig": overig,
+    })
+
+@logistieke_orders_bp.route("/api/logistieke-order/<order_id>/koppel-contract", methods=["POST"])
+def api_koppel_contract(order_id):
+    """AJAX-variant van het contract-koppelen, voor gebruik vanuit de inline-popup op
+    Live Operaties — zelfde logica als de volledige-pagina-versie, maar met een
+    JSON-antwoord i.p.v. een redirect."""
+    _guard = vereist_afdeling_of_403("live_operations")
+    if _guard: return _guard
+
+    data = request.get_json(silent=True) or {}
+    orders = laad_logistieke_orders()
+    order = next((o for o in orders if o["id"] == order_id), None)
+    if not order:
+        return jsonify({"error": "Order niet gevonden"}), 404
+
+    keuze = data.get("contract_keuze", "")
+    verantwoordelijke_afdeling = data.get("verantwoordelijke_afdeling", "")
+
+    if keuze == "spot":
+        marktprijzen_materiaal = sorted(
+            [p for p in laad_marktprijzen() if p.get("materiaal","") == order.get("materiaal","")],
+            key=lambda p: p.get("datum",""), reverse=True
+        )
+        dagprijs = marktprijzen_materiaal[0]["prijs_per_ton"] if marktprijzen_materiaal else None
+        order["contract_referentie"] = ""
+        order["prijstype"] = "Spot (dagprijs)"
+        order["prijs_per_ton"] = dagprijs
+    else:
+        alle_handelsorders = laad_handelsorders()
+        gekozen_contract = next((h for h in alle_handelsorders if h["id"] == keuze), None)
+        if not gekozen_contract:
+            return jsonify({"error": "Contract niet gevonden"}), 404
+        order["contract_referentie"] = gekozen_contract["contractnummer"]
+        order["prijstype"] = "Contract"
+        try:
+            order["prijs_per_ton"] = float(str(gekozen_contract.get("prijs","0")).replace(",","."))
+        except (ValueError, TypeError):
+            order["prijs_per_ton"] = None
+
+    if order.get("werkelijke_hoeveelheid") and order.get("prijs_per_ton"):
+        try:
+            order["totale_waarde"] = round(float(order["werkelijke_hoeveelheid"]) * float(order["prijs_per_ton"]), 2)
+        except (ValueError, TypeError):
+            order["totale_waarde"] = None
+
+    order["verantwoordelijke_afdeling"] = verantwoordelijke_afdeling if verantwoordelijke_afdeling in ("finance", "logistiek", "backoffice") else order.get("verantwoordelijke_afdeling","")
+    bewaar_logistieke_orders(orders)
+    return jsonify({"ok": True, "contract_referentie": order["contract_referentie"], "prijstype": order["prijstype"]})
+
 @logistieke_orders_bp.route("/logistiek/orders/<order_id>/koppel-contract", methods=["GET", "POST"])
 def logistieke_order_koppel_contract(order_id):
     """Koppelt een weging (via de logistieke order) aan een inkoopcontract dat de
     accountmanager heeft aangemaakt en goedgekeurd (Handelsorders, type inkoop, status
-    Definitief — een Concept telt niet als een echt contract). Geldt alleen voor
+    Definitief — een Concept telt niet als een echt contract). Matcht op materiaal ÉN
+    kwaliteit (dus een SOP-weging toont alleen SOP-contracten). Geldt alleen voor
     vrachtwagen-transport (deze hele module is weegbrug-gebaseerd, dus dat klopt vanzelf).
+    FIFO: het oudste passende contract staat bovenaan.
 
-    FIFO: het oudste passende contract staat bovenaan, zodat je eerst het langst
-    openstaande contract afhandelt vóór een nieuwer."""
+    Dit is de bereikbare-via-URL-fallback; de gangbare weg is de inline-popup op
+    Live Operaties zelf (zie de /api/... routes hierboven), die dezelfde herbruikte
+    matching-logica gebruikt."""
     _guard = vereist_afdeling_of_403("live_operations")
     if _guard: return _guard
 
@@ -937,20 +1187,7 @@ def logistieke_order_koppel_contract(order_id):
         pagina = render_simple_page("Niet gevonden", "live_operations", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/live-operations">Terug naar Live Operaties</a></div>')
         return render_template_string(pagina), 404
 
-    alle_handelsorders = [
-        h for h in laad_handelsorders()
-        if h.get("order_type") == "inkoop" and h.get("status") == "Definitief"
-    ]
-    # FIFO: oudste eerst (op aanmaakdatum/-tijd, "%d-%m-%Y %H:%M").
-    def _aangemaakt_sorteersleutel(h):
-        try:
-            return datetime.datetime.strptime(h.get("aangemaakt",""), "%d-%m-%Y %H:%M")
-        except (ValueError, TypeError):
-            return datetime.datetime.max
-    alle_handelsorders.sort(key=_aangemaakt_sorteersleutel)
-
-    passende_contracten = [h for h in alle_handelsorders if h.get("materiaal","") == order.get("materiaal","") and h.get("tegenpartij_naam","") == order.get("leverancier","")]
-    overige_contracten = [h for h in alle_handelsorders if h not in passende_contracten]
+    passende_contracten, overige_contracten = _contract_opties_voor_order(order)
 
     if request.method == "POST":
         keuze = request.form.get("contract_keuze", "")
@@ -966,7 +1203,8 @@ def logistieke_order_koppel_contract(order_id):
             order["prijstype"] = "Spot (dagprijs)"
             order["prijs_per_ton"] = dagprijs
         else:
-            gekozen_contract = next((h for h in alle_handelsorders if h["id"] == keuze), None)
+            alle_opties = passende_contracten + overige_contracten
+            gekozen_contract = next((h for h in alle_opties if h["id"] == keuze), None)
             if gekozen_contract:
                 order["contract_referentie"] = gekozen_contract["contractnummer"]
                 order["prijstype"] = "Contract"
@@ -990,18 +1228,18 @@ def logistieke_order_koppel_contract(order_id):
     <a href="/logistiek/orders/{{ order.id }}" style="color:var(--gray-400);text-decoration:none;">{{ order.ordernummer }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Contract koppelen</span>
 </div>
 <div class="page-title">Contract koppelen — {{ order.ordernummer }}</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">{{ order.leverancier }} — {{ order.materiaal }}. Koppel een goedgekeurd inkoopcontract (prijs komt automatisch mee) of markeer als spot-transactie (dagprijs). Oudste contract staat bovenaan (FIFO).</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">{{ order.leverancier }} — {{ order.materiaal }} ({{ order.kwaliteit }}). Koppel een goedgekeurd inkoopcontract (prijs komt automatisch mee) of markeer als spot-transactie (dagprijs). Oudste contract staat bovenaan (FIFO).</p>
 
-<form method="POST" style="max-width:520px;">
+<form method="POST" style="max-width:560px;">
     <div style="margin-bottom:16px;">
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;display:block;margin-bottom:6px;">
             <input type="radio" name="contract_keuze" value="spot" checked onchange="document.getElementById('contract_select').disabled=true;"> Spot-transactie (dagprijs uit marktprijzen)
         </label>
         {% if passende_contracten %}
-        <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 4px 0;">Passende contracten (zelfde materiaal + leverancier) — oudste eerst</div>
+        <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 4px 0;">Passende contracten ({{ order.materiaal }} — {{ order.kwaliteit }}, {{ order.leverancier }}) — oudste eerst</div>
         {% for c in passende_contracten %}
         <label style="font-size:12.5px;color:var(--gray-700);display:block;margin-bottom:6px;">
-            <input type="radio" name="contract_keuze" value="{{ c.id }}" onchange="document.getElementById('contract_select').disabled=true;"> {{ c.contractnummer }} — {{ c.hoeveelheid_mt or '—' }} MT{% if c.prijs %} à €{{ c.prijs }}/MT{% endif %} <span style="color:var(--gray-400);">({{ c.aangemaakt }})</span>
+            <input type="radio" name="contract_keuze" value="{{ c.id }}" onchange="document.getElementById('contract_select').disabled=true;"> {{ c.contractnummer }} — {{ c.materiaal }} ({{ c.kwaliteit }}){% if c.prijs %} à €{{ c.prijs }}/MT{% endif %} — <b>{{ c.resterend_ton }} MT open</b> van {{ c.totaal_ton }} MT <span style="color:var(--gray-400);">({{ c.aangemaakt }})</span>
         </label>
         {% endfor %}
         {% endif %}
@@ -1009,7 +1247,7 @@ def logistieke_order_koppel_contract(order_id):
         <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 4px 0;">Overige goedgekeurde contracten</div>
         <select id="contract_select" name="contract_keuze" onchange="document.querySelectorAll('input[name=contract_keuze][type=radio]').forEach(function(r){r.checked=false;});" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— geen —</option>
-            {% for c in overige_contracten %}<option value="{{ c.id }}">{{ c.contractnummer }} — {{ c.tegenpartij_naam }} ({{ c.materiaal }}, {{ c.hoeveelheid_mt or '—' }} MT{% if c.prijs %}, €{{ c.prijs }}/MT{% endif %})</option>{% endfor %}
+            {% for c in overige_contracten %}<option value="{{ c.id }}">{{ c.contractnummer }} — {{ c.tegenpartij_naam }} ({{ c.materiaal }} — {{ c.kwaliteit }}, {{ c.resterend_ton }} MT open van {{ c.totaal_ton }} MT{% if c.prijs %}, €{{ c.prijs }}/MT{% endif %})</option>{% endfor %}
         </select>
         {% endif %}
         {% if not passende_contracten and not overige_contracten %}
