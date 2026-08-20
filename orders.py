@@ -331,99 +331,31 @@ function wisselIndeling(welke) {
     <a href="/export-orders-csv?filter_status={{ filter_status }}&filter_materiaal={{ filter_materiaal|urlencode }}&filter_verantwoordelijke={{ filter_verantwoordelijke }}" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:5px 10px;border-radius:6px;">⬇ Export CSV</a>
 </form>
 
-<div class="form-nieuw-order">
-    <form method="POST">
-        <input type="hidden" name="actie" value="toevoegen">
-        <div class="form-rij-2">
-            <select name="ordertype">
-                <option value="verkoop">📤 Verkoop (uitgaand)</option>
-                <option value="inkoop">📥 Inkoop (inkomend)</option>
-            </select>
-            <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" list="bedrijvenLijst" required>
-            <datalist id="bedrijvenLijst">
-                {% for naam in alle_bedrijfsnamen %}<option value="{{ naam }}">{% endfor %}
-            </datalist>
-        </div>
-        <div class="form-rij-2">
-            <select name="materiaal">
-                <option value="">Materiaal kiezen...</option>
-                {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
-                <optgroup label="{{ categorie }}">
-                    <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
-                    {% for kw in kwaliteiten_lijst %}
-                    <option value="{{ kw }}">{{ kw }}</option>
-                    {% endfor %}
-                </optgroup>
-                {% endfor %}
-            </select>
-            <input type="text" name="hoeveelheid" placeholder="Hoeveelheid (bv. 500 ton)">
-        </div>
-        <div class="form-rij-2">
-            <input type="text" name="prijs" placeholder="Waarde in € (bv. 15000)">
-            <select name="status">
-                {% for s in statussen %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
-            </select>
-        </div>
-        <div class="form-rij-2">
-            <input type="date" name="verwachte_datum">
-            <input type="text" name="bestemming" placeholder="Bestemming (bv. Thailand, Duitsland)">
-        </div>
-        <input type="text" name="transportmiddel" placeholder="Transport (bv. Container, Truck, MSC)" style="margin-bottom:10px;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
-        <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
-        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">+ Order toevoegen</button>
-    </form>
-</div>
-
 {% if getoonde_orders %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="data-thead">
         <span style="flex:1.6;">Bedrijf &amp; materiaal</span>
         <span style="width:110px;text-align:right;">Waarde</span>
         <span style="width:100px;">Verwacht</span>
         <span style="width:150px;">Status</span>
         <span style="width:100px;">Verantw.</span>
-        <span style="width:150px;text-align:right;">Actie</span>
     </div>
     {% for o in getoonde_orders %}
-    <div class="data-row" style="cursor:default;">
+    <a href="/orders/{{ o.id }}" class="data-row">
         <span style="flex:1.6;">
-            <span style="font-weight:600;color:var(--gray-800);">{{ '📥' if o.get('ordertype') == 'inkoop' else '📤' }} {{ o.bedrijf }}</span>
-            {% if o.is_verlopen %} <span style="background:#fef2f2;color:#dc2626;font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px;">⚠ VERLOPEN</span>{% endif %}
-            <br><span class="zacht">{{ o.materiaal|default('—',true) }}{% if o.hoeveelheid %} · {{ o.hoeveelheid }}{% endif %}{% if o.bestemming %} · 🌍{{ o.bestemming }}{% endif %}</span>
+            <span style="font-weight:600;color:var(--gray-800);">{{ o.bedrijf }}</span>
+            {% if o.is_verlopen %} <span style="background:#fef2f2;color:#dc2626;font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px;">VERLOPEN</span>{% endif %}
+            <br><span class="zacht">{{ o.materiaal|default('—',true) }}{% if o.hoeveelheid %} · {{ o.hoeveelheid }}{% endif %}{% if o.bestemming %} · {{ o.bestemming }}{% endif %}</span>
         </span>
         <span style="width:110px;text-align:right;" class="num">{% if o.prijs %}€{{ o.prijs }}{% else %}—{% endif %}</span>
         <span style="width:100px;" class="zacht">{{ o.verwachte_datum|default('—',true) }}</span>
-        <span style="width:150px;">
-            <form method="POST" style="margin:0;">
-                <input type="hidden" name="actie" value="status_wijzigen">
-                <input type="hidden" name="order_id" value="{{ o.id }}">
-                <select name="nieuwe_status" class="order-status-select" style="background:{{ statuskleuren.get(o.status, '#94a3b8') }};color:#fff;font-size:11px;" onchange="this.form.submit()">
-                    {% for s in statussen %}<option value="{{ s }}" {% if s == o.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
-                </select>
-            </form>
-        </span>
+        <span style="width:150px;color:var(--gray-600);">{{ o.status }}</span>
         <span style="width:100px;" class="zacht">{{ o.verantwoordelijke }}</span>
-        <span style="width:150px;text-align:right;display:flex;justify-content:flex-end;align-items:center;gap:6px;">
-            {% if o.gekoppelde_shipment %}
-            <span style="font-size:10px;font-weight:700;color:var(--gray-500);background:var(--gray-50);padding:4px 7px;border-radius:5px;white-space:nowrap;">🚢 {{ o.gekoppelde_shipment.status }}</span>
-            {% elif o.status == "Gewonnen" %}
-            <a href="/voorraad?prefill_order={{ o.id }}" style="font-size:10px;font-weight:700;color:#fff;background:{{ '#0891b2' if o.get('ordertype') == 'inkoop' else '#dc2626' }};padding:4px 7px;border-radius:5px;text-decoration:none;white-space:nowrap;">{{ '📥 In' if o.get('ordertype') == 'inkoop' else '📤 Uit' }}</a>
-            {% endif %}
-            <form method="POST" style="margin:0;" onsubmit="return confirm('Order verwijderen?');">
-                <input type="hidden" name="actie" value="verwijderen">
-                <input type="hidden" name="order_id" value="{{ o.id }}">
-                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.95rem;">✕</button>
-            </form>
-        </span>
-    </div>
+    </a>
     {% endfor %}
 </div>
 {% else %}
-{% if alle_orders %}
-<div class="lege-staat">Geen orders gevonden voor deze filters.</div>
-{% else %}
-<div class="lege-staat">Nog geen orders. Voeg je eerste order toe via het formulier hierboven.</div>
-{% endif %}
+<div class="lege-staat">Geen pipeline-orders gevonden.</div>
 {% endif %}
     """
     pagina = render_simple_page("Orders", "orders", inhoud)
@@ -438,3 +370,107 @@ function wisselIndeling(welke) {
                                     kpi_totaal_gecombineerd=kpi_totaal_gecombineerd,
                                     kpi_handelsorders_concept=kpi_handelsorders_concept,
                                     kpi_handelsorders_definitief=kpi_handelsorders_definitief)
+
+@orders_bp.route("/orders/<order_id>", methods=["GET", "POST"])
+def order_detail(order_id):
+    """Inzien + beheren van één pipeline-order. Bewust een aparte pagina — de
+    overzichtslijst zelf toont nu alleen nog informatie, geen acties."""
+    _guard = vereist_afdeling_of_403("orders")
+    if _guard: return _guard
+
+    alle_orders = laad_orders()
+    order = next((o for o in alle_orders if o["id"] == order_id), None)
+    if not order:
+        pagina = render_simple_page("Niet gevonden", "orders", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/orders">Terug naar Orders</a></div>')
+        return render_template_string(pagina), 404
+
+    if request.method == "POST":
+        actie = request.form.get("actie", "")
+        if actie == "status_wijzigen":
+            nieuwe_status = request.form.get("nieuwe_status", "")
+            order["status"] = nieuwe_status
+            bewaar_orders(alle_orders)
+
+            if nieuwe_status == "Gewonnen":
+                huidige_gebruikersnaam = session.get("gebruikersnaam", "")
+                if order.get("materiaal") and order.get("prijs"):
+                    _hoeveelheid_ton = parse_hoeveelheid_getal(order.get("hoeveelheid", ""))
+                    try:
+                        _prijs_totaal = float(str(order["prijs"]).replace(",", "").replace("€", "").strip())
+                    except (ValueError, TypeError):
+                        _prijs_totaal = 0
+                    if _hoeveelheid_ton > 0 and _prijs_totaal > 0:
+                        _marktprijzen = laad_marktprijzen()
+                        _prijs_per_ton = round(_prijs_totaal / _hoeveelheid_ton, 2)
+                        _marktprijzen.append({
+                            "id": str(uuid.uuid4()), "materiaal": order["materiaal"],
+                            "prijs_per_ton": _prijs_per_ton, "bron": "order",
+                            "bedrijf": order.get("bedrijf", ""), "order_id": order["id"],
+                            "notitie": "", "gebruiker": huidige_gebruikersnaam,
+                            "datum": datetime.date.today().isoformat(),
+                            "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+                        })
+                        bewaar_marktprijzen(_marktprijzen)
+
+                toegewezen_am = laad_accountmanagers().get(order["bedrijf"], "")
+                if toegewezen_am and toegewezen_am != huidige_gebruikersnaam:
+                    alle_meldingen = laad_meldingen()
+                    prijs_tekst = f" (€{order['prijs']})" if order.get("prijs") else ""
+                    alle_meldingen.append({
+                        "id": str(uuid.uuid4()),
+                        "tekst": f"Order gewonnen! {huidige_gebruikersnaam} heeft een order voor {order['bedrijf']} (jouw bedrijf) op 'Gewonnen' gezet{prijs_tekst}.",
+                        "bedrijf": order["bedrijf"], "van": huidige_gebruikersnaam,
+                        "voor_gebruiker": toegewezen_am, "voor_team": "",
+                        "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+                    })
+                    bewaar_meldingen(alle_meldingen)
+        elif actie == "verwijderen":
+            alle_orders = [o for o in alle_orders if o["id"] != order_id]
+            bewaar_orders(alle_orders)
+            return redirect(url_for("orders.orders_pagina"))
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    _alle_shipments_lookup = laad_shipments()
+    gekoppelde_ref = f"Order-{order['id'][:8]}"
+    gekoppelde_shipment = next((s for s in _alle_shipments_lookup if s.get("referentie") == gekoppelde_ref), None)
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/orders" style="color:var(--gray-400);text-decoration:none;">Orders</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ order.bedrijf }}</span>
+</div>
+<div class="page-title">{{ order.bedrijf }}</div>
+
+<div style="background:var(--gray-50);border-radius:8px;padding:18px 20px;font-size:12.5px;color:var(--gray-600);max-width:600px;margin-bottom:20px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div><b>Type:</b> {{ "Inkoop" if order.get("ordertype") == "inkoop" else "Verkoop" }}</div>
+        <div><b>Materiaal:</b> {{ order.materiaal or '—' }}</div>
+        <div><b>Hoeveelheid:</b> {{ order.hoeveelheid or '—' }}</div>
+        <div><b>Waarde:</b> {% if order.prijs %}€{{ order.prijs }}{% else %}—{% endif %}</div>
+        <div><b>Verwachte datum:</b> {{ order.verwachte_datum or '—' }}</div>
+        <div><b>Bestemming:</b> {{ order.bestemming or '—' }}</div>
+        <div><b>Transportmiddel:</b> {{ order.transportmiddel or '—' }}</div>
+        <div><b>Verantwoordelijke:</b> {{ order.verantwoordelijke or '—' }}</div>
+    </div>
+    {% if order.notitie %}<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--gray-200);"><b>Notitie:</b> {{ order.notitie }}</div>{% endif %}
+    {% if gekoppelde_shipment %}<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--gray-200);"><b>Gekoppelde shipment:</b> {{ gekoppelde_shipment.status }}</div>{% endif %}
+</div>
+
+<form method="POST" style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
+    <input type="hidden" name="actie" value="status_wijzigen">
+    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Status:</label>
+    <select name="nieuwe_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        {% for s in statussen %}<option value="{{ s }}" {% if s == order.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+</form>
+
+{% if order.status == "Gewonnen" and not gekoppelde_shipment %}
+<a href="/voorraad?prefill_order={{ order.id }}" style="display:inline-block;margin-bottom:16px;font-size:12.5px;font-weight:700;color:#fff;background:{{ '#0891b2' if order.get('ordertype') == 'inkoop' else '#dc2626' }};text-decoration:none;padding:8px 16px;border-radius:6px;">{{ 'Inboeken in voorraad' if order.get('ordertype') == 'inkoop' else 'Uitboeken uit voorraad' }}</a>
+{% endif %}
+
+<form method="POST" onsubmit="return confirm('Deze order definitief verwijderen?');">
+    <input type="hidden" name="actie" value="verwijderen">
+    <button type="submit" style="padding:8px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:12.5px;cursor:pointer;">Verwijderen</button>
+</form>
+    """
+    pagina = render_simple_page(order["bedrijf"], "orders", inhoud)
+    return render_template_string(pagina, order=order, statussen=ORDER_STATUSSEN, gekoppelde_shipment=gekoppelde_shipment)
