@@ -31,6 +31,7 @@ from core import (
     is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     parse_hoeveelheid_getal, laad_logistieke_orders, bewaar_logistieke_orders,
     DOCUMENTEN_MAP, laad_documenten, bewaar_documenten, laad_bedrijfslogo_instelling, LOGO_MAP,
+    laad_meldingen, bewaar_meldingen,
 )
 
 weegbrug_bp = Blueprint("weegbrug", __name__)
@@ -361,6 +362,22 @@ def weegbrug_inwegen(record_id):
         record["weegbrugmedewerker_in"] = session.get("gebruikersnaam", "")
         record["status"] = "Ingewogen"
         bewaar_weegbrug(records)
+
+        # Melding naar de accountmanager die aan deze leverancier gekoppeld is: hun
+        # vrachtwagen is nu binnengekomen en wordt afgehandeld.
+        if record.get("leverancier"):
+            toegewezen_am = laad_accountmanagers().get(record["leverancier"], "")
+            if toegewezen_am and toegewezen_am != session.get("gebruikersnaam", ""):
+                alle_meldingen = laad_meldingen()
+                alle_meldingen.append({
+                    "id": str(uuid.uuid4()),
+                    "tekst": f"Vrachtwagen binnengekomen bij de weegbrug voor {record['leverancier']} (jouw leverancier) — {record.get('materiaal','')} {record.get('kwaliteit','')}, kenteken {record['kenteken']}.",
+                    "bedrijf": record["leverancier"], "van": session.get("gebruikersnaam", ""),
+                    "voor_gebruiker": toegewezen_am, "voor_team": "",
+                    "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+                })
+                bewaar_meldingen(alle_meldingen)
+
         return redirect(url_for("weegbrug.weegbrug_pagina"))
 
     inhoud = """

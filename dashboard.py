@@ -18,7 +18,7 @@ from core import (
     parse_hoeveelheid_getal, bereken_afstand_km, bepaal_shipment_flow_type,
     shipment_hoeveelheid, render_simple_page, ENF_BEDRIJVEN, LANDEN,
     effectieve_afdeling, laad_weegbrug, laad_logistieke_orders, laad_transport_planning,
-    laad_containers, vereist_afdeling_of_403,
+    laad_containers, vereist_afdeling_of_403, laad_handelsorders,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -608,6 +608,17 @@ def dashboard():
         <div class="db-leeg">Alle klanten recent gesproken.</div>
         {% endfor %}
     </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Recent gekoppeld aan contract</div>
+        {% for o in recent_gekoppelde_contracten %}
+        <a class="db-lijst-item" href="/logistiek/orders/{{ o.id }}">
+            <span><span class="db-lijst-naam">{{ o.leverancier }}</span><br><span class="db-lijst-sub">{{ o.contract_referentie }} — {{ o.materiaal }}</span></span>
+            <span class="db-lijst-getal">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} t{% endif %}</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Nog geen leveringen aan een contract gekoppeld.</div>
+        {% endfor %}
+    </div>
 </div>
 
 <div class="db-rij">
@@ -678,6 +689,14 @@ def dashboard():
     else:
         volume_totaal_label = f"{_volume_som_dash:.0f} t"
 
+    # --- Recent gekoppelde contracten: laatste logistieke orders die aan een
+    # inkoopcontract gekoppeld zijn (via Live Operaties/Weegbrug) — noodzakelijk om
+    # vanuit het commerciële Dashboard te kunnen zien wat er al binnengekomen is. ---
+    recent_gekoppelde_contracten = sorted(
+        [o for o in laad_logistieke_orders() if o.get("contract_referentie")],
+        key=lambda o: o.get("aangemaakt",""), reverse=True
+    )[:6]
+
     return render_template_string(pagina,
         gebruikersnaam_dash=gebruikersnaam_dash,
         huidige_week=_vandaag_dash.isocalendar()[1],
@@ -699,7 +718,7 @@ def dashboard():
         marktprijzen_recent=marktprijzen_recent,
         aantal_forwarders=aantal_forwarders, aantal_transport_steden=aantal_transport_steden,
         placeholders=placeholders,
-        activiteit=activiteit)
+        activiteit=activiteit, recent_gekoppelde_contracten=recent_gekoppelde_contracten)
 
 @dashboard_bp.route("/inzichten")
 def inzichten():
@@ -799,6 +818,30 @@ def inzichten():
             key=lambda x: -x["gemiddeld"]
         )
 
+        # --- Contractvoortgang: goedgekeurde inkoopcontracten voor dit materiaal, bij
+        # leveranciers in het gekozen land — met geleverd/resterend tonnage. Dit maakt
+        # zichtbaar wat er via Live Operaties/Weegbrug al daadwerkelijk gekoppeld is,
+        # rechtstreeks vanuit de commerciële kant. ---
+        def _geleverd_op_contract_inzichten(contractnummer):
+            return round(sum(
+                parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                for o in laad_logistieke_orders()
+                if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
+            ), 3)
+        contractvoortgang_lijst = []
+        for h in laad_handelsorders():
+            if h.get("order_type") == "inkoop" and h.get("materiaal","") == gekozen_materiaal and h.get("status") == "Definitief" and _bedrijf_land_lookup.get(h.get("tegenpartij_naam",""), "") == gekozen_land:
+                try:
+                    totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+                except (ValueError, TypeError):
+                    totaal = 0.0
+                geleverd = _geleverd_op_contract_inzichten(h["contractnummer"])
+                contractvoortgang_lijst.append({
+                    "contractnummer": h["contractnummer"], "leverancier": h.get("tegenpartij_naam",""), "kwaliteit": h.get("kwaliteit",""),
+                    "totaal": round(totaal,1), "geleverd": geleverd, "resterend": round(totaal-geleverd,1),
+                })
+        contractvoortgang_lijst.sort(key=lambda c: -c["resterend"])
+
         resultaat_html = render_template_string("""
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Omzet</div>
 <div class="ci-grid" style="margin-bottom:24px;">
@@ -859,11 +902,28 @@ def inzichten():
 {% else %}
 <div class="lege-staat">Geen weegrecords voor deze combinatie.</div>
 {% endif %}
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Contractvoortgang (goedgekeurde inkoopcontracten)</div>
+{% if contractvoortgang_lijst %}
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
+    {% for c in contractvoortgang_lijst %}
+    <div style="display:flex;align-items:center;padding:8px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="flex:1.3;font-family:var(--font-mono);color:var(--gray-500);">{{ c.contractnummer }}</span>
+        <span style="flex:1;color:var(--gray-700);">{{ c.leverancier }} — {{ c.kwaliteit }}</span>
+        <span style="width:110px;text-align:right;color:var(--gray-500);">{{ c.geleverd }} / {{ c.totaal }} MT</span>
+        <span style="width:110px;text-align:right;font-weight:700;color:{{ '#dc2626' if c.resterend > 0 else '#16a34a' }};">{{ c.resterend }} MT open</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">Geen goedgekeurde inkoopcontracten voor deze combinatie.</div>
+{% endif %}
         """, omzet_deze_maand=omzet_deze_maand, omzet_vorige_maand=omzet_vorige_maand,
              omzet_verschil_pct=omzet_verschil_pct, gem_verkoopprijs_per_ton=gem_verkoopprijs_per_ton,
              volume_per_maand=volume_per_maand, max_volume_maand=max_volume_maand,
              prijspunten_materiaal=prijspunten_materiaal, gekozen_materiaal=gekozen_materiaal,
-             gem_laadgewicht_per_leverancier=gem_laadgewicht_per_leverancier)
+             gem_laadgewicht_per_leverancier=gem_laadgewicht_per_leverancier,
+             contractvoortgang_lijst=contractvoortgang_lijst)
 
     inhoud = """
 <div class="page-title">Commerciële Inzichten</div>

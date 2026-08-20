@@ -15,7 +15,8 @@ from core import (
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_accountmanagers,
     laad_users, render_simple_page, vereist_afdeling_of_403,
     laad_leverancier_instellingen, bewaar_leverancier_instellingen, leverancier_instelling_voor,
-    laad_betalingstermijnen, geocode_adres,
+    laad_betalingstermijnen, geocode_adres, laad_handelsorders, laad_logistieke_orders,
+    parse_hoeveelheid_getal,
 )
 
 relaties_bp = Blueprint("relaties", __name__)
@@ -454,6 +455,31 @@ def leverancier_commercieel_instellingen(naam):
             bewaar_leverancier_instellingen(alle_instellingen)
         return redirect(url_for("relaties.leverancier_commercieel_instellingen", naam=naam))
 
+    # --- Contractvoortgang: alle goedgekeurde inkoopcontracten van deze leverancier,
+    # met geleverd/resterend tonnage — noodzakelijk om vanuit Commercieel te kunnen
+    # zien wat er via de weegbrug al daadwerkelijk binnengekomen is. ---
+    alle_logistieke_orders = laad_logistieke_orders()
+    def _geleverd_op_contract(contractnummer):
+        return round(sum(
+            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            for o in alle_logistieke_orders
+            if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
+        ), 3)
+    contracten_lev = []
+    for h in laad_handelsorders():
+        if h.get("order_type") == "inkoop" and h.get("tegenpartij_naam") == naam and h.get("status") == "Definitief":
+            try:
+                totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+            except (ValueError, TypeError):
+                totaal = 0.0
+            geleverd = _geleverd_op_contract(h["contractnummer"])
+            contracten_lev.append({
+                "contractnummer": h["contractnummer"], "materiaal": h.get("materiaal",""), "kwaliteit": h.get("kwaliteit",""),
+                "totaal": round(totaal,1), "geleverd": geleverd, "resterend": round(totaal-geleverd,1),
+                "aangemaakt": h.get("aangemaakt",""),
+            })
+    contracten_lev.sort(key=lambda c: c["aangemaakt"], reverse=True)
+
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/leveranciers" style="color:var(--gray-400);text-decoration:none;">Leveranciers</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ naam }}</span> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Commercieel</span>
@@ -511,6 +537,25 @@ def leverancier_commercieel_instellingen(naam):
     </form>
 </div>
 </div>
+
+<div style="margin-top:28px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Contractvoortgang (goedgekeurde inkoopcontracten)</div>
+    {% if contracten_lev %}
+    <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);max-width:720px;">
+        {% for c in contracten_lev %}
+        <div style="display:flex;align-items:center;padding:9px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+            <span style="flex:1.3;font-family:var(--font-mono);color:var(--gray-500);">{{ c.contractnummer }}</span>
+            <span style="flex:1;color:var(--gray-700);">{{ c.materiaal }} — {{ c.kwaliteit }}</span>
+            <span style="width:110px;text-align:right;color:var(--gray-500);">{{ c.geleverd }} / {{ c.totaal }} MT</span>
+            <span style="width:110px;text-align:right;font-weight:700;color:{{ '#dc2626' if c.resterend > 0 else '#16a34a' }};">{{ c.resterend }} MT open</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="lege-staat">Nog geen goedgekeurde inkoopcontracten voor deze leverancier.</div>
+    {% endif %}
+</div>
     """
     pagina = render_simple_page(f"{naam} — Commercieel", "leveranciers", inhoud)
-    return render_template_string(pagina, naam=naam, instelling=instelling, betalingstermijnen=laad_betalingstermijnen())
+    return render_template_string(pagina, naam=naam, instelling=instelling, betalingstermijnen=laad_betalingstermijnen(),
+                                    contracten_lev=contracten_lev)
