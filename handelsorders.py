@@ -52,9 +52,16 @@ def _bereken_marge_intern(order):
     het AANMAKEN van de order zijn vastgelegd (wisselkoers_vastgelegd) — die worden
     nooit opnieuw opgehaald, ook niet bij bewerken of definitief maken, zodat de
     koers nooit onder je berekening verandert. Deze cijfers (kostprijs, winst) zijn
-    puur intern en komen nooit op het contract dat naar de leverancier gaat."""
+    puur intern en komen nooit op het contract dat naar de leverancier gaat.
+
+    PERN (alleen UK-markt): een exportsubsidie die we ontvangen, dus die gaat van
+    de inkoopprijs af vóórdat de rest van de berekening begint. PERN is altijd in
+    pond en wordt met de eigen, apart vastgelegde pond-koers naar euro omgerekend —
+    ook als de inkoopprijs zelf in een andere valuta staat."""
     koersen = order.get("wisselkoers_vastgelegd", {}) or {}
     inkoopprijs_eur = _getal(order.get("prijs")) * koersen.get("inkoop", 1.0)
+    pern_eur = _getal(order.get("pern_gbp")) * koersen.get("pern", 1.0)
+    effectieve_inkoopprijs_eur = inkoopprijs_eur - pern_eur
     verkoopprijs_eur = _getal(order.get("berekende_verkoopprijs")) * koersen.get("verkoop", 1.0)
     transportkosten_eur = _getal(order.get("berekende_transportkosten")) * koersen.get("transport", 1.0)
     laadgewicht = _getal(order.get("gemiddeld_laadgewicht"))
@@ -62,10 +69,12 @@ def _bereken_marge_intern(order):
     hoeveelheid = _getal(order.get("hoeveelheid_mt"))
 
     transportkosten_per_mt_eur = round(transportkosten_eur / laadgewicht, 2) if laadgewicht > 0 else 0.0
-    kostprijs_eur = round(inkoopprijs_eur + transportkosten_per_mt_eur + extra_kosten, 2)
+    kostprijs_eur = round(effectieve_inkoopprijs_eur + transportkosten_per_mt_eur + extra_kosten, 2)
     winst_per_mt_eur = round(verkoopprijs_eur - kostprijs_eur, 2)
     winst_totaal_eur = round(winst_per_mt_eur * hoeveelheid, 2)
     return {
+        "pern_eur": round(pern_eur, 2),
+        "effectieve_inkoopprijs_eur": round(effectieve_inkoopprijs_eur, 2),
         "transportkosten_per_mt_eur": transportkosten_per_mt_eur,
         "kostprijs_eur": kostprijs_eur,
         "winst_per_mt_eur": winst_per_mt_eur,
@@ -74,15 +83,16 @@ def _bereken_marge_intern(order):
 
 def _vergrendel_wisselkoersen(order_form):
     """Haalt bij het AANMAKEN van een inkooporder eenmalig de live wisselkoersen op
-    voor inkoop-, verkoop- en transportvaluta, en legt ze vast. Wordt nooit
-    opnieuw aangeroepen bij bewerken — dat is precies het punt."""
+    voor inkoop-, verkoop-, transport- en pond-valuta (voor PERN), en legt ze vast.
+    Wordt nooit opnieuw aangeroepen bij bewerken — dat is precies het punt."""
     inkoop_valuta = order_form.get("valuta", "EUR")
     verkoop_valuta = order_form.get("verkoopprijs_valuta", "EUR") or inkoop_valuta
     transport_valuta = order_form.get("transportkosten_valuta", "EUR") or inkoop_valuta
     koers_inkoop, _ = haal_live_wisselkoers(inkoop_valuta, "EUR")
     koers_verkoop, _ = haal_live_wisselkoers(verkoop_valuta, "EUR")
     koers_transport, _ = haal_live_wisselkoers(transport_valuta, "EUR")
-    return {"inkoop": koers_inkoop, "verkoop": koers_verkoop, "transport": koers_transport}
+    koers_pern, _ = haal_live_wisselkoers("GBP", "EUR")
+    return {"inkoop": koers_inkoop, "verkoop": koers_verkoop, "transport": koers_transport, "pern": koers_pern}
 
 
 @handelsorders_bp.route("/handelsorders")
@@ -263,6 +273,7 @@ def handelsorders_nieuw_inkoop():
             "transportkosten_valuta": request.form.get("transportkosten_valuta", "").strip(),
             "gemiddeld_laadgewicht": request.form.get("gemiddeld_laadgewicht", "").strip(),
             "extra_kosten_per_mt": request.form.get("extra_kosten_per_mt", "").strip(),
+            "pern_gbp": request.form.get("pern_gbp", "").strip(),
             "klant": request.form.get("klant", "").strip(),
             "pod_haven": request.form.get("pod_haven", "").strip(),
             "opmerkingen": request.form.get("opmerkingen", "").strip(),
@@ -275,6 +286,8 @@ def handelsorders_nieuw_inkoop():
         # opnieuw opgehaald, ook niet bij bewerken of definitief maken.
         nieuw["wisselkoers_vastgelegd"] = _vergrendel_wisselkoersen(request.form)
         marge_resultaat = _bereken_marge_intern(nieuw)
+        nieuw["pern_eur"] = marge_resultaat["pern_eur"]
+        nieuw["effectieve_inkoopprijs_eur"] = marge_resultaat["effectieve_inkoopprijs_eur"]
         nieuw["kostprijs_eur"] = marge_resultaat["kostprijs_eur"]
         nieuw["winst_per_mt_eur"] = marge_resultaat["winst_per_mt_eur"]
         nieuw["winst_totaal_eur"] = marge_resultaat["winst_totaal_eur"]
@@ -319,7 +332,7 @@ def _inkoop_formulier_html():
     </div>
     <div>
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bedrijfseenheid</label>
-        <select name="bedrijfseenheid" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        <select name="bedrijfseenheid" id="bedrijfseenheid_select" onchange="toonPernIndienUK()" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for be in bedrijfseenheden %}<option value="{{ be }}" {% if bedrijfseenheid == be %}selected{% endif %}>{{ be }}</option>{% endfor %}
         </select>
@@ -430,6 +443,11 @@ def _inkoop_formulier_html():
     <div style="font-size:11px;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:0.06em;">Intern — dit ziet de leverancier nooit</div>
     <div style="font-size:11.5px;color:#991b1b;margin-top:2px;">Deze cijfers verschijnen nooit op het contract of in de mail naar de leverancier. Puur voor de eigen margeberekening.</div>
 </div>
+<div id="pern_blok" style="display:none;margin-bottom:10px;max-width:260px;">
+    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">PERN (£, alleen UK-markt)</label>
+    <input type="text" name="pern_gbp" value="{{ pern_gbp|default('')}}" placeholder="Schommelt dagelijk, zelf invullen" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+    <div style="font-size:10.5px;color:var(--gray-300);margin-top:2px;">Gaat van de inkoopprijs af (we ontvangen dit).</div>
+</div>
 <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Verkoopprijs (per MT)</label>
@@ -490,6 +508,14 @@ def _inkoop_formulier_html():
 
 <script>
 var TAXONOMIE = {{ taxonomie_json|safe }};
+function toonPernIndienUK() {
+    var select = document.getElementById("bedrijfseenheid_select");
+    var pernBlok = document.getElementById("pern_blok");
+    if (select && pernBlok) {
+        pernBlok.style.display = (select.value === "UK") ? "block" : "none";
+    }
+}
+document.addEventListener("DOMContentLoaded", toonPernIndienUK);
 function verversKwaliteiten() {
     var materiaal = document.getElementById("materiaal_input").value;
     var kwaliteitDatalist = document.getElementById("kwaliteit_datalist");
@@ -832,6 +858,11 @@ def handelsorder_detail(order_id):
 <div style="background:#fef2f2;border-radius:8px;padding:14px 20px;font-size:12.5px;color:#7f1d1d;max-width:720px;margin-bottom:20px;">
     <div style="font-size:11px;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Intern — nooit naar de leverancier</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        {% if order.bedrijfseenheid == "UK" %}
+        <div><b>PERN (£):</b> {{ order.pern_gbp or '—' }}</div>
+        <div><b>PERN in €:</b> {% if order.pern_eur %}€{{ order.pern_eur }}{% else %}—{% endif %}</div>
+        <div><b>Inkoopprijs na PERN (€):</b> {% if order.effectieve_inkoopprijs_eur is not none %}€{{ order.effectieve_inkoopprijs_eur }}{% else %}—{% endif %}</div>
+        {% endif %}
         <div><b>Verkoopprijs:</b> {% if order.berekende_verkoopprijs %}{{ order.verkoopprijs_valuta }} {{ order.berekende_verkoopprijs }}/MT{% else %}—{% endif %}</div>
         <div><b>Transportkosten (totaal):</b> {% if order.berekende_transportkosten %}{{ order.transportkosten_valuta }} {{ order.berekende_transportkosten }}{% else %}—{% endif %}</div>
         <div><b>Gem. laadgewicht:</b> {{ order.gemiddeld_laadgewicht or '—' }}{% if order.gemiddeld_laadgewicht %} MT{% endif %}</div>
@@ -884,7 +915,7 @@ def handelsorder_bewerken(order_id):
     if order["order_type"] == "inkoop":
         velden += ["afhaal_locatienaam", "afhaal_adres", "afhaal_postcode", "afhaal_stad", "afhaal_land",
                    "berekende_verkoopprijs", "verkoopprijs_valuta", "berekende_transportkosten", "transportkosten_valuta",
-                   "gemiddeld_laadgewicht", "extra_kosten_per_mt", "klant"]
+                   "gemiddeld_laadgewicht", "extra_kosten_per_mt", "pern_gbp", "klant"]
     else:
         velden += ["lever_adres", "lever_postcode", "lever_stad", "lever_land", "leverancier"]
 
@@ -904,6 +935,8 @@ def handelsorder_bewerken(order_id):
         # al bij het aanmaken zijn vastgelegd. Die worden hier NOOIT opnieuw opgehaald.
         if order["order_type"] == "inkoop":
             marge_resultaat = _bereken_marge_intern(order)
+            order["pern_eur"] = marge_resultaat["pern_eur"]
+            order["effectieve_inkoopprijs_eur"] = marge_resultaat["effectieve_inkoopprijs_eur"]
             order["kostprijs_eur"] = marge_resultaat["kostprijs_eur"]
             order["winst_per_mt_eur"] = marge_resultaat["winst_per_mt_eur"]
             order["winst_totaal_eur"] = marge_resultaat["winst_totaal_eur"]
