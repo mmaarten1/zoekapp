@@ -44,7 +44,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "voorraadmomenten.json", "voorraad_shipments.json", "contracten.json", "marktprijzen.json", "cert_vervaldatums.json",
         "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json", "transport_planning.json",
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
-        "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json",
+        "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -1955,3 +1955,42 @@ def genereer_contractnummer(bestaande_orders, order_type):
     vandaag_nummers = [int(o["contractnummer"].replace(prefix, "")) for o in bestaande_orders if o.get("contractnummer","").startswith(prefix) and o["contractnummer"].replace(prefix,"").isdigit()]
     volgnummer = (max(vandaag_nummers) + 1) if vandaag_nummers else 1
     return f"{prefix}{volgnummer:03d}"
+
+# ============================================================
+# Live wisselkoersen voor de marge-calculatie bij Inkooporders. Gebruikt
+# frankfurter.app (gratis, gebaseerd op de Europese Centrale Bank, geen
+# API-sleutel nodig) — xe.com zelf biedt geen toegankelijke gratis API.
+# Cached per dag zodat de externe dienst niet onnodig belast wordt.
+# ============================================================
+WISSELKOERS_CACHE_FILE = datapad("wisselkoers_cache.json")
+
+def haal_live_wisselkoers(van_valuta, naar_valuta="EUR"):
+    """Geeft de koers terug om van 'van_valuta' naar 'naar_valuta' om te rekenen
+    (dus: bedrag_in_naar_valuta = bedrag_in_van_valuta * koers). Bij een storing
+    valt dit terug op de laatst bekende koers uit de cache, en als allerlaatste
+    redmiddel op 1.0 — zodat een tijdelijke storing nooit de hele berekening
+    laat crashen, wel duidelijk zichtbaar blijft als 'onzeker' voor wie het leest."""
+    if van_valuta == naar_valuta:
+        return 1.0, True
+    vandaag_str = datetime.date.today().isoformat()
+    try:
+        with open(WISSELKOERS_CACHE_FILE, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+    except:
+        cache = {}
+    cache_sleutel = f"{van_valuta}_{naar_valuta}"
+    if cache.get(cache_sleutel, {}).get("datum") == vandaag_str:
+        return cache[cache_sleutel]["koers"], True
+
+    try:
+        resp = requests.get(f"https://api.frankfurter.app/latest?from={van_valuta}&to={naar_valuta}", timeout=5)
+        data = resp.json()
+        koers = data["rates"][naar_valuta]
+        cache[cache_sleutel] = {"koers": koers, "datum": vandaag_str}
+        with open(WISSELKOERS_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+        return koers, True
+    except Exception:
+        if cache_sleutel in cache:
+            return cache[cache_sleutel]["koers"], False
+        return 1.0, False
