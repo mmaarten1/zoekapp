@@ -18,7 +18,7 @@ from core import (
     parse_hoeveelheid_getal, bereken_afstand_km, bepaal_shipment_flow_type,
     shipment_hoeveelheid, render_simple_page, ENF_BEDRIJVEN, LANDEN,
     effectieve_afdeling, laad_weegbrug, laad_logistieke_orders, laad_transport_planning,
-    laad_containers, vereist_afdeling_of_403, laad_handelsorders,
+    laad_containers, vereist_afdeling_of_403, laad_handelsorders, laad_facturen, bepaal_factuur_status,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -140,10 +140,119 @@ def _logistiek_dashboard():
                                     kpi_transport_onderweg=kpi_transport_onderweg, kpi_transport_vertraagd=kpi_transport_vertraagd,
                                     kpi_containers_onderweg=kpi_containers_onderweg, recente_weegrecords=recente_weegrecords)
 
+def _backoffice_finance_dashboard():
+    """Eenvoudig, apart dashboard voor Backoffice/Finance — bewust klein gehouden en
+    alleen met echt beschikbare data; wordt later verder ingevuld. Zonder deze
+    aparte functie vielen deze afdelingen terug op het commerciële dashboard
+    (persoonlijk per accountmanager), wat voor hen altijd leeg/nul zou zijn."""
+    huidige_gebruiker = session.get("gebruikersnaam", "")
+    _huidig_uur = datetime.datetime.now().hour
+    if _huidig_uur < 12:
+        groet_woord = "Goedemorgen"
+    elif _huidig_uur < 18:
+        groet_woord = "Goedemiddag"
+    else:
+        groet_woord = "Goedenavond"
+
+    alle_facturen = laad_facturen()
+    for _f in alle_facturen:
+        _f["status"] = bepaal_factuur_status(_f)
+    openstaande_facturen = [f for f in alle_facturen if f.get("status") != "Betaald"]
+    te_laat_facturen = [f for f in alle_facturen if f.get("status") == "Te laat"]
+
+    def _bedrag_getal(f):
+        try:
+            return float(str(f.get("bedrag", "0")).replace(",", "."))
+        except (ValueError, TypeError):
+            return 0.0
+    totaal_openstaand = sum(_bedrag_getal(f) for f in openstaande_facturen)
+
+    alle_logistieke_orders_bf = laad_logistieke_orders()
+    klaar_voor_finance = [o for o in alle_logistieke_orders_bf if o.get("status") == "Klaar voor Finance"]
+    wacht_op_afhandeling = [o for o in alle_logistieke_orders_bf if o.get("status") in ("Weegbon compleet", "Afhandeling")]
+
+    _vandaag_bf = datetime.date.today()
+    _vervaldatums_bf = laad_cert_vervaldatums()
+    aantal_cert_verlopen_bf = 0
+    for b in ENF_BEDRIJVEN:
+        for c in [x.strip() for x in b.get("certificeringen", "").split(",") if x.strip()]:
+            geldig_tot = _vervaldatums_bf.get(_cert_sleutel(b["naam"], c), "")
+            if geldig_tot:
+                try:
+                    if datetime.datetime.strptime(geldig_tot, "%Y-%m-%d").date() < _vandaag_bf:
+                        aantal_cert_verlopen_bf += 1
+                except (ValueError, TypeError):
+                    pass
+
+    recent_gekoppeld_bf = sorted(
+        [o for o in alle_logistieke_orders_bf if o.get("contract_referentie")],
+        key=lambda o: o.get("aangemaakt",""), reverse=True
+    )[:6]
+
+    inhoud = """
+<div class="page-title">{{ groet_woord }}, {{ gebruikersnaam or "daar" }}</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Overzicht voor Backoffice/Finance.</p>
+
+<style>
+.bf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:24px; }
+.bf-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); padding:16px 4px; }
+.bf-getal { font-size:1.6rem; font-weight:800; color:var(--gray-800); }
+.bf-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.6px; margin-top:4px; font-weight:600; }
+.bf-tabel-rij { display:flex; align-items:center; padding:9px 4px; border-bottom:1px solid var(--gray-100); font-size:12.5px; text-decoration:none; color:inherit; }
+</style>
+
+<div class="bf-grid">
+    <div class="bf-kaart"><div class="bf-getal">{{ openstaande_facturen|length }}</div><div class="bf-label">Openstaande facturen</div></div>
+    <div class="bf-kaart" style="{% if te_laat_facturen %}border-color:#fecaca;{% endif %}"><div class="bf-getal" style="{% if te_laat_facturen %}color:#dc2626;{% endif %}">{{ te_laat_facturen|length }}</div><div class="bf-label">Te laat</div></div>
+    <div class="bf-kaart"><div class="bf-getal">€{{ "{:,.0f}".format(totaal_openstaand).replace(",", ".") }}</div><div class="bf-label">Totaal openstaand</div></div>
+    <div class="bf-kaart"><div class="bf-getal">{{ klaar_voor_finance|length }}</div><div class="bf-label">Klaar voor Finance</div></div>
+    <div class="bf-kaart"><div class="bf-getal">{{ wacht_op_afhandeling|length }}</div><div class="bf-label">Wacht op afhandeling</div></div>
+    <div class="bf-kaart"><div class="bf-getal">{{ aantal_cert_verlopen_bf }}</div><div class="bf-label">Certificeringen verlopen</div></div>
+</div>
+
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+    <a href="/facturen" style="font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">Facturen →</a>
+    <a href="/logistiek/afhandeling" style="font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">Afhandeling →</a>
+    <a href="/certificeringen" style="font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">Certificeringen →</a>
+</div>
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Recent gekoppeld aan contract</div>
+{% if recent_gekoppeld_bf %}
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
+    {% for o in recent_gekoppeld_bf %}
+    <a href="/logistiek/orders/{{ o.id }}" class="bf-tabel-rij">
+        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ o.leverancier }}</span>
+        <span style="flex:1;color:var(--gray-500);">{{ o.contract_referentie }} — {{ o.materiaal }}</span>
+        <span style="width:90px;text-align:right;color:var(--gray-600);">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} t{% endif %}</span>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">Nog geen leveringen aan een contract gekoppeld.</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Dashboard", "dashboard", inhoud)
+    return render_template_string(pagina, groet_woord=groet_woord, gebruikersnaam=huidige_gebruiker,
+                                    openstaande_facturen=openstaande_facturen, te_laat_facturen=te_laat_facturen,
+                                    totaal_openstaand=totaal_openstaand, klaar_voor_finance=klaar_voor_finance,
+                                    wacht_op_afhandeling=wacht_op_afhandeling, aantal_cert_verlopen_bf=aantal_cert_verlopen_bf,
+                                    recent_gekoppeld_bf=recent_gekoppeld_bf)
+
 @dashboard_bp.route("/dashboard")
 def dashboard():
     if effectieve_afdeling() in ("logistiek", "weegbrug"):
         return _logistiek_dashboard()
+    if effectieve_afdeling() in ("backoffice", "finance"):
+        return _backoffice_finance_dashboard()
+
+    huidige_gebruiker = session.get("gebruikersnaam", "")
+    _huidig_uur = datetime.datetime.now().hour
+    if _huidig_uur < 12:
+        groet_woord = "Goedemorgen"
+    elif _huidig_uur < 18:
+        groet_woord = "Goedemiddag"
+    else:
+        groet_woord = "Goedenavond"
 
     snapshots = maak_dagelijkse_snapshot()
     groei_pct = None
@@ -162,7 +271,65 @@ def dashboard():
     aantal_geen = sum(1 for s in status_alle.values() if s == "geen_interesse")
     status_totaal = max(aantal_klant + aantal_potentie + aantal_proces + aantal_geen, 1)
 
-    # ---------- Ingekocht per maand (echte data: inbound shipments) ----------
+    # ---------- Alles hieronder gepersonaliseerd naar de ingelogde accountmanager ----------
+    accountmanagers_alle_dash = laad_accountmanagers()
+    mijn_bedrijven_lijst = [b for b in ENF_BEDRIJVEN if accountmanagers_alle_dash.get(b["naam"]) == huidige_gebruiker]
+    alle_handelsorders_dash = laad_handelsorders()
+
+    def _handelsorder_datum(h):
+        try:
+            return datetime.datetime.strptime(h.get("aangemaakt",""), "%d-%m-%Y %H:%M").date()
+        except (ValueError, TypeError):
+            return None
+
+    def _marge_getal(h):
+        try:
+            return float(str(h.get("berekende_marge","0")).replace(",","."))
+        except (ValueError, TypeError):
+            return 0.0
+
+    mijn_inkoop_definitief = [h for h in alle_handelsorders_dash if h.get("order_type")=="inkoop" and h.get("status")=="Definitief" and h.get("aangemaakt_door")==huidige_gebruiker]
+    mijn_verkoop_definitief = [h for h in alle_handelsorders_dash if h.get("order_type")=="verkoop" and h.get("status")=="Definitief" and h.get("aangemaakt_door")==huidige_gebruiker]
+    mijn_concept_orders = [h for h in alle_handelsorders_dash if h.get("status")=="Concept" and h.get("aangemaakt_door")==huidige_gebruiker]
+
+    # KPI: eigen klanten (was: 'Bedrijven in database', bedrijfsbreed)
+    eigen_klanten_aantal = sum(1 for b in mijn_bedrijven_lijst if status_alle.get(b["naam"]) == "klant")
+
+    # KPI: gedekt volume -> persoonlijk ingekocht volume deze maand
+    _deze_maand_sleutel_kpi = (datetime.date.today().year, datetime.date.today().month)
+    gedekt_volume_maand = sum(
+        parse_hoeveelheid_getal(h.get("hoeveelheid_mt",""))
+        for h in mijn_inkoop_definitief
+        if _handelsorder_datum(h) and (_handelsorder_datum(h).year, _handelsorder_datum(h).month) == _deze_maand_sleutel_kpi
+    )
+
+    # KPI: actieve leads -> eigen leads (potentie/in_proces), gekoppeld als accountmanager
+    eigen_actieve_leads = sum(1 for b in mijn_bedrijven_lijst if status_alle.get(b["naam"]) in ("potentie", "in_proces"))
+
+    # KPI: geplande orders -> eigen openstaande (Concept) handelsorders
+    geplande_orders_aantal = len(mijn_concept_orders)
+
+    # KPI: omzet (gewonnen) -> som van eigen marges uit inkoop, dit jaar
+    _dit_jaar_kpi = datetime.date.today().year
+    mijn_inkoop_dit_jaar = [h for h in mijn_inkoop_definitief if _handelsorder_datum(h) and _handelsorder_datum(h).year == _dit_jaar_kpi]
+    omzet_totaal = sum(_marge_getal(h) for h in mijn_inkoop_dit_jaar if h.get("berekende_marge"))
+
+    # KPI: ton verkocht -> alles wat je zelf hebt verkocht
+    ton_verkocht_totaal = sum(parse_hoeveelheid_getal(h.get("hoeveelheid_mt","")) for h in mijn_verkoop_definitief)
+
+    # KPI: verwachte omzet -> hernoemd naar gemiddelde marge per ton (dit jaar, eigen inkoop)
+    mijn_inkoop_met_marge = [h for h in mijn_inkoop_dit_jaar if h.get("berekende_marge") and h.get("hoeveelheid_mt")]
+    _totaal_marge_gem = sum(_marge_getal(h) for h in mijn_inkoop_met_marge)
+    _totaal_ton_gem = sum(parse_hoeveelheid_getal(h.get("hoeveelheid_mt","")) for h in mijn_inkoop_met_marge)
+    gemiddelde_marge_per_ton = round(_totaal_marge_gem / _totaal_ton_gem, 2) if _totaal_ton_gem > 0 else 0
+
+    # KPI: lopende orders -> hernoemd naar openstaande (te laat) facturen van eigen klanten
+    alle_facturen_dash = laad_facturen()
+    for _f in alle_facturen_dash:
+        _f["status"] = bepaal_factuur_status(_f)
+    lopende_orders_aantal = len([f for f in alle_facturen_dash if f.get("status")=="Te laat" and accountmanagers_alle_dash.get(f.get("bedrijf",""))==huidige_gebruiker])
+
+    # ---------- Ingekocht per maand (persoonlijk, uit eigen Handelsorders) ----------
     vandaag_maand = datetime.date.today().replace(day=1)
     maand_labels = []
     maand_sleutels = []
@@ -177,41 +344,29 @@ def dashboard():
     maand_sleutels.reverse()
     maand_labels.reverse()
     inkoop_per_maand = {sleutel: 0.0 for sleutel in maand_sleutels}
-    alle_shipments_dash = laad_shipments()
-    for s in alle_shipments_dash:
-        if s.get("status") == "Cancelled" or not s.get("datum"):
+    for h in mijn_inkoop_definitief:
+        _d = _handelsorder_datum(h)
+        if not _d:
             continue
-        if bepaal_shipment_flow_type(s) != "inbound":
-            continue
-        try:
-            dt = datetime.datetime.strptime(s["datum"], "%Y-%m-%d").date()
-        except (ValueError, TypeError):
-            continue
-        sleutel = (dt.year, dt.month)
+        sleutel = (_d.year, _d.month)
         if sleutel in inkoop_per_maand:
-            inkoop_per_maand[sleutel] += shipment_hoeveelheid(s)
+            inkoop_per_maand[sleutel] += parse_hoeveelheid_getal(h.get("hoeveelheid_mt",""))
     inkoop_serie = [inkoop_per_maand[s] for s in maand_sleutels]
     max_inkoop_maand = max(inkoop_serie) if any(inkoop_serie) else 1
 
-    # ---------- Inkoop per kwaliteit (echte data: goedgekeurde inbound-transacties) ----------
+    # ---------- Inkoop per kwaliteit (persoonlijk, uit eigen Handelsorders) ----------
     inkoop_per_kwaliteit = {}
-    for t in laad_voorraad():
-        if t.get("type") not in ("in", "inbound"):
-            continue
-        if t.get("keuringsstatus", "goedgekeurd") != "goedgekeurd":
-            continue
-        naam = t.get("materiaal", "")
+    for h in mijn_inkoop_definitief:
+        naam = f"{h.get('materiaal','')} — {h.get('kwaliteit','')}" if h.get("kwaliteit") else h.get("materiaal","")
         if not naam:
             continue
-        inkoop_per_kwaliteit[naam] = inkoop_per_kwaliteit.get(naam, 0.0) + parse_hoeveelheid_getal(t.get("hoeveelheid", ""))
+        inkoop_per_kwaliteit[naam] = inkoop_per_kwaliteit.get(naam, 0.0) + parse_hoeveelheid_getal(h.get("hoeveelheid_mt",""))
     inkoop_kwaliteit_lijst = sorted(inkoop_per_kwaliteit.items(), key=lambda x: -x[1])[:8]
     max_inkoop_kwaliteit = max([a for _, a in inkoop_kwaliteit_lijst], default=1) or 1
 
-    # ---------- Orders / sales (echte data) ----------
+    # ---------- Orders (oude, eenvoudige orders.json — nog gebruikt door Team-prestatie hieronder) ----------
     orders_alle_dash = laad_orders()
-    verkoop_orders_dash = [o for o in orders_alle_dash if o.get("ordertype", "verkoop") != "inkoop"]
-    gewonnen_verkoop_dash = [o for o in verkoop_orders_dash if o.get("status") == "Gewonnen"]
-    open_of_onderhandeling_dash = [o for o in orders_alle_dash if o.get("status") in ("Open", "Onderhandeling")]
+    _vandaag_dash = datetime.date.today()
 
     def _prijs_getal(o):
         try:
@@ -219,33 +374,24 @@ def dashboard():
         except (ValueError, TypeError):
             return 0.0
 
-    omzet_totaal = sum(_prijs_getal(o) for o in gewonnen_verkoop_dash)
-    ton_verkocht_totaal = sum(parse_hoeveelheid_getal(o.get("hoeveelheid", "")) for o in gewonnen_verkoop_dash)
-    verwachte_omzet = sum(_prijs_getal(o) for o in verkoop_orders_dash if o.get("status") in ("Open", "Onderhandeling"))
-    lopende_orders_aantal = len(open_of_onderhandeling_dash)
-
-    _vandaag_dash = datetime.date.today()
-    geplande_orders_lijst = []
-    for o in open_of_onderhandeling_dash:
-        if not o.get("verwachte_datum"):
+    # ---------- Sales pipeline -> per bedrijfseenheid (team), dan per persoon: ingekochte hoeveelheid ----------
+    _pipeline_per_team = {}
+    for h in alle_handelsorders_dash:
+        if h.get("order_type") != "inkoop" or h.get("status") != "Definitief":
             continue
-        try:
-            d = datetime.datetime.strptime(o["verwachte_datum"], "%Y-%m-%d").date()
-        except (ValueError, TypeError):
-            continue
-        if d >= _vandaag_dash:
-            geplande_orders_lijst.append(o)
-    geplande_orders_aantal = len(geplande_orders_lijst)
-
-    # Sales pipeline: verdeling van alle orders over de statussen
+        _team = h.get("bedrijfseenheid","") or "Niet ingedeeld"
+        _persoon = h.get("aangemaakt_door","") or "Onbekend"
+        _hoeveelheid = parse_hoeveelheid_getal(h.get("hoeveelheid_mt",""))
+        _pipeline_per_team.setdefault(_team, {})
+        _pipeline_per_team[_team][_persoon] = _pipeline_per_team[_team].get(_persoon, 0.0) + _hoeveelheid
     pipeline_tellingen = []
-    for st in ("Open", "Onderhandeling", "Gewonnen", "Verloren"):
-        aantal = sum(1 for o in orders_alle_dash if o.get("status") == st)
-        pipeline_tellingen.append({"status": st, "aantal": aantal})
-    max_pipeline = max([p["aantal"] for p in pipeline_tellingen], default=1) or 1
+    for _team, _personen in _pipeline_per_team.items():
+        _personen_lijst = sorted([{"naam": p, "hoeveelheid": round(h,1)} for p, h in _personen.items()], key=lambda x: -x["hoeveelheid"])
+        pipeline_tellingen.append({"team": _team, "personen": _personen_lijst, "totaal": round(sum(_personen.values()),1)})
+    pipeline_tellingen.sort(key=lambda t: -t["totaal"])
+    max_pipeline = max([t["totaal"] for t in pipeline_tellingen], default=1) or 1
 
     # ---------- Team-prestatie (echte data) ----------
-    accountmanagers_alle_dash = laad_accountmanagers()
     _teamnamen_dash = sorted(set(laad_users().keys()) | set(accountmanagers_alle_dash.values()) | {o.get("verantwoordelijke", "") for o in orders_alle_dash if o.get("verantwoordelijke")})
     team_prestaties_dash = []
     for naam in _teamnamen_dash:
@@ -261,18 +407,16 @@ def dashboard():
     team_prestaties_dash = team_prestaties_dash[:6]
     max_team_waarde = max([t["waarde"] for t in team_prestaties_dash], default=1) or 1
 
-    # ---------- Progressie met bedrijven (status-funnel, echte data) ----------
+    # ---------- Progressie met bedrijven (status-funnel, gepersonaliseerd) ----------
     progressie_funnel = [
-        {"label": "Nieuwe leads", "aantal": len(ENF_BEDRIJVEN) - status_totaal + max(0, status_totaal - (aantal_klant + aantal_potentie + aantal_proces + aantal_geen))},
-        {"label": "Potentie", "aantal": aantal_potentie},
-        {"label": "In proces", "aantal": aantal_proces},
-        {"label": "Klant", "aantal": aantal_klant},
+        {"label": "Nieuwe leads", "aantal": sum(1 for b in mijn_bedrijven_lijst if not status_alle.get(b["naam"]))},
+        {"label": "Potentie", "aantal": sum(1 for b in mijn_bedrijven_lijst if status_alle.get(b["naam"]) == "potentie")},
+        {"label": "In proces", "aantal": sum(1 for b in mijn_bedrijven_lijst if status_alle.get(b["naam"]) == "in_proces")},
+        {"label": "Klant", "aantal": eigen_klanten_aantal},
     ]
-    # Nieuwe leads = bedrijven zonder enige status
-    progressie_funnel[0]["aantal"] = sum(1 for b in ENF_BEDRIJVEN if not status_alle.get(b["naam"]))
     max_funnel = max([f["aantal"] for f in progressie_funnel], default=1) or 1
 
-    # ---------- Topklanten & klanten zonder recent contact (echte data) ----------
+    # ---------- Topklanten & klanten zonder recent contact (gepersonaliseerd) ----------
     _notities_alle_dash = laad_notities()
 
     def _laatste_contact_dagen(naam_bedrijf):
@@ -289,7 +433,7 @@ def dashboard():
             return None
         return (_vandaag_dash - laatste).days
 
-    klanten_dash = [b for b in ENF_BEDRIJVEN if status_alle.get(b["naam"]) == "klant"]
+    klanten_dash = [b for b in mijn_bedrijven_lijst if status_alle.get(b["naam"]) == "klant"]
     topklanten = sorted(klanten_dash, key=lambda b: -parse_hoeveelheid_getal(b.get("volume", "")))[:5]
     klanten_zonder_contact = []
     for b in klanten_dash:
@@ -300,7 +444,7 @@ def dashboard():
     klanten_zonder_contact = klanten_zonder_contact[:5]
 
     nieuwe_leads_lijst = sorted(
-        [b for b in ENF_BEDRIJVEN if not status_alle.get(b["naam"])],
+        [b for b in mijn_bedrijven_lijst if not status_alle.get(b["naam"])],
         key=lambda b: -parse_hoeveelheid_getal(b.get("volume", ""))
     )[:5]
 
@@ -312,14 +456,16 @@ def dashboard():
     aantal_forwarders = len(transport_data_dash)
     aantal_transport_steden = sum(len(v) for v in transport_data_dash.values())
 
-    # ---------- Vraagt om aandacht ----------
+    # ---------- Vraagt om aandacht (grotendeels gepersonaliseerd; 'leads zonder
+    # accountmanager' blijft bewust bedrijfsbreed, want die hebben per definitie
+    # nog geen eigenaar) ----------
     leads_zonder_am_dash = [b for b in ENF_BEDRIJVEN if not accountmanagers_alle_dash.get(b["naam"])]
     leads_zonder_am_groot = sum(1 for b in leads_zonder_am_dash if parse_hoeveelheid_getal(b.get("volume", "")) > 10000)
-    bedrijven_zonder_kwaliteiten = sum(1 for b in ENF_BEDRIJVEN if b.get("materialen") and not b.get("kwaliteiten"))
+    bedrijven_zonder_kwaliteiten = sum(1 for b in mijn_bedrijven_lijst if b.get("materialen") and not b.get("kwaliteiten"))
 
     _vervaldatums_dash = laad_cert_vervaldatums()
     aantal_cert_verlopen = 0
-    for b in ENF_BEDRIJVEN:
+    for b in mijn_bedrijven_lijst:
         for c in [x.strip() for x in b.get("certificeringen", "").split(",") if x.strip()]:
             geldig_tot = _vervaldatums_dash.get(_cert_sleutel(b["naam"], c), "")
             if geldig_tot:
@@ -329,11 +475,12 @@ def dashboard():
                 except (ValueError, TypeError):
                     pass
 
+    # Orders over datum -> eigen Concept-handelsorders waarvan de einddatum al voorbij is
     orders_verlopen = 0
-    for o in open_of_onderhandeling_dash:
-        if o.get("verwachte_datum"):
+    for h in mijn_concept_orders:
+        if h.get("einddatum"):
             try:
-                if datetime.datetime.strptime(o["verwachte_datum"], "%Y-%m-%d").date() < _vandaag_dash:
+                if datetime.datetime.strptime(h["einddatum"], "%Y-%m-%d").date() < _vandaag_dash:
                     orders_verlopen += 1
             except (ValueError, TypeError):
                 pass
@@ -343,11 +490,11 @@ def dashboard():
         sub = f"waarvan {leads_zonder_am_groot} boven 10.000 t/j" if leads_zonder_am_groot else ""
         aandacht_items.append({"titel": f"{len(leads_zonder_am_dash)} leads zonder accountmanager", "sub": sub, "url": "/?accountmanager="})
     if bedrijven_zonder_kwaliteiten:
-        aandacht_items.append({"titel": f"{bedrijven_zonder_kwaliteiten} bedrijven zonder kwaliteiten", "sub": "blokkeert matching met fabrieken", "url": "/"})
+        aandacht_items.append({"titel": f"{bedrijven_zonder_kwaliteiten} eigen bedrijven zonder kwaliteiten", "sub": "blokkeert matching met fabrieken", "url": "/"})
     if aantal_cert_verlopen:
-        aandacht_items.append({"titel": f"{aantal_cert_verlopen} certificeringen verlopen", "sub": "controle nodig", "url": "/certificeringen"})
+        aandacht_items.append({"titel": f"{aantal_cert_verlopen} certificeringen verlopen (eigen bedrijven)", "sub": "controle nodig", "url": "/certificeringen"})
     if orders_verlopen:
-        aandacht_items.append({"titel": f"{orders_verlopen} orders over de verwachte datum", "sub": "nog niet afgerond", "url": "/orders"})
+        aandacht_items.append({"titel": f"{orders_verlopen} eigen orders over de einddatum", "sub": "nog niet definitief gemaakt", "url": "/handelsorders"})
 
     # ---------- Activiteit van het team ----------
     activiteit = []
@@ -367,11 +514,6 @@ def dashboard():
             })
     activiteit.sort(key=lambda x: x["tijd_sorteer"], reverse=True)
     activiteit = activiteit[:6]
-
-    volume_klant = 0.0
-    for b in ENF_BEDRIJVEN:
-        if status_alle.get(b["naam"]) == "klant":
-            volume_klant += parse_hoeveelheid_getal(b.get("volume", ""))
 
     gebruikersnaam_dash = session.get("gebruikersnaam", "")
 
@@ -453,7 +595,7 @@ def dashboard():
 
 <div class="db-topbar">
     <div>
-        <div class="db-groet">Goedemorgen, {{ gebruikersnaam_dash or "daar" }}</div>
+        <div class="db-groet">{{ groet_woord }}, {{ gebruikersnaam_dash or "daar" }}</div>
         <div class="db-substaat">Stand van zaken, week {{ huidige_week }} · bijgewerkt vanochtend {{ bijgewerkt_tijd }}</div>
     </div>
     <div class="db-acties">
@@ -464,46 +606,46 @@ def dashboard():
 
 <div class="db-kpi-rij">
     <div class="db-kpi">
-        <div class="db-kpi-label">Bedrijven in database</div>
-        <div class="db-kpi-getal">{{ "{:,}".format(totaal).replace(",", ".") }}</div>
-        <div class="db-kpi-sub">{% if groei_pct is not none %}{{ '+' if groei_pct >= 0 else '' }}{{ groei_pct }}% sinds {{ groei_periode }}{% else %}nog geen groeicijfer{% endif %}</div>
+        <div class="db-kpi-label">Eigen klanten</div>
+        <div class="db-kpi-getal">{{ "{:,}".format(eigen_klanten_aantal).replace(",", ".") }}</div>
+        <div class="db-kpi-sub">gekoppeld als accountmanager</div>
     </div>
     <div class="db-kpi">
         <div class="db-kpi-label">Gedekt volume</div>
         <div class="db-kpi-getal">{{ volume_totaal_label }}</div>
-        <div class="db-kpi-sub">per jaar, opgegeven</div>
+        <div class="db-kpi-sub">persoonlijk ingekocht deze maand</div>
     </div>
     <div class="db-kpi">
         <div class="db-kpi-label">Actieve leads</div>
-        <div class="db-kpi-getal">{{ status_totaal_leads }}</div>
-        <div class="db-kpi-sub">{{ leads_zonder_am_dash|length }} zonder accountmanager</div>
+        <div class="db-kpi-getal">{{ eigen_actieve_leads }}</div>
+        <div class="db-kpi-sub">eigen leads, gekoppeld als accountmanager</div>
     </div>
     <div class="db-kpi">
         <div class="db-kpi-label">Geplande orders</div>
         <div class="db-kpi-getal">{{ geplande_orders_aantal }}</div>
-        <div class="db-kpi-sub">met een verwachte datum</div>
+        <div class="db-kpi-sub">eigen orders, nog concept</div>
     </div>
 </div>
 <div class="db-kpi-rij">
     <div class="db-kpi">
-        <div class="db-kpi-label">Omzet (gewonnen)</div>
+        <div class="db-kpi-label">Omzet (marge, dit jaar)</div>
         <div class="db-kpi-getal">€{{ "{:,.0f}".format(omzet_totaal).replace(",", ".") }}</div>
-        <div class="db-kpi-sub">uit gewonnen verkooporders</div>
+        <div class="db-kpi-sub">eigen marge uit inkoop</div>
     </div>
     <div class="db-kpi">
         <div class="db-kpi-label">Ton verkocht</div>
         <div class="db-kpi-getal">{{ "{:,.0f}".format(ton_verkocht_totaal).replace(",", ".") }}</div>
-        <div class="db-kpi-sub">uit gewonnen verkooporders</div>
+        <div class="db-kpi-sub">eigen, definitieve verkooporders</div>
     </div>
     <div class="db-kpi">
-        <div class="db-kpi-label">Verwachte omzet</div>
-        <div class="db-kpi-getal">€{{ "{:,.0f}".format(verwachte_omzet).replace(",", ".") }}</div>
-        <div class="db-kpi-sub">open + onderhandeling</div>
+        <div class="db-kpi-label">Gem. marge per ton</div>
+        <div class="db-kpi-getal">€{{ "{:,.2f}".format(gemiddelde_marge_per_ton).replace(",", ".") }}</div>
+        <div class="db-kpi-sub">gemiddeld dit jaar, eigen inkoop</div>
     </div>
     <div class="db-kpi">
-        <div class="db-kpi-label">Lopende orders</div>
+        <div class="db-kpi-label">Openstaande facturen</div>
         <div class="db-kpi-getal">{{ lopende_orders_aantal }}</div>
-        <div class="db-kpi-sub">open of in onderhandeling</div>
+        <div class="db-kpi-sub">te laat, bij eigen klanten</div>
     </div>
 </div>
 
@@ -524,13 +666,20 @@ def dashboard():
         {% endif %}
     </div>
     <div class="db-kol">
-        <div class="db-sectie-titel">Sales pipeline</div>
-        {% for p in pipeline_tellingen %}
-        <div class="db-hbar-rij">
-            <span class="db-hbar-naam">{{ p.status }}</span>
-            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (p.aantal/max_pipeline*100)|round(1) }}%;"></span></span>
-            <span class="db-hbar-getal">{{ p.aantal }}</span>
+        <div class="db-sectie-titel">Sales pipeline <small>ingekocht per team, per persoon</small></div>
+        {% for t in pipeline_tellingen %}
+        <div style="margin-bottom:10px;">
+            <div style="font-size:11.5px;font-weight:700;color:var(--gray-700);margin-bottom:3px;">{{ t.team }} — {{ t.totaal }} t</div>
+            {% for p in t.personen %}
+            <div class="db-hbar-rij" style="margin-left:8px;">
+                <span class="db-hbar-naam" style="font-size:11px;">{{ p.naam }}</span>
+                <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (p.hoeveelheid/max_pipeline*100)|round(1) }}%;"></span></span>
+                <span class="db-hbar-getal">{{ p.hoeveelheid }} t</span>
+            </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <div class="db-leeg">Nog geen ingekochte, definitieve orders.</div>
         {% endfor %}
     </div>
 </div>
@@ -681,13 +830,12 @@ def dashboard():
     """
     pagina = render_simple_page("Dashboard", "dashboard", inhoud)
 
-    _volume_som_dash = sum(parse_hoeveelheid_getal(b.get("volume","")) for b in ENF_BEDRIJVEN)
-    if _volume_som_dash >= 1_000_000:
-        volume_totaal_label = f"{_volume_som_dash/1_000_000:.1f} Mt".replace(".", ",")
-    elif _volume_som_dash >= 1000:
-        volume_totaal_label = f"{_volume_som_dash/1000:.1f}k t".replace(".", ",")
+    if gedekt_volume_maand >= 1_000_000:
+        volume_totaal_label = f"{gedekt_volume_maand/1_000_000:.1f} Mt".replace(".", ",")
+    elif gedekt_volume_maand >= 1000:
+        volume_totaal_label = f"{gedekt_volume_maand/1000:.1f}k t".replace(".", ",")
     else:
-        volume_totaal_label = f"{_volume_som_dash:.0f} t"
+        volume_totaal_label = f"{gedekt_volume_maand:.0f} t"
 
     # --- Recent gekoppelde contracten: laatste logistieke orders die aan een
     # inkoopcontract gekoppeld zijn (via Live Operaties/Weegbrug) — noodzakelijk om
@@ -698,15 +846,15 @@ def dashboard():
     )[:6]
 
     return render_template_string(pagina,
-        gebruikersnaam_dash=gebruikersnaam_dash,
+        gebruikersnaam_dash=gebruikersnaam_dash, groet_woord=groet_woord,
         huidige_week=_vandaag_dash.isocalendar()[1],
         bijgewerkt_tijd=datetime.datetime.now().strftime("%H:%M"),
         totaal=len(ENF_BEDRIJVEN), groei_pct=groei_pct, groei_periode=groei_periode,
-        volume_totaal_label=volume_totaal_label,
-        status_totaal_leads=len(ENF_BEDRIJVEN), leads_zonder_am_dash=leads_zonder_am_dash,
+        volume_totaal_label=volume_totaal_label, eigen_klanten_aantal=eigen_klanten_aantal,
+        eigen_actieve_leads=eigen_actieve_leads, leads_zonder_am_dash=leads_zonder_am_dash,
         geplande_orders_aantal=geplande_orders_aantal,
         omzet_totaal=omzet_totaal, ton_verkocht_totaal=ton_verkocht_totaal,
-        verwachte_omzet=verwachte_omzet, lopende_orders_aantal=lopende_orders_aantal,
+        gemiddelde_marge_per_ton=gemiddelde_marge_per_ton, lopende_orders_aantal=lopende_orders_aantal,
         maand_labels=maand_labels, inkoop_serie=inkoop_serie, max_inkoop_maand=max_inkoop_maand,
         pipeline_tellingen=pipeline_tellingen, max_pipeline=max_pipeline,
         inkoop_kwaliteit_lijst=inkoop_kwaliteit_lijst, max_inkoop_kwaliteit=max_inkoop_kwaliteit,
