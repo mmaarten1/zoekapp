@@ -13,7 +13,7 @@ from flask import Blueprint, request, session, render_template_string, redirect,
 
 from core import (
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_accountmanagers,
-    laad_users, render_simple_page, vereist_afdeling_of_403,
+    laad_users, render_simple_page, vereist_afdeling_of_403, is_huidige_gebruiker_admin,
     laad_leverancier_instellingen, bewaar_leverancier_instellingen, leverancier_instelling_voor,
     laad_betalingstermijnen, geocode_adres, laad_handelsorders, laad_logistieke_orders,
     parse_hoeveelheid_getal,
@@ -252,8 +252,17 @@ def klanten_pagina():
     filter_status_klant = request.args.get("filter_status", "")
 
     status_alle_klant = laad_status()
+    accountmanagers_alle_klant = laad_accountmanagers()
+    huidige_gebruiker_klant = session.get("gebruikersnaam", "")
+    _is_bevoorrecht_klant = is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur"
 
-    klanten_lijst = list(PAPIERFABRIEKEN)
+    # Alleen de fabrieken die aan de ingelogde accountmanager zijn toegewezen — geen
+    # bedrijfsbrede lijst meer. Admin/directeur zien (net als overal elders) wel alles.
+    if _is_bevoorrecht_klant:
+        klanten_lijst = list(PAPIERFABRIEKEN)
+    else:
+        klanten_lijst = [f for f in PAPIERFABRIEKEN if accountmanagers_alle_klant.get(f["naam"]) == huidige_gebruiker_klant]
+    _eigen_klanten_basis = list(klanten_lijst)  # vóór zoek-/land-/status-filters, voor de tellingen hieronder
     if zoekterm_fab:
         klanten_lijst = [f for f in klanten_lijst if zoekterm_fab in f.get("naam","").lower() or zoekterm_fab in f.get("stad","").lower()]
     if land_fab:
@@ -267,13 +276,13 @@ def klanten_pagina():
             klanten_lijst = [f for f in klanten_lijst if f["status"] == filter_status_klant]
     klanten_lijst.sort(key=lambda f: f.get("naam",""))
 
-    alle_landen_fab = sorted({f.get("land","") for f in PAPIERFABRIEKEN if f.get("land","")})
+    alle_landen_fab = sorted({f.get("land","") for f in _eigen_klanten_basis if f.get("land","")})
     landen_in_resultaat_fab = len({f.get("land","") for f in klanten_lijst if f.get("land","")})
 
     aantal_per_status = {
-        "klant": sum(1 for f in PAPIERFABRIEKEN if status_alle_klant.get(f["naam"]) == "klant"),
-        "in_proces": sum(1 for f in PAPIERFABRIEKEN if status_alle_klant.get(f["naam"]) == "in_proces"),
-        "potentie": sum(1 for f in PAPIERFABRIEKEN if status_alle_klant.get(f["naam"]) == "potentie"),
+        "klant": sum(1 for f in _eigen_klanten_basis if status_alle_klant.get(f["naam"]) == "klant"),
+        "in_proces": sum(1 for f in _eigen_klanten_basis if status_alle_klant.get(f["naam"]) == "in_proces"),
+        "potentie": sum(1 for f in _eigen_klanten_basis if status_alle_klant.get(f["naam"]) == "potentie"),
     }
 
     actieve_filters_fab = []
