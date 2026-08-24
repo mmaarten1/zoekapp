@@ -825,6 +825,23 @@ def handelsorder_notitie_toevoegen(order_id):
             bewaar_handelsorders(orders)
     return redirect(url_for("handelsorders.handelsorder_detail", order_id=order_id))
 
+@handelsorders_bp.route("/handelsorders/<order_id>/verwijderen", methods=["POST"])
+def handelsorder_verwijderen(order_id):
+    """Verwijdert een order — alleen toegestaan zolang de status Concept is. Een
+    Definitieve order is een verstuurd contract en mag niet zomaar verdwijnen;
+    daarvoor bestaat geen verwijder-actie, alleen aanmaken en (als Concept)
+    bewerken of verwijderen."""
+    _guard = vereist_afdeling_of_403("handelsorders")
+    if _guard: return _guard
+
+    orders = laad_handelsorders()
+    order = next((o for o in orders if o["id"] == order_id), None)
+    if order and order.get("status") == "Concept":
+        orders = [o for o in orders if o["id"] != order_id]
+        bewaar_handelsorders(orders)
+        return redirect(url_for("handelsorders.handelsorders_pagina"))
+    return redirect(url_for("handelsorders.handelsorder_detail", order_id=order_id))
+
 @handelsorders_bp.route("/handelsorders/<order_id>")
 def handelsorder_detail(order_id):
     _guard = vereist_afdeling_of_403("handelsorders")
@@ -951,6 +968,9 @@ def handelsorder_detail(order_id):
     <a href="/handelsorders/{{ order.id }}/bewerken" style="padding:9px 18px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Wijzigen</a>
     <form method="POST" action="/handelsorders/{{ order.id }}/goedkeuren" onsubmit="return confirm('Order goedkeuren en versturen? Dit maakt de order definitief en kan niet ongedaan gemaakt worden.');" style="margin:0;">
         <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Goedkeuren en versturen</button>
+    </form>
+    <form method="POST" action="/handelsorders/{{ order.id }}/verwijderen" onsubmit="return confirm('Deze order definitief verwijderen? Dit kan niet ongedaan gemaakt worden.');" style="margin:0;">
+        <button type="submit" style="padding:9px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:13px;cursor:pointer;">Verwijderen</button>
     </form>
     {% else %}
     <a href="/handelsorders/{{ order.id }}/pdf" target="_blank" style="padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Contract downloaden (PDF)</a>
