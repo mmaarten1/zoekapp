@@ -168,6 +168,7 @@ def marktprijzen_pagina():
             <b>{{ p.materiaal }}</b> · €{{ "{:,.2f}".format(p.prijs_per_ton) }}/ton
             {% if p.bedrijf %} · {{ p.bedrijf }}{% endif %}
             {% if p.bron == "order" %} · <span style="color:var(--brand-600);">📦 uit order</span>{% endif %}
+            {% if p.bron == "handelsorder" %} · <a href="/handelsorders/{{ p.order_id }}" style="color:var(--brand-600);text-decoration:none;">📦 uit handelsorder</a>{% endif %}
             <br><small style="color:var(--gray-400);">{{ p.datum }} · {{ p.gebruiker }}{% if p.notitie %} · {{ p.notitie }}{% endif %}</small>
         </div>
         <form method="POST" onsubmit="return confirm('Prijspunt verwijderen?');" style="margin:0;">

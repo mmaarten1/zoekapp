@@ -27,7 +27,7 @@ from core import (
     laad_bedrijfseenheden, laad_leverancier_instellingen, leverancier_instelling_voor,
     genereer_supplier_reference, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     parse_hoeveelheid_getal, AFDELINGEN, AFDELING_LABELS, haal_live_wisselkoers, laad_facturen,
-    bepaal_factuur_status,
+    bepaal_factuur_status, laad_marktprijzen, bewaar_marktprijzen,
 )
 
 handelsorders_bp = Blueprint("handelsorders", __name__)
@@ -1011,6 +1011,40 @@ def _stuur_contractmail_naar_tegenpartij(order, pdf_bytes):
     aanknopingspunt voor zodra er een e-mailaccount/SMTP-koppeling beschikbaar is."""
     return {"verstuurd": False, "reden": "E-mailkoppeling nog niet actief."}
 
+def _log_marktprijs_bij_definitief(order):
+    """Legt automatisch een marktprijspunt vast zodra een order definitief wordt —
+    zelfde principe als het oude orders.json-systeem deed bij 'Gewonnen', nu voor
+    het huidige, actieve Handelsorders-systeem. Prijs wordt altijd in euro
+    vastgelegd: voor inkoop via de al-vastgelegde wisselkoers (nooit opnieuw
+    opgehaald), voor verkoop via een live koers op het moment van definitief maken
+    (verkooporders leggen geen koers vooraf vast, dus die is er nog niet)."""
+    if not order.get("materiaal") or not order.get("prijs"):
+        return
+    try:
+        _prijs = float(str(order["prijs"]).replace(",", "."))
+    except (ValueError, TypeError):
+        return
+    if _prijs <= 0:
+        return
+    _valuta = order.get("valuta", "EUR")
+    if order.get("order_type") == "inkoop":
+        _koers = (order.get("wisselkoers_vastgelegd") or {}).get("inkoop", 1.0)
+    else:
+        _koers, _ = haal_live_wisselkoers(_valuta, "EUR") if _valuta != "EUR" else (1.0, True)
+    _prijs_eur = round(_prijs * _koers, 2)
+
+    _marktprijzen = laad_marktprijzen()
+    _marktprijzen.append({
+        "id": str(uuid.uuid4()), "materiaal": order["materiaal"],
+        "prijs_per_ton": _prijs_eur, "bron": "handelsorder",
+        "bedrijf": order.get("tegenpartij_naam", ""), "order_id": order["id"],
+        "notitie": f"{order.get('contractnummer','')} ({order.get('kwaliteit','')})" if order.get("kwaliteit") else order.get("contractnummer",""),
+        "gebruiker": session.get("gebruikersnaam", ""),
+        "datum": datetime.date.today().isoformat(),
+        "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+    })
+    bewaar_marktprijzen(_marktprijzen)
+
 @handelsorders_bp.route("/handelsorders/<order_id>/goedkeuren", methods=["POST"])
 def handelsorder_goedkeuren(order_id):
     _guard = vereist_afdeling_of_403("handelsorders")
@@ -1028,6 +1062,8 @@ def handelsorder_goedkeuren(order_id):
         order["boekhoud_resultaat"] = _stuur_naar_boekhoudpakket(order)
         order["email_resultaat"] = _stuur_contractmail_naar_tegenpartij(order, pdf_bytes)
         bewaar_handelsorders(orders)
+
+        _log_marktprijs_bij_definitief(order)
 
     return redirect(url_for("handelsorders.handelsorder_detail", order_id=order_id))
 
