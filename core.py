@@ -45,6 +45,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json", "transport_planning.json",
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
         "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
+        "login_pogingen.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -903,6 +904,10 @@ def laad_forwarder_wachtwoorden():
             return json.load(f)
     except:
         return {}
+
+def bewaar_forwarder_wachtwoorden(data):
+    with open(datapad("forwarder_wachtwoorden.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 # ============================================================
@@ -1996,3 +2001,53 @@ def haal_live_wisselkoers(van_valuta, naar_valuta="EUR"):
         if cache_sleutel in cache:
             return cache[cache_sleutel]["koers"], False
         return 1.0, False
+
+# ============================================================
+# Brute-force-bescherming op inloggen: na een aantal mislukte pogingen wordt
+# een account tijdelijk geblokkeerd. Bijgehouden per gebruikersnaam (niet per
+# IP — eenvoudiger en dekt het praktische risico: iemand die keihard een
+# wachtwoord van een bekend account probeert te raden).
+# ============================================================
+MAX_MISLUKTE_INLOGPOGINGEN = 5
+INLOG_LOCKOUT_MINUTEN = 15
+
+def laad_inlog_pogingen():
+    try:
+        with open(datapad("login_pogingen.json"), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_inlog_pogingen(data):
+    with open(datapad("login_pogingen.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def is_account_tijdelijk_geblokkeerd(gebruikersnaam):
+    """Geeft (geblokkeerd: bool, resterende_minuten: int) terug. Na
+    MAX_MISLUKTE_INLOGPOGINGEN mislukte pogingen op rij is een account
+    INLOG_LOCKOUT_MINUTEN geblokkeerd, gerekend vanaf de laatste mislukte poging."""
+    pogingen = laad_inlog_pogingen()
+    info = pogingen.get(gebruikersnaam)
+    if not info or info.get("aantal", 0) < MAX_MISLUKTE_INLOGPOGINGEN:
+        return False, 0
+    try:
+        laatste = datetime.datetime.strptime(info["laatste"], "%Y-%m-%dT%H:%M:%S")
+    except (KeyError, ValueError):
+        return False, 0
+    verstreken_minuten = (datetime.datetime.now() - laatste).total_seconds() / 60
+    if verstreken_minuten >= INLOG_LOCKOUT_MINUTEN:
+        return False, 0
+    return True, max(1, round(INLOG_LOCKOUT_MINUTEN - verstreken_minuten))
+
+def registreer_mislukte_inlogpoging(gebruikersnaam):
+    pogingen = laad_inlog_pogingen()
+    info = pogingen.setdefault(gebruikersnaam, {"aantal": 0, "laatste": ""})
+    info["aantal"] = info.get("aantal", 0) + 1
+    info["laatste"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    bewaar_inlog_pogingen(pogingen)
+
+def reset_mislukte_inlogpogingen(gebruikersnaam):
+    pogingen = laad_inlog_pogingen()
+    if gebruikersnaam in pogingen:
+        del pogingen[gebruikersnaam]
+        bewaar_inlog_pogingen(pogingen)

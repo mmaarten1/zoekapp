@@ -1,4 +1,5 @@
 import os
+import secrets
 import json
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -32,6 +33,8 @@ from core import (
     ALBLASSERDAM_NAAM, bepaal_shipment_flow_type, shipment_hoeveelheid,
     TENANT_ID, COMPANIES_HOUSE_API_KEY, CH_FAILLIET_STATUSSEN,
     companies_house_status, is_ch_financieel_gezond, laad_transport_data, laad_forwarder_wachtwoorden,
+    bewaar_forwarder_wachtwoorden, is_account_tijdelijk_geblokkeerd, registreer_mislukte_inlogpoging,
+    reset_mislukte_inlogpogingen,
     PAGINA_HOOFD, sidebar_html, render_simple_page, is_huidige_gebruiker_admin, vereist_admin_of_403,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
@@ -45,7 +48,47 @@ from core import (
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "verander-dit-later-in-iets-geheims")
+
+def _bepaal_secret_key():
+    """Gebruikt de SECRET_KEY-omgevingsvariabele als die is ingesteld (aanbevolen,
+    zeker in productie). Is die er niet, dan wordt GEEN vast, voorspelbaar
+    noodwoord meer gebruikt (dat was een echt beveiligingslek — iedereen die de
+    broncode kent, kende dan ook de sleutel waarmee sessies ondertekend worden).
+    In plaats daarvan wordt eenmalig een willekeurige, veilige sleutel gegenereerd
+    en weggeschreven naar een lokaal bestand, zodat sessies wél consistent blijven
+    over herstarts heen — zonder dat de sleutel ooit in de broncode terechtkomt."""
+    omgevingssleutel = os.environ.get("SECRET_KEY")
+    if omgevingssleutel:
+        return omgevingssleutel
+    # Zelfde DATA_DIR-conventie als core.py (Railway Volume indien ingesteld, anders lokale map)
+    # — bewust hier los gehouden i.p.v. core.py te importeren, want dit moet al werken
+    # vóórdat de rest van de app (inclusief core.py) geladen wordt.
+    data_map = os.environ.get("DATA_DIR", ".")
+    sleutelpad = os.path.join(data_map, ".secret_key")
+    try:
+        with open(sleutelpad, "r", encoding="utf-8") as f:
+            bestaande = f.read().strip()
+            if bestaande:
+                return bestaande
+    except FileNotFoundError:
+        pass
+    nieuwe_sleutel = secrets.token_hex(32)
+    try:
+        os.makedirs(os.path.dirname(sleutelpad), exist_ok=True)
+        with open(sleutelpad, "w", encoding="utf-8") as f:
+            f.write(nieuwe_sleutel)
+    except OSError:
+        pass  # Kan niet wegschrijven (bv. read-only filesystem) — sleutel blijft dan wel deze sessie werken
+    return nieuwe_sleutel
+
+app.secret_key = _bepaal_secret_key()
+
+# Sessie-cookies verharden. SESSION_COOKIE_SECURE alleen aanzetten in productie
+# (Railway) — anders werkt lokaal inloggen niet meer, want dat draait meestal
+# over gewoon http zonder ssl, en een 'Secure'-cookie wordt dan nooit verstuurd.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
 
 from marktprijzen import marktprijzen_bp
 app.register_blueprint(marktprijzen_bp)
@@ -1824,7 +1867,22 @@ def forwarder_upload():
         bestand = request.files.get("bestand")
 
         wachtwoorden = laad_forwarder_wachtwoorden()
-        if forwarder not in wachtwoorden or wachtwoorden[forwarder] != wachtwoord:
+        opgeslagen_waarde = wachtwoorden.get(forwarder, "")
+        _geldig = False
+        if opgeslagen_waarde:
+            if opgeslagen_waarde.startswith(("pbkdf2:", "scrypt:")):
+                # Al correct gehasht
+                _geldig = check_password_hash(opgeslagen_waarde, wachtwoord)
+            else:
+                # Nog platte tekst (oude, handmatig aangemaakte data) — dit is de
+                # laatste keer dat dit onveilig wordt vergeleken: bij een geldig
+                # wachtwoord wordt het meteen omgezet naar een hash, zodat het
+                # bestand vanaf nu nooit meer leesbare wachtwoorden bevat.
+                _geldig = (opgeslagen_waarde == wachtwoord)
+                if _geldig:
+                    wachtwoorden[forwarder] = generate_password_hash(wachtwoord)
+                    bewaar_forwarder_wachtwoorden(wachtwoorden)
+        if forwarder not in wachtwoorden or not _geldig:
             bericht = "Onjuiste forwarder-naam of wachtwoord."
         elif not bestand:
             bericht = "Geen bestand geselecteerd."
@@ -1930,16 +1988,23 @@ def login():
     if request.method == "POST":
         gebruikersnaam = request.form.get("gebruikersnaam", "")
         wachtwoord = request.form.get("wachtwoord", "")
-        users = laad_users()
-        if gebruikersnaam in users and check_password_hash(users[gebruikersnaam]["wachtwoord"], wachtwoord):
-            session["ingelogd"] = True
-            session["gebruikersnaam"] = gebruikersnaam
-            session["team"] = users[gebruikersnaam].get("team", "")
-            session["afdeling"] = users[gebruikersnaam].get("afdeling", "")
-            session["rol"] = users[gebruikersnaam].get("rol", "")
-            return redirect(url_for("zoeken.index"))
+
+        geblokkeerd, resterende_minuten = is_account_tijdelijk_geblokkeerd(gebruikersnaam)
+        if geblokkeerd:
+            fout = f"Te veel mislukte inlogpogingen. Probeer het over {resterende_minuten} minuten opnieuw."
         else:
-            fout = "Onjuiste gebruikersnaam of wachtwoord."
+            users = laad_users()
+            if gebruikersnaam in users and check_password_hash(users[gebruikersnaam]["wachtwoord"], wachtwoord):
+                reset_mislukte_inlogpogingen(gebruikersnaam)
+                session["ingelogd"] = True
+                session["gebruikersnaam"] = gebruikersnaam
+                session["team"] = users[gebruikersnaam].get("team", "")
+                session["afdeling"] = users[gebruikersnaam].get("afdeling", "")
+                session["rol"] = users[gebruikersnaam].get("rol", "")
+                return redirect(url_for("zoeken.index"))
+            else:
+                registreer_mislukte_inlogpoging(gebruikersnaam)
+                fout = "Onjuiste gebruikersnaam of wachtwoord."
     return render_template_string(LOGIN_HTML, fout=fout)
 
 
@@ -2956,7 +3021,6 @@ def facturen_logistieke_orders():
 
 
 
-import secrets
 import string
 
 def genereer_wachtwoord():
