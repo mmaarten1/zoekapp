@@ -798,6 +798,29 @@ function verversKwaliteiten() {
 </script>
     """
 
+@handelsorders_bp.route("/handelsorders/<order_id>/notitie", methods=["POST"])
+def handelsorder_notitie_toevoegen(order_id):
+    """Voegt een tijdgestempelde notitie toe aan het doorlopende activiteitenlog van
+    een order — los van de vaste afdeling_notities-velden (die maar één waarde per
+    afdeling hebben en alleen bij aanmaken/bewerken ingevuld worden). Dit hier is
+    een groeiende lijst, zodat iedereen die met de order te maken krijgt een
+    kanttekening kan achterlaten, ook nadat de order al Definitief is."""
+    _guard = vereist_afdeling_of_403("handelsorders")
+    if _guard: return _guard
+
+    orders = laad_handelsorders()
+    order = next((o for o in orders if o["id"] == order_id), None)
+    if order:
+        tekst = request.form.get("notitie_tekst", "").strip()
+        if tekst:
+            order.setdefault("activiteitenlog", []).append({
+                "tekst": tekst,
+                "gebruiker": session.get("gebruikersnaam", ""),
+                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            })
+            bewaar_handelsorders(orders)
+    return redirect(url_for("handelsorders.handelsorder_detail", order_id=order_id))
+
 @handelsorders_bp.route("/handelsorders/<order_id>")
 def handelsorder_detail(order_id):
     _guard = vereist_afdeling_of_403("handelsorders")
@@ -923,6 +946,26 @@ def handelsorder_detail(order_id):
         {% endif %}
     {% endif %}
     {% endif %}
+</div>
+
+<div style="margin-top:28px;max-width:720px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Activiteitenlog</div>
+    {% if order.activiteitenlog %}
+    <div style="border:none;border-top:1px solid var(--gray-200);margin-bottom:14px;">
+        {% for regel in order.activiteitenlog|reverse %}
+        <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:12.5px;color:var(--gray-700);">
+            {{ regel.tekst }}
+            <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">{{ regel.gebruiker }} · {{ regel.aangemaakt }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="font-size:12px;color:var(--gray-300);margin-bottom:14px;">Nog geen notities toegevoegd.</div>
+    {% endif %}
+    <form method="POST" action="/handelsorders/{{ order.id }}/notitie">
+        <textarea name="notitie_tekst" rows="2" placeholder="Notitie toevoegen (bv. vraag, update, bijzonderheid)..." required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;margin-bottom:8px;"></textarea>
+        <button type="submit" style="padding:7px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Notitie toevoegen</button>
+    </form>
 </div>
     """
     pagina = render_simple_page(order["contractnummer"], "handelsorders", inhoud)
