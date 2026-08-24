@@ -882,6 +882,7 @@ function toggleMobielMenu() {
 <section class="search-bar-section">
     <div class="hero-content" style="display:flex;align-items:center;gap:14px;">
         <form method="POST" id="searchForm" style="flex:1;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="search-container">
                 <div class="search-row">
                     <input class="search-input" name="zoekterm" placeholder="Bedrijf, contactpersoon of stad..." value="{{ zoekterm }}">
@@ -916,6 +917,7 @@ function toggleMobielMenu() {
     {% if bedrijven %}
     <!-- FILTERS -->
     <form method="POST" id="filterForm" style="flex:0 0 0;width:0;margin:0;padding:0;overflow:visible;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="zoekterm" value="{{ zoekterm }}">
         <input type="hidden" name="land" value="{{ land }}">
         <input type="hidden" name="regio" value="{{ regio }}">

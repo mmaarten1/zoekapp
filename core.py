@@ -18,6 +18,7 @@ Wordt geïmporteerd door app.py met: from core import *
 
 import os
 import json
+import secrets
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 import requests
@@ -1733,6 +1734,7 @@ function toggleMobielMenu() {
              .replace("TEAM_HIER", session.get("team", "") or "Teamlid")
 
 def render_simple_page(titel, actief, inhoud_html):
+    _csrf_token = haal_of_maak_csrf_token()
     kop = PAGINA_HOOFD.replace("__TITEL__", titel)
     volledige_html = kop + "<body>\n" + sidebar_html(actief) + '''
 <div class="content-wrapper">
@@ -1740,6 +1742,41 @@ def render_simple_page(titel, actief, inhoud_html):
 ''' + inhoud_html + '''
 </div>
 </div>
+<script>
+var CSRF_TOKEN = "''' + _csrf_token + '''";
+// Elk formulier automatisch van het CSRF-token voorzien, vlak vóór verzenden
+// (capture-fase, dus dit werkt ook voor formulieren die pas na het laden van
+// de pagina door JS zijn aangemaakt) — zo hoeft geen van de tientallen
+// bestanden met <form>-elementen zelf aangepast te worden.
+document.addEventListener("submit", function(e) {
+    var form = e.target;
+    if (form.tagName === "FORM" && (form.method || "get").toLowerCase() === "post") {
+        if (!form.querySelector('input[name="csrf_token"]')) {
+            var veld = document.createElement("input");
+            veld.type = "hidden";
+            veld.name = "csrf_token";
+            veld.value = CSRF_TOKEN;
+            form.appendChild(veld);
+        }
+    }
+}, true);
+// Zelfde voor fetch()-aanroepen (de diverse /api/...-endpoints): automatisch
+// een header toevoegen bij POST/PUT/DELETE/PATCH.
+var _origineleFetch = window.fetch;
+window.fetch = function(url, opties) {
+    opties = opties || {};
+    var methode = (opties.method || "GET").toUpperCase();
+    if (["POST","PUT","DELETE","PATCH"].indexOf(methode) !== -1) {
+        opties.headers = opties.headers || {};
+        if (opties.headers instanceof Headers) {
+            opties.headers.set("X-CSRF-Token", CSRF_TOKEN);
+        } else {
+            opties.headers["X-CSRF-Token"] = CSRF_TOKEN;
+        }
+    }
+    return _origineleFetch.call(this, url, opties);
+};
+</script>
 </body>
 </html>'''
     return volledige_html
@@ -2051,3 +2088,15 @@ def reset_mislukte_inlogpogingen(gebruikersnaam):
     if gebruikersnaam in pogingen:
         del pogingen[gebruikersnaam]
         bewaar_inlog_pogingen(pogingen)
+
+# ============================================================
+# CSRF-bescherming. Het token wordt per sessie eenmalig aangemaakt en
+# opgeslagen; server-side validatie gebeurt centraal in app.py (before_request),
+# en de client-side kant (elk formulier automatisch van het token voorzien)
+# gebeurt hier in render_simple_page — zodat GEEN van de ~30 bestanden met
+# formulieren zelf aangepast hoeft te worden.
+# ============================================================
+def haal_of_maak_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+    return session["csrf_token"]

@@ -34,7 +34,7 @@ from core import (
     TENANT_ID, COMPANIES_HOUSE_API_KEY, CH_FAILLIET_STATUSSEN,
     companies_house_status, is_ch_financieel_gezond, laad_transport_data, laad_forwarder_wachtwoorden,
     bewaar_forwarder_wachtwoorden, is_account_tijdelijk_geblokkeerd, registreer_mislukte_inlogpoging,
-    reset_mislukte_inlogpogingen,
+    reset_mislukte_inlogpogingen, haal_of_maak_csrf_token,
     PAGINA_HOOFD, sidebar_html, render_simple_page, is_huidige_gebruiker_admin, vereist_admin_of_403,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
@@ -89,6 +89,15 @@ app.secret_key = _bepaal_secret_key()
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
+
+@app.context_processor
+def _injecteer_csrf_token_overal():
+    """Maakt {{ csrf_token }} beschikbaar in ELKE Jinja-render in de hele app,
+    ook de handvol standalone admin-pagina's die niet via render_simple_page
+    lopen (die krijgen het token al automatisch via de client-side injectie
+    daar) — zonder dat elke individuele render_template_string-aanroep
+    aangepast hoeft te worden."""
+    return dict(csrf_token=haal_of_maak_csrf_token())
 
 from marktprijzen import marktprijzen_bp
 app.register_blueprint(marktprijzen_bp)
@@ -545,6 +554,31 @@ def profiel_invullen(token):
     waarden = {"naam": uitnodiging.get("bedrijfsnaam", ""), "contactpersoon": uitnodiging.get("naam", ""), "email_algemeen": uitnodiging.get("email", "")}
     return render_template_string(inhoud, bericht=bericht, waarden=waarden)
 
+_CSRF_VRIJGESTELDE_ENDPOINTS = {"login", "static", "forwarder_upload", "profiel_invullen"}
+
+@app.before_request
+def valideer_csrf_token():
+    """Centrale CSRF-bescherming voor de hele app. Het token zelf wordt altijd
+    beschikbaar gemaakt (ook op GET, zodat een formulier het al heeft vóór de
+    eerste keer versturen); de daadwerkelijke check geldt alleen voor
+    state-wijzigende requests. Vrijgesteld: 'login' (CSRF hierop is een laag
+    risico t.o.v. het risico dat een fout hier iedereen buitensluit), en
+    'forwarder_upload'/'profiel_invullen' (externe, niet-ingelogde pagina's
+    met hun EIGEN toegangsbeveiliging — forwarder-wachtwoord resp. een
+    geheime uitnodigingslink — die niet via render_simple_page lopen en dus
+    het token niet automatisch krijgen)."""
+    haal_of_maak_csrf_token()
+    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+        if request.endpoint in _CSRF_VRIJGESTELDE_ENDPOINTS:
+            return
+        verstuurd = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
+        verwacht = session.get("csrf_token")
+        if not verstuurd or not verwacht or not secrets.compare_digest(verstuurd, verwacht):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Ongeldige sessie (CSRF-token ontbreekt of is verlopen). Herlaad de pagina en probeer opnieuw."}), 400
+            pagina = render_simple_page("Sessie verlopen", "", '<div class="page-title">Sessie verlopen</div><div class="lege-staat">Je sessie is verlopen of het formulier was verouderd. Herlaad de pagina en probeer het opnieuw.</div>')
+            return render_template_string(pagina), 400
+
 @app.before_request
 def vereis_login():
     toegestaan = ["login", "static", "forwarder_upload", "profiel_invullen"]
@@ -622,6 +656,7 @@ IMPORT_HTML = '''
         <p>Kolommen: Naam, Type (Leverancier/Klant/Fabriek), Land, Stad, Adres, Telefoonnummer, Materialen, Klanttype, Volume, Certificeringen</p>
         {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
         <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="file" name="bestand" accept=".xlsx,.xls" required>
             <button type="submit">Importeren</button>
         </form>
@@ -780,6 +815,7 @@ SCRAPMONSTER_IMPORT_HTML = '''
         <p>Haalt schroothandels/recyclingcentra op van scrapmonster.com voor het gekozen land (max. 50 pagina's, tot ~1000 bedrijven). Kan 2-3 minuten duren per land.</p>
         {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <select name="land" required>
                 {% for naam in landen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
             </select>
@@ -1294,6 +1330,7 @@ OSM_IMPORT_HTML = '''
         <p>Haalt gratis, publiek beschikbare recyclingbedrijven (schroothandels, recyclingcentra, papierfabrieken, afvalbeheerbedrijven) op uit OpenStreetMap voor het gekozen land. Kan 10-60 seconden duren.</p>
         {% if bericht %}<div class="bericht {{ 'succes' if succes else 'fout' }}">{{ bericht }}</div>{% endif %}
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <select name="land" required>
                 {% for naam in landen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
             </select>
@@ -1329,6 +1366,7 @@ OPSCHOON_HTML = '''
         <p>Verwijdert bedrijven en fabrieken die dubbel voorkomen. Bij dubbelen wordt de meest complete versie bewaard (met adres/telefoon indien beschikbaar).</p>
         {% if bericht %}<div class="bericht succes">{{ bericht }}</div>{% endif %}
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label><input type="radio" name="modus" value="normaal" checked> <b>Normaal</b> — zelfde naam + land + stad</label>
             <label><input type="radio" name="modus" value="streng"> <b>Streng</b> — alleen zelfde naam + land (negeert verschillen in stad-notatie, spaties, hoofdletters, leestekens)</label>
             <button type="submit">Nu opschonen</button>
@@ -1419,11 +1457,13 @@ HERLABEL_HTML = '''
         <p>Kent een Bedrijfstype toe aan bedrijven die er nog geen hebben, maar <b>alleen</b> als er precies één duidelijk materiaal is (bij twijfel wordt niets gegokt).</p>
         {% if bericht %}<div class="bericht succes">{{ bericht }}</div>{% endif %}
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="actie" value="aanvullen">
             <button type="submit">Nu aanvullen</button>
         </form>
         <p style="margin-top:20px;">Heb je eerder de knop gebruikt en staat er nu te vaak "Papierfabriek"? Corrigeer dat hiermee:</p>
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="actie" value="corrigeer">
             <button type="submit" class="secundair">Corrigeer verkeerd gegokte "Papierfabriek"-labels</button>
         </form>
