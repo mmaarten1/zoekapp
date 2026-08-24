@@ -704,7 +704,7 @@ def voorraad_pagina():
     </form>
 </div>
 
-<div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
+<div class="vrd-kaart" id="shipments" style="margin-bottom:24px;overflow-x:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
         <div class="dg-kaart-titel" style="margin-bottom:0;">Alle actieve shipments</div>
         <form method="GET" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
