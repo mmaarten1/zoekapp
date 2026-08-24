@@ -19,7 +19,7 @@ from core import (
     parse_hoeveelheid_getal, bereken_voorraad_status, is_huidige_gebruiker_admin,
     vereist_admin_of_403, render_simple_page, ENF_BEDRIJVEN,
     ALBLASSERDAM_NAAM, bepaal_shipment_flow_type, shipment_hoeveelheid, SHIPMENT_STATUSSEN,
-    vereist_afdeling_of_403,
+    vereist_afdeling_of_403, laad_handelsorders,
 )
 
 voorraad_bp = Blueprint("voorraad", __name__)
@@ -466,6 +466,54 @@ def voorraad_pagina():
         c["resterend"] = max(0, volume - voortgang - gepland)
         c["percentage"] = round((voortgang / volume * 100), 1) if volume else 0
 
+    # Handelsorders (het huidige, actieve contractsysteem — vervangt het oude
+    # handmatige 'Contracten'-blok hierboven, dat nu alleen nog voor bestaande,
+    # historische data getoond wordt). Geleverd/gepland wordt hier op dezelfde
+    # manier bepaald als bij Inkoop-/Verkoop-planning: via logistieke orders
+    # (vrachtwagen) resp. transport planning (schip).
+    from core import laad_logistieke_orders, laad_transport_planning
+    _alle_logistieke_orders_vr = laad_logistieke_orders()
+    _alle_transport_planning_vr = laad_transport_planning()
+
+    def _geleverd_handelsorder(contractnummer, order_type, transportmodus):
+        # Vrachtwagen-inkoop: via logistieke orders (Weegbrug/Live Operaties)
+        if order_type == "inkoop" and transportmodus != "Schip":
+            _via_logistiek = sum(
+                parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                for o in _alle_logistieke_orders_vr
+                if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
+            )
+        else:
+            _via_logistiek = sum(
+                parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+                for t in _alle_transport_planning_vr
+                if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
+            )
+        # Plus: shipments (Voorraad-module) die aan dit contractnummer gekoppeld zijn
+        # en daadwerkelijk aangekomen/afgeleverd zijn.
+        _via_shipments = sum(
+            shipment_hoeveelheid(s) for s in alle_shipments
+            if s.get("contract_id") == contractnummer and s.get("status") in ("Received", "Delivered")
+        )
+        return round(_via_logistiek + _via_shipments, 3)
+
+    alle_handelsorder_contracten = []
+    for h in laad_handelsorders():
+        if h.get("status") != "Definitief":
+            continue
+        try:
+            _volume = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+        except (ValueError, TypeError):
+            _volume = 0.0
+        _geleverd = _geleverd_handelsorder(h["contractnummer"], h.get("order_type",""), h.get("transportmodus",""))
+        alle_handelsorder_contracten.append({
+            "id": h["id"], "contractnummer": h["contractnummer"], "tegenpartij": h.get("tegenpartij_naam",""),
+            "richting": h.get("order_type",""), "materiaal": f"{h.get('materiaal','')} — {h.get('kwaliteit','')}",
+            "volume": round(_volume,1), "geleverd": _geleverd, "resterend": round(max(0,_volume-_geleverd),1),
+            "percentage": round((_geleverd/_volume*100),1) if _volume else 0,
+        })
+    alle_handelsorder_contracten.sort(key=lambda c: -c["resterend"])
+
     # Fabrieken-overzicht: verkoop-contracten gegroepeerd per tegenpartij (fabriek/klant)
     fabrieken_overzicht = {}
     for c in alle_contracten:
@@ -649,7 +697,7 @@ def voorraad_pagina():
         </div>
         <select name="contract_id" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
             <option value="">Geen contract koppelen</option>
-            {% for c in alle_contracten %}<option value="{{ c.id }}">{{ c.referentie }} — {{ c.tegenpartij }} ({{ c.materiaal }}, {{ c.richting }})</option>{% endfor %}
+            {% for c in alle_handelsorder_contracten %}<option value="{{ c.contractnummer }}">{{ c.contractnummer }} — {{ c.tegenpartij }} ({{ c.materiaal }}, {{ c.richting }})</option>{% endfor %}
         </select>
         <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
         <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Shipment plannen</button>
@@ -762,34 +810,32 @@ function voorraadStatusSubmit(form, isInbound) {
     {% endfor %}
 </div>
 
-<div class="dg-kaart-titel" style="margin-bottom:12px;">📜 Contracten</div>
-<div class="vrd-kaart" style="max-width:520px;margin-bottom:16px;">
-    <form method="POST" action="/voorraad/contracten" class="form-voorraad">
-        <input type="hidden" name="actie" value="toevoegen">
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="referentie" placeholder="Referentie (bv. ABC-2026-001)" required>
-            <select name="richting"><option value="inkoop">Inkoop</option><option value="verkoop">Verkoop</option></select>
-        </div>
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <input type="text" name="tegenpartij" placeholder="Tegenpartij" list="bedrijvenLijstVoorraad">
-            <input type="text" name="contract_volume" placeholder="Contractvolume (ton)" required>
-        </div>
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:10px;">
-            <input type="text" name="prijs_per_ton" placeholder="Prijs per ton (€, optioneel)">
-        </div>
-        <select name="materiaal" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
-            <option value="">Materiaal...</option>
-            {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
-            <optgroup label="{{ categorie }}">
-                <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
-                {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}">{{ kw }}</option>{% endfor %}
-            </optgroup>
-            {% endfor %}
-        </select>
-        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Contract toevoegen</button>
-    </form>
+<div class="dg-kaart-titel" style="margin-bottom:12px;">Contracten</div>
+<div class="vrd-kaart" style="max-width:520px;margin-bottom:16px;background:#eff6ff;">
+    <div style="font-size:12.5px;color:#1d4ed8;">Nieuwe contracten worden nu aangemaakt via Handelsorders.</div>
+    <a href="/handelsorders/nieuw" style="display:inline-block;margin-top:8px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:7px 14px;border-radius:6px;">+ Nieuw contract (Handelsorders) →</a>
 </div>
 <div class="vrd-kaart" style="margin-bottom:24px;">
+    {% for c in alle_handelsorder_contracten %}
+    <a href="/handelsorders/{{ c.id }}" style="display:block;padding:10px 0;border-bottom:1px solid var(--gray-50);text-decoration:none;color:inherit;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div><b>{{ c.contractnummer }}</b> · {{ c.tegenpartij }} · {{ c.materiaal }} <span style="color:var(--gray-400);font-size:11px;">({{ c.richting }})</span></div>
+        </div>
+        <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">
+            Volume: {{ c.volume }} t · Geleverd: {{ c.geleverd }} t · Resterend: {{ c.resterend }} t
+        </div>
+        <div style="background:var(--gray-100);border-radius:4px;height:6px;overflow:hidden;margin-top:6px;">
+            <div style="background:var(--brand-500);height:100%;width:{{ c.percentage }}%;"></div>
+        </div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">{{ c.percentage }}% vervuld</div>
+    </a>
+    {% else %}
+    <div class="lege-staat">Nog geen definitieve contracten via Handelsorders.</div>
+    {% endfor %}
+</div>
+
+{% if alle_contracten %}
+<div class="dg-kaart-titel" style="margin-bottom:12px;color:var(--gray-400);">Oude contracten (gearchiveerd, alleen-lezen)</div>
     {% for c in alle_contracten %}
     <div style="padding:10px 0;border-bottom:1px solid var(--gray-50);">
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -811,6 +857,7 @@ function voorraadStatusSubmit(form, isInbound) {
     <div class="lege-staat">Nog geen contracten.</div>
     {% endfor %}
 </div>
+{% endif %}
 
 {% if is_admin %}
 <div class="vrd-kaart" style="max-width:520px;margin-bottom:20px;">
@@ -1023,7 +1070,8 @@ function toggleTransactieVelden() {
                                     flow_by_origin_lijst=flow_by_origin_lijst, flow_by_destination_lijst=flow_by_destination_lijst,
                                     actieve_shipments=actieve_shipments, alle_shipments_dropdown=alle_shipments_dropdown,
                                     shipment_statussen=SHIPMENT_STATUSSEN, landen=_alle_bedrijven_landen,
-                                    alle_contracten=alle_contracten, is_admin=is_huidige_gebruiker_admin(), prefill=prefill,
+                                    alle_contracten=alle_contracten, alle_handelsorder_contracten=alle_handelsorder_contracten,
+                                    is_admin=is_huidige_gebruiker_admin(), prefill=prefill,
                                     fabrieken_overzicht_lijst=fabrieken_overzicht_lijst,
                                     getoonde_shipments=getoonde_shipments, filter_flow_type=filter_flow_type,
                                     filter_shipment_status=filter_shipment_status, filter_shipment_materiaal=filter_shipment_materiaal,
