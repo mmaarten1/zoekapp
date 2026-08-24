@@ -1183,6 +1183,10 @@ def _genereer_contract_pdf(order):
         data.append(rij("Afhaallocatie", f"{order.get('afhaal_adres','')}, {order.get('afhaal_postcode','')} {order.get('afhaal_stad','')}, {order.get('afhaal_land','')}" if order.get("afhaal_adres") else ""))
     else:
         data.append(rij("Leverlocatie", f"{order.get('lever_adres','')}, {order.get('lever_postcode','')} {order.get('lever_stad','')}, {order.get('lever_land','')}" if order.get("lever_adres") else ""))
+        # Bewust NIET de herkomst-leverancier op het contract: bij handelsbedrijven is het
+        # gebruikelijk om niet te onthullen bij welke leverancier is ingekocht, anders kan
+        # de klant de tussenhandel omzeilen. Dit veld blijft dus intern (zichtbaar op de
+        # detailpagina, niet op het contract dat de klant ontvangt).
     if order.get("opmerkingen"):
         data.append(rij("Opmerkingen", order["opmerkingen"]))
 
