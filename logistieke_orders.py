@@ -138,6 +138,99 @@ def inkoop_planning_pagina():
     return render_template_string(pagina, markt_overzicht=markt_overzicht)
 
 
+@logistieke_orders_bp.route("/logistiek/verkoop-planning")
+def verkoop_planning_pagina():
+    """Overzicht voor Logistiek: alle DEFINITIEVE verkoopcontracten die nog (deels)
+    naar de klant vervoerd moeten worden — gegroepeerd per bedrijfseenheid (markt).
+    Analoog aan Inkoop-planning, maar dan uitgaand: gekoppeld aan Transport Planning
+    (dat sowieso al 'Peute → fabrieken' als scope heeft, dus dit past er precies op).
+    Zodra een accountmanager een verkooporder definitief maakt, verschijnt die hier."""
+    _guard = vereist_afdeling_of_403("inkoop_planning")
+    if _guard: return _guard
+
+    alle_transport_planning_vp = laad_transport_planning()
+
+    def _gepland_verkoop(contractnummer):
+        return round(sum(
+            parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+            for t in alle_transport_planning_vp
+            if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
+        ), 3)
+
+    contracten_open_vp = []
+    for h in laad_handelsorders():
+        if h.get("order_type") != "verkoop" or h.get("status") != "Definitief":
+            continue
+        try:
+            totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+        except (ValueError, TypeError):
+            totaal = 0.0
+        gepland = _gepland_verkoop(h["contractnummer"])
+        resterend = round(totaal - gepland, 1)
+        if resterend <= 0:
+            continue
+        contracten_open_vp.append({
+            "id": h["id"], "contractnummer": h["contractnummer"], "klant": h.get("tegenpartij_naam",""),
+            "bedrijfseenheid": h.get("bedrijfseenheid","") or "Niet ingedeeld", "materiaal": h.get("materiaal",""),
+            "kwaliteit": h.get("kwaliteit",""), "transportmodus": h.get("transportmodus","") or "Vrachtwagen",
+            "pod_haven": h.get("pod_haven",""), "totaal": round(totaal,1), "gepland": gepland, "resterend": resterend,
+        })
+
+    per_markt_vp = {}
+    for c in contracten_open_vp:
+        per_markt_vp.setdefault(c["bedrijfseenheid"], []).append(c)
+    markt_overzicht_vp = []
+    for markt, items in per_markt_vp.items():
+        markt_overzicht_vp.append({
+            "markt": markt, "contracten": sorted(items, key=lambda x: -x["resterend"]),
+            "aantal_orders": len(items), "totaal_resterend": round(sum(i["resterend"] for i in items), 1),
+        })
+    markt_overzicht_vp.sort(key=lambda m: -m["totaal_resterend"])
+
+    inhoud = """
+<div class="page-title">Verkoop-planning</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Definitieve verkoopcontracten die nog (deels) naar de klant vervoerd moeten worden — per markt.</p>
+
+<style>
+.vp-marktkop { display:flex; align-items:baseline; gap:14px; padding:12px 4px 8px 4px; border-bottom:2px solid var(--gray-800); margin-top:24px; }
+.vp-marktnaam { font-size:15px; font-weight:800; color:var(--gray-800); text-transform:uppercase; }
+.vp-marktsub { font-size:12px; color:var(--gray-400); }
+.vp-rij { display:flex; align-items:center; padding:10px 4px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
+.vp-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; }
+</style>
+
+{% if markt_overzicht_vp %}
+{% for m in markt_overzicht_vp %}
+<div class="vp-marktkop">
+    <span class="vp-marktnaam">{{ m.markt }}</span>
+    <span class="vp-marktsub">{{ m.aantal_orders }} order{{ 's' if m.aantal_orders != 1 else '' }} open · {{ m.totaal_resterend }} MT te vervoeren</span>
+</div>
+{% for c in m.contracten %}
+<div class="vp-rij">
+    <span style="width:100px;">
+        {% if c.transportmodus == "Schip" %}<span class="vp-badge" style="background:#eff6ff;color:#1d4ed8;">Schip</span>
+        {% else %}<span class="vp-badge" style="background:#f0fdf4;color:#16a34a;">Vrachtwagen</span>{% endif %}
+    </span>
+    <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ c.klant }}</span>
+    <span style="flex:1;color:var(--gray-600);">{{ c.materiaal }} — {{ c.kwaliteit }}</span>
+    <span style="width:130px;color:var(--gray-500);">{{ c.contractnummer }}</span>
+    {% if c.transportmodus == "Schip" %}<span style="width:110px;color:var(--gray-500);">{{ c.pod_haven or '—' }}</span>{% else %}<span style="width:110px;"></span>{% endif %}
+    <span style="width:130px;text-align:right;color:var(--gray-500);">{{ c.gepland }} / {{ c.totaal }} MT</span>
+    <span style="width:110px;text-align:right;font-weight:700;color:#dc2626;">{{ c.resterend }} MT open</span>
+    <span style="width:90px;text-align:right;">
+        <a href="/transport-planning/nieuw?fabriek={{ c.klant|urlencode }}&materiaal={{ (c.materiaal ~ ' — ' ~ c.kwaliteit)|urlencode }}&hoeveelheid={{ c.resterend }}&contract_referentie={{ c.contractnummer|urlencode }}" style="font-size:11px;font-weight:700;color:var(--brand-600);text-decoration:none;">Plan in →</a>
+    </span>
+</div>
+{% endfor %}
+{% endfor %}
+{% else %}
+<div class="lege-staat">Geen openstaande verkoopcontracten — alles is ingepland of geleverd.</div>
+{% endif %}
+    """
+    pagina = render_simple_page("Verkoop-planning", "verkoop_planning", inhoud)
+    return render_template_string(pagina, markt_overzicht_vp=markt_overzicht_vp)
+
+
 def _weegbrug_status_naar_orderstatus(weegbrug_status):
     """Vertaalt de weegbrug-status naar een passende suggestie voor de orderstatus, bij koppelen/synchroniseren."""
     if weegbrug_status == "Compleet":
