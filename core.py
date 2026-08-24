@@ -109,6 +109,7 @@ PAGINA_AFDELINGEN = {
     "logistiek": ["logistiek"],
     "weegbrug": ["logistiek", "weegbrug"],
     "logistieke_orders": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
+    "inkoop_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
     "afhandeling": ["logistiek", "weegbrug", "backoffice"],
     "live_operations": ["logistiek", "weegbrug", "backoffice"],
     "logistieke_orders_finance": ["finance", "logistiek", "weegbrug"],
@@ -1648,6 +1649,7 @@ def sidebar_html(actief):
     items = [
         ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
         ("live_operations", "/live-operations", "OP", "Live Operaties"),
+        ("inkoop_planning", "/logistiek/inkoop-planning", "IP", "Inkoop-planning"),
         ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),
         ("dashboard", "/dashboard", "DB", "Dashboard"),
         ("logistieke_orders", "/logistiek/orders", "LO", "Orders logistiek"),

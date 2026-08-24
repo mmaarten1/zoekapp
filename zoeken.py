@@ -834,6 +834,7 @@ HTML = '''
     <nav class="sidebar-nav">
         {% if mag_pagina_zien('weegbrug') %}<a href="/weegbrug" class="sidebar-link"><span class="icoon">WB</span> Weegbrug</a>{% endif %}
         {% if mag_pagina_zien('live_operations') %}<a href="/live-operations" class="sidebar-link"><span class="icoon">OP</span> Live Operaties</a>{% endif %}
+        {% if mag_pagina_zien('inkoop_planning') %}<a href="/logistiek/inkoop-planning" class="sidebar-link"><span class="icoon">IP</span> Inkoop-planning</a>{% endif %}
         {% if mag_pagina_zien('afhandeling') %}<a href="/logistiek/afhandeling" class="sidebar-link"><span class="icoon">AF</span> Afhandeling</a>{% endif %}
         {% if mag_pagina_zien('dashboard') %}<a href="/dashboard" class="sidebar-link"><span class="icoon">DB</span> Dashboard</a>{% endif %}
         {% if mag_pagina_zien('logistieke_orders') %}<a href="/logistiek/orders" class="sidebar-link"><span class="icoon">LO</span> Orders logistiek</a>{% endif %}

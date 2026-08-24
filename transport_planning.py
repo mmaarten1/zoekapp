@@ -157,6 +157,7 @@ def transport_planning_nieuw():
             "transporttarief": request.form.get("transporttarief", "").strip(),
             "status": "Te plannen",
             "opmerkingen": request.form.get("opmerkingen", "").strip(),
+            "contract_referentie": request.form.get("contract_referentie", "").strip(),
             "aangemaakt_door": session.get("gebruikersnaam", ""),
             "aangemaakt": nu.strftime("%d-%m-%Y %H:%M"),
         }
@@ -165,16 +166,27 @@ def transport_planning_nieuw():
         return redirect(url_for("transport_planning.transport_planning_detail", transport_id=nieuw["id"]))
 
     fabriek_namen = sorted({b["naam"] for b in PAPIERFABRIEKEN})
+    _vi_leverancier = request.args.get("leverancier", "").strip()
+    _vi_materiaal = request.args.get("materiaal", "").strip()
+    _vi_hoeveelheid = request.args.get("hoeveelheid", "").strip()
+    _vi_contract = request.args.get("contract_referentie", "").strip()
+    _vi_fabriek = request.args.get("fabriek", "").strip()
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/transport-planning" style="color:var(--gray-400);text-decoration:none;">Transport Planning</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw</span>
 </div>
 <div class="page-title">Transport plannen</div>
+{% if vi_contract %}
+<div style="background:#eff6ff;color:#1d4ed8;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">
+    Wordt gekoppeld aan contract <b>{{ vi_contract }}</b>{% if vi_leverancier %} (leverancier: {{ vi_leverancier }}){% endif %}.
+</div>
+{% endif %}
 
 <form method="POST" style="max-width:680px;">
+    <input type="hidden" name="contract_referentie" value="{{ vi_contract }}">
     <div style="margin-bottom:10px;">
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Fabriek</label>
-        <input type="text" name="fabriek" list="fabrieken_lijst" onblur="toonTariefSuggestie(this.value)" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+        <input type="text" name="fabriek" value="{{ vi_fabriek }}" list="fabrieken_lijst" onblur="toonTariefSuggestie(this.value)" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         <datalist id="fabrieken_lijst">{% for naam in fabriek_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
         <div id="tarief_suggestie" style="margin-top:6px;font-size:11.5px;"></div>
     </div>
@@ -209,11 +221,11 @@ def transport_planning_nieuw():
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Materiaal</label>
-            <input type="text" name="materiaal" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <input type="text" name="materiaal" value="{{ vi_materiaal }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Hoeveelheid (ton)</label>
-            <input type="text" name="hoeveelheid" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <input type="text" name="hoeveelheid" value="{{ vi_hoeveelheid }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Aantal trucks</label>
@@ -268,7 +280,9 @@ async function toonTariefSuggestie(fabriekNaam) {
 </script>
     """
     pagina = render_simple_page("Transport plannen", "transport_planning", inhoud)
-    return render_template_string(pagina, fabriek_namen=fabriek_namen)
+    return render_template_string(pagina, fabriek_namen=fabriek_namen, vi_leverancier=_vi_leverancier,
+                                    vi_materiaal=_vi_materiaal, vi_hoeveelheid=_vi_hoeveelheid,
+                                    vi_contract=_vi_contract, vi_fabriek=_vi_fabriek)
 
 @transport_planning_bp.route("/transport-planning/<transport_id>")
 def transport_planning_detail(transport_id):

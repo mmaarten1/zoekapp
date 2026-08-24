@@ -249,7 +249,10 @@ def weegbrug_opdracht():
     inhoud = _opdracht_formulier_html()
     pagina = render_simple_page("Weegopdracht", "weegbrug", inhoud)
     return render_template_string(pagina, fout=None, leverancier_namen=leverancier_namen,
-                                    materiaal_namen=materiaal_namen, taxonomie_json=json.dumps(taxonomie))
+                                    materiaal_namen=materiaal_namen, taxonomie_json=json.dumps(taxonomie),
+                                    vi_leverancier=request.args.get("leverancier", "").strip(),
+                                    vi_materiaal=request.args.get("materiaal", "").strip(),
+                                    vi_kwaliteit=request.args.get("kwaliteit", "").strip())
 
 def _opdracht_formulier_html():
     return """
@@ -264,19 +267,19 @@ def _opdracht_formulier_html():
 <form method="POST" style="max-width:640px;">
     <div style="margin-bottom:12px;">
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Leverancier *</label>
-        <input type="text" name="leverancier" list="leveranciers_datalist" required autocomplete="off" placeholder="Begin te typen..." style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+        <input type="text" name="leverancier" list="leveranciers_datalist" required autocomplete="off" placeholder="Begin te typen..." value="{{ vi_leverancier|default('') }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         <datalist id="leveranciers_datalist">{% for naam in leverancier_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
         <div style="font-size:10.5px;color:var(--gray-300);margin-top:2px;">Alleen bestaande, erkende leveranciers. Nieuwe leverancier? Vraag Backoffice.</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Materiaal *</label>
-            <input type="text" name="materiaal" id="materiaal_input" list="materiaal_datalist" required autocomplete="off" placeholder="Begin te typen..." oninput="verversKwaliteiten()" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <input type="text" name="materiaal" id="materiaal_input" list="materiaal_datalist" required autocomplete="off" placeholder="Begin te typen..." oninput="verversKwaliteiten()" value="{{ vi_materiaal|default('') }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
             <datalist id="materiaal_datalist">{% for m in materiaal_namen %}<option value="{{ m }}">{% endfor %}</datalist>
         </div>
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Kwaliteit *</label>
-            <input type="text" name="kwaliteit" id="kwaliteit_input" list="kwaliteit_datalist" required autocomplete="off" placeholder="Kies eerst materiaal..." style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <input type="text" name="kwaliteit" id="kwaliteit_input" list="kwaliteit_datalist" required autocomplete="off" placeholder="Kies eerst materiaal..." value="{{ vi_kwaliteit|default('') }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
             <datalist id="kwaliteit_datalist"></datalist>
         </div>
     </div>
@@ -337,6 +340,9 @@ function verversKwaliteiten() {
     });
     kwaliteitInput.placeholder = kwaliteiten.length ? "Begin te typen..." : "Kies eerst een geldig materiaal...";
 }
+document.addEventListener("DOMContentLoaded", function() {
+    if (document.getElementById("materiaal_input").value) { verversKwaliteiten(); }
+});
 </script>
     """
 
