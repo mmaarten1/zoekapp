@@ -27,7 +27,7 @@ from core import (
     laad_bedrijfseenheden, laad_leverancier_instellingen, leverancier_instelling_voor,
     genereer_supplier_reference, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     parse_hoeveelheid_getal, AFDELINGEN, AFDELING_LABELS, haal_live_wisselkoers, laad_facturen,
-    bepaal_factuur_status, laad_marktprijzen, bewaar_marktprijzen,
+    bepaal_factuur_status, laad_marktprijzen, bewaar_marktprijzen, laad_documenten, laad_logistieke_orders,
 )
 
 handelsorders_bp = Blueprint("handelsorders", __name__)
@@ -854,6 +854,19 @@ def handelsorder_detail(order_id):
             if _betalingstermijn_dagen is not None:
                 factuur_vervaldatum_voorstel = (datetime.date.today() + datetime.timedelta(days=_betalingstermijn_dagen)).isoformat()
 
+    # Gekoppelde documenten (weegbonnen e.d.): via de logistieke orders die aan
+    # dit contract gekoppeld zijn (contract_referentie == contractnummer), en
+    # hun eigen ordernummer — waaronder het documentensysteem alles opslaat.
+    alle_documenten_map = laad_documenten()
+    gekoppelde_ordernummers = [
+        o.get("ordernummer","") for o in laad_logistieke_orders()
+        if o.get("contract_referentie") == order["contractnummer"] and o.get("ordernummer")
+    ]
+    gekoppelde_documenten = []
+    for _ordernr in gekoppelde_ordernummers:
+        for _doc in alle_documenten_map.get(_ordernr, []):
+            gekoppelde_documenten.append({**_doc, "ordernummer": _ordernr})
+
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/handelsorders" style="color:var(--gray-400);text-decoration:none;">Handelsorders</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ order.contractnummer }}</span>
@@ -948,6 +961,20 @@ def handelsorder_detail(order_id):
     {% endif %}
 </div>
 
+{% if gekoppelde_documenten %}
+<div style="margin-top:24px;max-width:720px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Gekoppelde documenten</div>
+    <div style="border:none;border-top:1px solid var(--gray-200);">
+        {% for doc in gekoppelde_documenten %}
+        <a href="/documenten_uploads/{{ doc.bestandsnaam }}" target="_blank" style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;color:var(--gray-700);text-decoration:none;">
+            <span>{{ doc.originele_naam }}</span>
+            <span style="color:var(--gray-400);font-size:11px;">{{ doc.ordernummer }} · {{ doc.timestamp }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <div style="margin-top:28px;max-width:720px;">
     <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Activiteitenlog</div>
     {% if order.activiteitenlog %}
@@ -972,7 +999,8 @@ def handelsorder_detail(order_id):
     return render_template_string(pagina, order=order, afdeling_labels=AFDELING_LABELS,
                                     bestaande_factuur=bestaande_factuur,
                                     factuur_bedrag_voorstel=factuur_bedrag_voorstel,
-                                    factuur_vervaldatum_voorstel=factuur_vervaldatum_voorstel)
+                                    factuur_vervaldatum_voorstel=factuur_vervaldatum_voorstel,
+                                    gekoppelde_documenten=gekoppelde_documenten)
 
 @handelsorders_bp.route("/handelsorders/<order_id>/bewerken", methods=["GET", "POST"])
 def handelsorder_bewerken(order_id):
