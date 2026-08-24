@@ -16,6 +16,7 @@ Registratie in app.py met: app.register_blueprint(handelsorders_bp)
 """
 import uuid
 import datetime
+import re
 import io
 from flask import Blueprint, request, session, redirect, url_for, render_template_string, Response, jsonify
 
@@ -25,7 +26,8 @@ from core import (
     laad_materiaal_taxonomie, laad_incoterms, laad_betalingstermijnen, laad_valuta, laad_pod_havens,
     laad_bedrijfseenheden, laad_leverancier_instellingen, leverancier_instelling_voor,
     genereer_supplier_reference, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
-    parse_hoeveelheid_getal, AFDELINGEN, AFDELING_LABELS, haal_live_wisselkoers,
+    parse_hoeveelheid_getal, AFDELINGEN, AFDELING_LABELS, haal_live_wisselkoers, laad_facturen,
+    bepaal_factuur_status,
 )
 
 handelsorders_bp = Blueprint("handelsorders", __name__)
@@ -807,6 +809,28 @@ def handelsorder_detail(order_id):
         pagina = render_simple_page("Niet gevonden", "handelsorders", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/handelsorders">Terug naar Handelsorders</a></div>')
         return render_template_string(pagina), 404
 
+    # Voor definitieve verkooporders: check of er al een factuur aan dit contract
+    # gekoppeld is (voorkomt dubbel factureren), en bereken de voorinvulling voor
+    # het geval er nog geen is.
+    bestaande_factuur = None
+    factuur_vervaldatum_voorstel = ""
+    factuur_bedrag_voorstel = ""
+    if order.get("order_type") == "verkoop" and order.get("status") == "Definitief":
+        bestaande_factuur = next((f for f in laad_facturen() if f.get("contract_referentie") == order["contractnummer"]), None)
+        if bestaande_factuur:
+            bestaande_factuur["status"] = bepaal_factuur_status(bestaande_factuur)
+        if not bestaande_factuur:
+            try:
+                factuur_bedrag_voorstel = str(round(_getal(order.get("prijs")) * _getal(order.get("hoeveelheid_mt")), 2))
+            except (ValueError, TypeError):
+                factuur_bedrag_voorstel = ""
+            _betalingstermijn_dagen = None
+            _match = re.search(r"(\d+)\s*dagen", order.get("betalingstermijn","") or "")
+            if _match:
+                _betalingstermijn_dagen = int(_match.group(1))
+            if _betalingstermijn_dagen is not None:
+                factuur_vervaldatum_voorstel = (datetime.date.today() + datetime.timedelta(days=_betalingstermijn_dagen)).isoformat()
+
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/handelsorders" style="color:var(--gray-400);text-decoration:none;">Handelsorders</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ order.contractnummer }}</span>
@@ -891,11 +915,21 @@ def handelsorder_detail(order_id):
     {% else %}
     <a href="/handelsorders/{{ order.id }}/pdf" target="_blank" style="padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Contract downloaden (PDF)</a>
     <span style="font-size:11.5px;color:var(--gray-400);">Verstuurd naar {{ order.tegenpartij_naam }} · boekhoudkoppeling: infrastructuur gereed, nog niet actief</span>
+    {% if order.order_type == "verkoop" %}
+        {% if bestaande_factuur %}
+        <a href="/facturen?bedrijf={{ order.tegenpartij_naam|urlencode }}" style="padding:9px 18px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Factuur bekijken ({{ bestaande_factuur.status }})</a>
+        {% else %}
+        <a href="/facturen?bedrijf={{ order.tegenpartij_naam|urlencode }}&contract_referentie={{ order.contractnummer|urlencode }}&referentie={{ order.contractnummer|urlencode }}&bedrag={{ factuur_bedrag_voorstel }}&vervaldatum={{ factuur_vervaldatum_voorstel }}" style="padding:9px 18px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Factuur aanmaken →</a>
+        {% endif %}
+    {% endif %}
     {% endif %}
 </div>
     """
     pagina = render_simple_page(order["contractnummer"], "handelsorders", inhoud)
-    return render_template_string(pagina, order=order, afdeling_labels=AFDELING_LABELS)
+    return render_template_string(pagina, order=order, afdeling_labels=AFDELING_LABELS,
+                                    bestaande_factuur=bestaande_factuur,
+                                    factuur_bedrag_voorstel=factuur_bedrag_voorstel,
+                                    factuur_vervaldatum_voorstel=factuur_vervaldatum_voorstel)
 
 @handelsorders_bp.route("/handelsorders/<order_id>/bewerken", methods=["GET", "POST"])
 def handelsorder_bewerken(order_id):

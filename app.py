@@ -2744,6 +2744,7 @@ def facturen_pagina():
                 "factuurdatum": request.form.get("factuurdatum", "").strip(),
                 "vervaldatum": request.form.get("vervaldatum", "").strip(),
                 "betaalddatum": "",
+                "contract_referentie": request.form.get("contract_referentie", "").strip(),
                 "gebruiker": session.get("gebruikersnaam", ""),
                 "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
             }
@@ -2764,6 +2765,11 @@ def facturen_pagina():
 
     vooringevuld_bedrijf = request.args.get("bedrijf", "")
     filter_status_fact = request.args.get("filter_status", "")
+    vi_contract = request.args.get("contract_referentie", "").strip()
+    vi_referentie = request.args.get("referentie", "").strip()
+    vi_bedrag = request.args.get("bedrag", "").strip()
+    vi_factuurdatum = request.args.get("factuurdatum", "").strip()
+    vi_vervaldatum = request.args.get("vervaldatum", "").strip()
 
     alle_facturen = laad_facturen()
     for f in alle_facturen:
@@ -2893,21 +2899,27 @@ def facturen_pagina():
 
 <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px 18px;max-width:600px;margin-bottom:20px;">
     <div class="dg-kaart-titel" style="margin-bottom:10px;">Factuur toevoegen</div>
+    {% if vi_contract %}
+    <div style="background:#eff6ff;color:#1d4ed8;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:12.5px;">
+        Wordt gekoppeld aan contract <b>{{ vi_contract }}</b>.
+    </div>
+    {% endif %}
     <form method="POST">
         <input type="hidden" name="actie" value="toevoegen">
+        <input type="hidden" name="contract_referentie" value="{{ vi_contract }}">
         <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" list="bedrijvenLijstFacturen" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
         <datalist id="bedrijvenLijstFacturen">{% for naam in alle_bedrijfsnamen_fact %}<option value="{{ naam }}">{% endfor %}</datalist>
-        <input type="text" name="referentie" placeholder="Referentie / omschrijving" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+        <input type="text" name="referentie" placeholder="Referentie / omschrijving" value="{{ vi_referentie }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
-            <input type="text" name="bedrag" placeholder="Bedrag (€)" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <input type="text" name="bedrag" placeholder="Bedrag (€)" value="{{ vi_bedrag }}" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <select name="btw_percentage" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
                 <option value="">BTW %</option>
                 <option value="0">0%</option>
                 <option value="9">9%</option>
                 <option value="21">21%</option>
             </select>
-            <input type="date" name="factuurdatum" title="Factuurdatum" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-            <input type="date" name="vervaldatum" title="Vervaldatum" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <input type="date" name="factuurdatum" title="Factuurdatum" value="{{ vi_factuurdatum }}" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <input type="date" name="vervaldatum" title="Vervaldatum" value="{{ vi_vervaldatum }}" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
         </div>
         <button type="submit" style="margin-top:10px;padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Factuur toevoegen</button>
     </form>
@@ -2926,7 +2938,10 @@ def facturen_pagina():
     {% for f in getoonde_facturen %}
     <div class="fact-rij fact-row">
         <span style="flex:1.4;"><a href="/bedrijf/{{ f.bedrijf|urlencode }}" style="color:var(--gray-800);font-weight:600;text-decoration:none;">{{ f.bedrijf }}</a></span>
-        <span style="flex:1.2;color:var(--gray-600);">{{ f.referentie|default('—', true) }}</span>
+        <span style="flex:1.2;color:var(--gray-600);">
+            {{ f.referentie|default('—', true) }}
+            {% if f.contract_referentie %}<br><a href="/handelsorders?zoekterm={{ f.contract_referentie|urlencode }}" style="font-size:10.5px;color:var(--brand-600);text-decoration:none;">↳ {{ f.contract_referentie }}</a>{% endif %}
+        </span>
         <span style="width:100px;text-align:right;font-family:var(--font-mono);">€{{ f.bedrag }}</span>
         <span style="width:100px;color:var(--gray-500);">{{ f.vervaldatum }}</span>
         <span style="width:100px;">
@@ -2952,6 +2967,8 @@ def facturen_pagina():
     pagina = render_simple_page("Facturen", "facturen", inhoud)
     return render_template_string(pagina,
         vooringevuld_bedrijf=vooringevuld_bedrijf, filter_status_fact=filter_status_fact,
+        vi_contract=vi_contract, vi_referentie=vi_referentie, vi_bedrag=vi_bedrag,
+        vi_factuurdatum=vi_factuurdatum, vi_vervaldatum=vi_vervaldatum,
         alle_facturen=alle_facturen, getoonde_facturen=getoonde_facturen,
         openstaande_facturen=openstaande_facturen, te_laat_facturen=te_laat_facturen,
         totaal_openstaand=totaal_openstaand, alle_bedrijfsnamen_fact=alle_bedrijfsnamen_fact,
