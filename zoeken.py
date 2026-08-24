@@ -2739,7 +2739,7 @@ select.klik-bewerken-veld { cursor:pointer; }
         {% endif %}
     </div>
     {% endfor %}
-    <a href="/orders?bedrijf={{ bedrijf.naam|urlencode }}" style="display:block;margin-top:10px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">+ Order toevoegen voor {{ bedrijf.naam }} →</a>
+    <a href="{{ '/handelsorders/nieuw/verkoop?klant=' if is_fabriek_profiel else '/handelsorders/nieuw/inkoop?leverancier=' }}{{ bedrijf.naam|urlencode }}" style="display:block;margin-top:10px;font-size:0.78rem;color:var(--brand-600);text-decoration:none;font-weight:600;">+ Order toevoegen voor {{ bedrijf.naam }} →</a>
 </div>
 {% endif %}
 

@@ -304,7 +304,9 @@ def handelsorders_nieuw_inkoop():
 
     inhoud = _inkoop_formulier_html()
     pagina = render_simple_page("Nieuwe inkooporder", "handelsorders", inhoud)
-    return render_template_string(pagina, **_formulier_context())
+    context = _formulier_context()
+    context["leverancier"] = request.args.get("leverancier", "").strip()
+    return render_template_string(pagina, **context)
 
 def _formulier_context():
     return dict(
@@ -629,7 +631,9 @@ def handelsorders_nieuw_verkoop():
 
     inhoud = _verkoop_formulier_html()
     pagina = render_simple_page("Nieuwe verkooporder", "handelsorders", inhoud)
-    return render_template_string(pagina, **_formulier_context())
+    context = _formulier_context()
+    context["klant"] = request.args.get("klant", "").strip()
+    return render_template_string(pagina, **context)
 
 def _verkoop_formulier_html():
     return """
