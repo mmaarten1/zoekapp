@@ -47,6 +47,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
         "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
         "login_pogingen.json", "voorraadwaardering.json", "voorraadmutaties_periode.json", "voorraadlocaties.json",
+        "productiemutaties.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -2160,4 +2161,24 @@ def laad_voorraadlocaties():
 
 def bewaar_voorraadlocaties(data):
     with open(VOORRAADLOCATIES_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ============================================================
+# Productiemutaties: materiaaltransformatie als één traceerbare mutatie.
+# Eén input-materiaal (bv. Mixed Paper) wordt omgezet in één of meer
+# output-materialen (bv. OCC 1.04 + Mixed Paper balen), met eventueel een
+# productieverlies. Dit voedt automatisch de 'Productie/verwerking'-kolom
+# in de mutatiestaat, per betrokken materiaal.
+# ============================================================
+PRODUCTIEMUTATIES_FILE = datapad("productiemutaties.json")
+
+def laad_productiemutaties():
+    try:
+        with open(PRODUCTIEMUTATIES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_productiemutaties(data):
+    with open(PRODUCTIEMUTATIES_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
