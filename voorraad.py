@@ -561,16 +561,17 @@ def voorraad_pagina():
 
     _alle_posities_voor_hoofdoverzicht = _bereken_voorraadposities()
 
-    def _daadwerkelijke_voorraad_voor_categorie(bedrijfseenheid_naam):
-        return round(sum(
-            p["geleverd_ton"] for p in _alle_posities_voor_hoofdoverzicht
-            if p["entiteit"] == bedrijfseenheid_naam and p["status"] == "Fysieke voorraad"
-        ), 1)
-
-    alblasserdam_categorieen = [
-        {"naam": "Papier & karton", "bedrijfseenheid": "Papier", "verwacht_inkomend": _resterend_inkoop_voor_bedrijfseenheid("Papier"), "daadwerkelijk": _daadwerkelijke_voorraad_voor_categorie("Papier")},
-        {"naam": "Plastic", "bedrijfseenheid": "Plastic", "verwacht_inkomend": _resterend_inkoop_voor_bedrijfseenheid("Plastic"), "daadwerkelijk": _daadwerkelijke_voorraad_voor_categorie("Plastic")},
-    ]
+    alblasserdam_categorieen = []
+    for naam_label, be_naam in [("Papier & karton", "Papier"), ("Plastic", "Plastic")]:
+        _besch = _bereken_beschikbaarheid_per_categorie(be_naam, _alle_posities_voor_hoofdoverzicht)
+        alblasserdam_categorieen.append({
+            "naam": naam_label, "bedrijfseenheid": be_naam,
+            "verwacht_inkomend": _resterend_inkoop_voor_bedrijfseenheid(be_naam),
+            "daadwerkelijk": _besch["fysieke_voorraad"],
+            "gereserveerd": _besch["gereserveerd"],
+            "verkocht_niet_uitgeleverd": _besch["verkocht_niet_uitgeleverd"],
+            "vrije_voorraad": _besch["vrije_voorraad"],
+        })
     back_to_back_markten = [be for be in laad_bedrijfseenheden() if be not in ("Papier", "Plastic")]
 
     inhoud = """
@@ -595,12 +596,17 @@ def voorraad_pagina():
 
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:28px;padding:16px 4px;">
     <div style="font-size:11px;font-weight:800;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Alblasserdam — fysieke voorraad</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:16px;">
         {% for c in alblasserdam_categorieen %}
-        <div style="border:none;border-top:1px solid var(--gray-100);padding-top:10px;">
-            <div style="font-weight:700;color:var(--gray-800);font-size:13.5px;margin-bottom:6px;">{{ c.naam }}</div>
-            <div style="font-size:12px;color:var(--gray-500);">Verwacht inkomend: <b style="color:var(--gray-700);">{{ c.verwacht_inkomend }} t</b></div>
-            <div style="font-size:12px;color:var(--gray-500);">Daadwerkelijke voorraad: <b style="color:var(--gray-700);">{{ c.daadwerkelijk }} t</b></div>
+        <div style="border:none;border-top:2px solid var(--gray-800);padding-top:10px;">
+            <div style="font-weight:800;color:var(--gray-800);font-size:14px;margin-bottom:10px;">{{ c.naam }}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:12px;">
+                <div style="color:var(--gray-500);">Onderweg / in transit</div><div style="text-align:right;font-weight:700;color:var(--gray-700);">{{ c.verwacht_inkomend }} t</div>
+                <div style="color:var(--gray-500);">Fysieke voorraad</div><div style="text-align:right;font-weight:700;color:var(--gray-700);">{{ c.daadwerkelijk }} t</div>
+                <div style="color:var(--gray-500);padding-left:10px;">— Gereserveerd</div><div style="text-align:right;color:#d97706;">{{ c.gereserveerd }} t</div>
+                <div style="color:var(--gray-500);padding-left:10px;">— Verkocht, niet uitgeleverd</div><div style="text-align:right;color:#1d4ed8;">{{ c.verkocht_niet_uitgeleverd }} t</div>
+                <div style="color:var(--gray-700);font-weight:700;padding-left:10px;border-top:1px solid var(--gray-100);padding-top:6px;">— Vrije voorraad</div><div style="text-align:right;font-weight:800;color:#16a34a;border-top:1px solid var(--gray-100);padding-top:6px;">{{ c.vrije_voorraad }} t</div>
+            </div>
         </div>
         {% endfor %}
     </div>
@@ -1233,6 +1239,57 @@ def _bereken_voorraadposities():
     posities.sort(key=lambda p: p["datum_binnenkomst"], reverse=True)
     return posities
 
+def _bereken_beschikbaarheid_per_categorie(bedrijfseenheid_naam, alle_posities=None):
+    """Volledige 'beschikbaar-om-te-beloven'-uitsplitsing voor één materiaalcategorie
+    bij Alblasserdam (Papier & karton of Plastic): fysieke voorraad, gereserveerd
+    (verkoop nog concept), verkocht-maar-nog-niet-uitgeleverd (verkoop definitief,
+    nog niet (volledig) verscheept/uitgeleverd) en wat daarna nog vrij is."""
+    if alle_posities is None:
+        alle_posities = _bereken_voorraadposities()
+
+    fysieke_voorraad = round(sum(
+        p["geleverd_ton"] for p in alle_posities
+        if p["entiteit"] == bedrijfseenheid_naam and p["status"] == "Fysieke voorraad"
+    ), 1)
+
+    _alle_handelsorders_besch = laad_handelsorders()
+    _transport_planning_besch = laad_transport_planning()
+    _logistieke_orders_besch = laad_logistieke_orders()
+
+    gereserveerd = 0.0
+    verkocht_niet_uitgeleverd = 0.0
+    for h in _alle_handelsorders_besch:
+        if h.get("order_type") != "verkoop" or h.get("bedrijfseenheid") != bedrijfseenheid_naam:
+            continue
+        try:
+            _volume = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+        except (ValueError, TypeError):
+            _volume = 0.0
+        if h.get("status") == "Concept":
+            gereserveerd += _volume
+        elif h.get("status") == "Definitief":
+            _reeds_uitgeleverd = sum(
+                parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+                for t in _transport_planning_besch
+                if t.get("contract_referentie") == h["contractnummer"] and t.get("status") not in ("Geannuleerd",)
+            ) + sum(
+                parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                for o in _logistieke_orders_besch
+                if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond")
+            )
+            verkocht_niet_uitgeleverd += max(0, _volume - _reeds_uitgeleverd)
+
+    gereserveerd = round(gereserveerd, 1)
+    verkocht_niet_uitgeleverd = round(verkocht_niet_uitgeleverd, 1)
+    vrij = round(max(0, fysieke_voorraad - gereserveerd - verkocht_niet_uitgeleverd), 1)
+
+    return {
+        "fysieke_voorraad": fysieke_voorraad,
+        "gereserveerd": gereserveerd,
+        "verkocht_niet_uitgeleverd": verkocht_niet_uitgeleverd,
+        "vrije_voorraad": vrij,
+    }
+
 @voorraad_bp.route("/voorraad/waardering", methods=["GET", "POST"])
 def voorraad_waardering_pagina():
     _guard = vereist_afdeling_of_403("voorraad")
@@ -1261,6 +1318,11 @@ def voorraad_waardering_pagina():
     totaal_marktwaarde = sum(p["marktwaarde"] for p in posities if p["marktwaarde"] is not None)
     totaal_ongerealiseerd = sum(p["ongerealiseerd_resultaat"] for p in posities if p["ongerealiseerd_resultaat"] is not None)
 
+    beschikbaarheid_per_categorie = [
+        {"naam": "Papier & karton", **_bereken_beschikbaarheid_per_categorie("Papier", posities)},
+        {"naam": "Plastic", **_bereken_beschikbaarheid_per_categorie("Plastic", posities)},
+    ]
+
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Voorraadwaardering</span>
@@ -1285,6 +1347,21 @@ def voorraad_waardering_pagina():
         <div style="font-size:1.4rem;font-weight:800;color:{{ '#16a34a' if totaal_ongerealiseerd >= 0 else '#dc2626' }};">{{ '+' if totaal_ongerealiseerd >= 0 else '' }}€{{ "{:,.0f}".format(totaal_ongerealiseerd).replace(",", ".") }}</div>
         <div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-top:3px;">Ongerealiseerd resultaat</div>
     </div>
+</div>
+
+<div style="font-size:11px;font-weight:800;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Beschikbaarheid per categorie</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:28px;">
+    {% for c in beschikbaarheid_per_categorie %}
+    <div style="border:none;border-top:2px solid var(--gray-800);padding-top:10px;">
+        <div style="font-weight:800;color:var(--gray-800);font-size:14px;margin-bottom:10px;">{{ c.naam }}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:12px;">
+            <div style="color:var(--gray-500);">Fysieke voorraad</div><div style="text-align:right;font-weight:700;color:var(--gray-700);">{{ c.fysieke_voorraad }} t</div>
+            <div style="color:var(--gray-500);padding-left:10px;">— Gereserveerd</div><div style="text-align:right;color:#d97706;">{{ c.gereserveerd }} t</div>
+            <div style="color:var(--gray-500);padding-left:10px;">— Verkocht, niet uitgeleverd</div><div style="text-align:right;color:#1d4ed8;">{{ c.verkocht_niet_uitgeleverd }} t</div>
+            <div style="color:var(--gray-700);font-weight:700;padding-left:10px;border-top:1px solid var(--gray-100);padding-top:6px;">— Vrije voorraad</div><div style="text-align:right;font-weight:800;color:#16a34a;border-top:1px solid var(--gray-100);padding-top:6px;">{{ c.vrije_voorraad }} t</div>
+        </div>
+    </div>
+    {% endfor %}
 </div>
 
 {% for status_naam, groep in posities_per_status.items() %}
@@ -1330,4 +1407,5 @@ def voorraad_waardering_pagina():
     pagina = render_simple_page("Voorraadwaardering", "voorraad", inhoud)
     return render_template_string(pagina, posities_per_status=posities_per_status,
                                     totaal_ton=totaal_ton, totaal_boekwaarde=totaal_boekwaarde,
-                                    totaal_marktwaarde=totaal_marktwaarde, totaal_ongerealiseerd=totaal_ongerealiseerd)
+                                    totaal_marktwaarde=totaal_marktwaarde, totaal_ongerealiseerd=totaal_ongerealiseerd,
+                                    beschikbaarheid_per_categorie=beschikbaarheid_per_categorie)
