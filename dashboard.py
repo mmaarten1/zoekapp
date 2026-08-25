@@ -772,6 +772,20 @@ def dashboard():
 
 <div class="db-rij">
     <div class="db-kol">
+        <div class="db-sectie-titel">Eigen orders die actie nodig hebben <small>nog concept</small></div>
+        {% for h in mijn_concept_orders %}
+        <a class="db-lijst-item" href="/handelsorders/{{ h.id }}">
+            <span><span class="db-lijst-naam">{{ h.tegenpartij_naam }}</span><br><span class="db-lijst-sub">{{ h.contractnummer }} — {{ "Inkoop" if h.order_type == "inkoop" else "Verkoop" }}</span></span>
+            <span class="db-lijst-getal">{{ h.hoeveelheid_mt or '—' }}{% if h.hoeveelheid_mt %} t{% endif %}</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Geen openstaande concept-orders.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="db-rij">
+    <div class="db-kol">
         <div class="db-sectie-titel">Nieuwe leads</div>
         {% for b in nieuwe_leads_lijst %}
         <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
@@ -866,7 +880,8 @@ def dashboard():
         marktprijzen_recent=marktprijzen_recent,
         aantal_forwarders=aantal_forwarders, aantal_transport_steden=aantal_transport_steden,
         placeholders=placeholders,
-        activiteit=activiteit, recent_gekoppelde_contracten=recent_gekoppelde_contracten)
+        activiteit=activiteit, recent_gekoppelde_contracten=recent_gekoppelde_contracten,
+        mijn_concept_orders=mijn_concept_orders)
 
 @dashboard_bp.route("/inzichten")
 def inzichten():
