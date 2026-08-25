@@ -21,6 +21,7 @@ from core import (
     ALBLASSERDAM_NAAM, bepaal_shipment_flow_type, shipment_hoeveelheid, SHIPMENT_STATUSSEN,
     vereist_afdeling_of_403, laad_handelsorders, laad_voorraadwaardering, bewaar_voorraadwaardering,
     laad_bedrijfseenheden, laad_marktprijzen, laad_logistieke_orders, laad_transport_planning,
+    laad_voorraadmutaties_periode, bewaar_voorraadmutaties_periode,
 )
 
 voorraad_bp = Blueprint("voorraad", __name__)
@@ -610,6 +611,8 @@ def voorraad_pagina():
         </div>
         {% endfor %}
     </div>
+    <a href="/voorraad/mutaties" style="display:inline-block;margin-bottom:8px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:8px 16px;border-radius:6px;">Voorraad Alblasserdam — mutatiestaat →</a>
+    <br>
     <a href="/voorraad/waardering" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;">Voorraadwaardering bijwerken →</a>
 
     {% if back_to_back_markten %}
@@ -627,15 +630,15 @@ def voorraad_pagina():
 </div>
 
 <div class="vrd-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:16px;">
-    <div class="vrd-kaart"><div class="vrd-getal">{{ "{:,.1f}".format(kpi_fysiek_totaal) }}</div><div class="vrd-label">📦 TOTAL STOCK (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--brand-600);">{{ "{:,.1f}".format(kpi_vrij_totaal) }}</div><div class="vrd-label">✅ AVAILABLE (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(kpi_verkocht_totaal) }}</div><div class="vrd-label">🔒 RESERVED (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:#7c3aed;">{{ "{:,.1f}".format(kpi_transit_totaal) }}</div><div class="vrd-label">🚚 IN TRANSIT (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:#0891b2;">{{ "{:,.1f}".format(kpi_direct_flow_totaal) }}</div><div class="vrd-label">🌍 DIRECT FLOW (ton)</div></div>
-    <div class="vrd-kaart" style="background:var(--gray-800);"><div class="vrd-getal" style="color:#fff;">{{ "{:,.1f}".format(kpi_totaal_controlled) }}</div><div class="vrd-label" style="color:var(--gray-300);">📊 TOTAL CONTROLLED VOLUME</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:#16a34a;">{{ "{:,.1f}".format(inkomend_7d) }}</div><div class="vrd-label">📥 INCOMING 7 DAYS (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(uitgaand_7d) }}</div><div class="vrd-label">📤 OUTGOING 7 DAYS (ton)</div></div>
-    <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--gray-600);">{{ "{:,.1f}".format(kpi_forecast_totaal) }}</div><div class="vrd-label">🔮 FORECAST STOCK (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal">{{ "{:,.1f}".format(kpi_fysiek_totaal) }}</div><div class="vrd-label">TOTAL STOCK (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--brand-600);">{{ "{:,.1f}".format(kpi_vrij_totaal) }}</div><div class="vrd-label">AVAILABLE (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(kpi_verkocht_totaal) }}</div><div class="vrd-label">RESERVED (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#7c3aed;">{{ "{:,.1f}".format(kpi_transit_totaal) }}</div><div class="vrd-label">IN TRANSIT (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#0891b2;">{{ "{:,.1f}".format(kpi_direct_flow_totaal) }}</div><div class="vrd-label">DIRECT FLOW (ton)</div></div>
+    <div class="vrd-kaart" style="background:var(--gray-800);"><div class="vrd-getal" style="color:#fff;">{{ "{:,.1f}".format(kpi_totaal_controlled) }}</div><div class="vrd-label" style="color:var(--gray-300);">TOTAL CONTROLLED VOLUME</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#16a34a;">{{ "{:,.1f}".format(inkomend_7d) }}</div><div class="vrd-label">INCOMING 7 DAYS (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:#dc2626;">{{ "{:,.1f}".format(uitgaand_7d) }}</div><div class="vrd-label">OUTGOING 7 DAYS (ton)</div></div>
+    <div class="vrd-kaart"><div class="vrd-getal" style="color:var(--gray-600);">{{ "{:,.1f}".format(kpi_forecast_totaal) }}</div><div class="vrd-label">FORECAST STOCK (ton)</div></div>
 </div>
 
 <div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
@@ -673,7 +676,7 @@ def voorraad_pagina():
         <div class="dg-kaart-titel" style="margin-bottom:10px;">Voorraad per locatie</div>
         {% for loc, aantal in stock_per_locatie_lijst %}
         <div class="vrd-transactie" style="padding:7px 0;">
-            <span>📍 {{ loc }}</span>
+            <span>{{ loc }}</span>
             <b>{{ "{:,.1f}".format(aantal) }} ton</b>
         </div>
         {% else %}
@@ -686,7 +689,7 @@ def voorraad_pagina():
         {% for bucket, aantal in aging_buckets.items() %}
         <div style="margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
-                <span style="color:{{ '#dc2626' if bucket == '90+' and aantal > 0 else 'var(--gray-500)' }};font-weight:{{ '700' if bucket == '90+' and aantal > 0 else '500' }};">{{ bucket }} dagen{{ ' ⚠' if bucket == '90+' and aantal > 0 else '' }}</span>
+                <span style="color:{{ '#dc2626' if bucket == '90+' and aantal > 0 else 'var(--gray-500)' }};font-weight:{{ '700' if bucket == '90+' and aantal > 0 else '500' }};">{{ bucket }} dagen{{ ' ' if bucket == '90+' and aantal > 0 else '' }}</span>
                 <span>{{ "{:,.1f}".format(aantal) }} ton</span>
             </div>
             <div style="background:var(--gray-100);border-radius:4px;height:6px;overflow:hidden;">
@@ -701,7 +704,7 @@ def voorraad_pagina():
     <div class="vrd-kaart">
         <div class="dg-kaart-titel" style="margin-bottom:10px;">Flow by origin</div>
         {% for land, aantal in flow_by_origin_lijst %}
-        <div class="vrd-transactie" style="padding:6px 0;"><span>🌍 {{ land }}</span><b>{{ "{:,.1f}".format(aantal) }} ton</b></div>
+        <div class="vrd-transactie" style="padding:6px 0;"><span>{{ land }}</span><b>{{ "{:,.1f}".format(aantal) }} ton</b></div>
         {% else %}
         <div style="color:var(--gray-300);font-size:12.5px;">Nog geen flow-data.</div>
         {% endfor %}
@@ -709,7 +712,7 @@ def voorraad_pagina():
     <div class="vrd-kaart">
         <div class="dg-kaart-titel" style="margin-bottom:10px;">Flow by destination</div>
         {% for land, aantal in flow_by_destination_lijst %}
-        <div class="vrd-transactie" style="padding:6px 0;"><span>🎯 {{ land }}</span><b>{{ "{:,.1f}".format(aantal) }} ton</b></div>
+        <div class="vrd-transactie" style="padding:6px 0;"><span>{{ land }}</span><b>{{ "{:,.1f}".format(aantal) }} ton</b></div>
         {% else %}
         <div style="color:var(--gray-300);font-size:12.5px;">Nog geen flow-data.</div>
         {% endfor %}
@@ -728,7 +731,7 @@ def voorraad_pagina():
     {% endfor %}
 </div>
 
-<div class="dg-kaart-titel" style="margin-bottom:12px;">🚢 Shipment plannen (systeem bepaalt zelf inbound/outbound/direct)</div>
+<div class="dg-kaart-titel" style="margin-bottom:12px;">Shipment plannen (systeem bepaalt zelf inbound/outbound/direct)</div>
 {% if prefill %}
 <div style="background:#eff6ff;color:#1d4ed8;padding:8px 14px;border-radius:8px;margin-bottom:10px;font-size:0.82rem;font-weight:600;max-width:680px;">Formulier vooringevuld vanuit de order — controleer en bevestig hieronder.</div>
 {% endif %}
@@ -870,12 +873,12 @@ function voorraadStatusSubmit(form, isInbound) {
 }
 </script>
 
-<div class="dg-kaart-titel" style="margin-bottom:12px;">🏭 Fabrieken — openstaande leveringen</div>
+<div class="dg-kaart-titel" style="margin-bottom:12px;">Fabrieken — openstaande leveringen</div>
 <p style="color:var(--gray-400);font-size:0.82rem;margin-top:-8px;margin-bottom:16px;">Wat kan er nog geleverd worden per fabriek/klant, gebaseerd op je verkoopcontracten hieronder.</p>
 <div class="vrd-kaart" style="margin-bottom:24px;">
     {% for fabriek_naam, contracten_lijst in fabrieken_overzicht_lijst %}
     <div style="padding:10px 0;border-bottom:1px solid var(--gray-50);">
-        <div style="font-weight:700;color:var(--gray-800);margin-bottom:6px;">🏭 {{ fabriek_naam }}</div>
+        <div style="font-weight:700;color:var(--gray-800);margin-bottom:6px;">{{ fabriek_naam }}</div>
         {% for c in contracten_lijst %}
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:4px 0;">
             <span>{{ c.materiaal }} <span style="color:var(--gray-400);">({{ c.referentie }})</span></span>
@@ -950,10 +953,10 @@ function voorraadStatusSubmit(form, isInbound) {
         <input type="hidden" name="actie" value="toevoegen">
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <select name="type" id="voorraadTypeSelect" onchange="toggleTransactieVelden()">
-                <option value="in">📥 Inbound (binnenkomend materiaal)</option>
-                <option value="uit">📤 Outbound (verkoop/afvoer)</option>
-                <option value="transfer">🔄 Transfer (tussen locaties)</option>
-                <option value="adjustment">⚖️ Adjustment (correctie)</option>
+                <option value="in">Inbound (binnenkomend materiaal)</option>
+                <option value="uit">Outbound (verkoop/afvoer)</option>
+                <option value="transfer">Transfer (tussen locaties)</option>
+                <option value="adjustment">️ Adjustment (correctie)</option>
             </select>
             <input type="date" name="datum" value="{{ vandaag }}">
         </div>
@@ -981,14 +984,14 @@ function voorraadStatusSubmit(form, isInbound) {
         </div>
         <div id="adjustmentVeldWrap" style="display:none;">
             <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <select name="richting"><option value="plus">➕ Voorraad erbij</option><option value="min">➖ Voorraad eraf</option></select>
+                <select name="richting"><option value="plus">Voorraad erbij</option><option value="min">Voorraad eraf</option></select>
                 <input type="text" name="reden" placeholder="Reden (verplicht)">
             </div>
         </div>
         <div id="keuringVeldWrap">
             <select name="keuringsstatus">
                 <option value="te_keuren">⏳ Te keuren (nog niet in handelsvoorraad)</option>
-                <option value="goedgekeurd">✅ Direct goedgekeurd (telt meteen mee)</option>
+                <option value="goedgekeurd">Direct goedgekeurd (telt meteen mee)</option>
             </select>
         </div>
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -1037,17 +1040,17 @@ function toggleTransactieVelden() {
         {% for t in getoonde_transacties %}
         <div class="vrd-transactie">
             <div>
-                {% if t.type == "transfer" %}<span style="background:#eef2ff;color:#4f46e5;font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;">🔄 TRANSFER</span>
-                {% elif t.type == "adjustment" %}<span style="background:{{ '#f0fdf4' if t.get('richting') == 'plus' else '#fef2f2' }};color:{{ '#16a34a' if t.get('richting') == 'plus' else '#dc2626' }};font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;">⚖️ {{ 'CORRECTIE +' if t.get('richting') == 'plus' else 'CORRECTIE -' }}</span>
-                {% else %}<span class="{{ 'vrd-badge-in' if t.type == 'in' else 'vrd-badge-uit' }}">{{ '📥 IN' if t.type == 'in' else '📤 UIT' }}</span>{% endif %}
+                {% if t.type == "transfer" %}<span style="background:#eef2ff;color:#4f46e5;font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;">TRANSFER</span>
+                {% elif t.type == "adjustment" %}<span style="background:{{ '#f0fdf4' if t.get('richting') == 'plus' else '#fef2f2' }};color:{{ '#16a34a' if t.get('richting') == 'plus' else '#dc2626' }};font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;">️ {{ 'CORRECTIE +' if t.get('richting') == 'plus' else 'CORRECTIE -' }}</span>
+                {% else %}<span class="{{ 'vrd-badge-in' if t.type == 'in' else 'vrd-badge-uit' }}">{{ 'IN' if t.type == 'in' else 'UIT' }}</span>{% endif %}
                 {% if t.type == "in" %}
                     {% if t.get("keuringsstatus","goedgekeurd") == "te_keuren" %}<span class="vrd-badge-te-keuren">⏳ Te keuren</span>
                     {% elif t.get("keuringsstatus") == "afgekeurd" %}<span class="vrd-badge-afgekeurd">✕ Afgekeurd</span>
                     {% else %}<span style="color:#16a34a;font-size:11px;">✓ Goedgekeurd</span>{% endif %}
                 {% endif %}
                 <b>{{ t.materiaal }}</b> · {{ t.hoeveelheid }} ton
-                {% if t.type == "transfer" %} · 📍{{ t.locatie_van }} → {{ t.locatie_naar }}
-                {% elif t.locatie %} · 📍{{ t.locatie }}{% endif %}
+                {% if t.type == "transfer" %} · {{ t.locatie_van }} → {{ t.locatie_naar }}
+                {% elif t.locatie %} · {{ t.locatie }}{% endif %}
                 {% if t.type == "adjustment" and t.reden %} · reden: {{ t.reden }}{% endif %}
                 {% if t.bedrijf %} · {{ t.bedrijf }}{% endif %}
                 {% if t.prijs %} · €{{ t.prijs }}{% endif %}
@@ -1081,7 +1084,7 @@ function toggleTransactieVelden() {
     {% endif %}
 </div>
 
-<div class="dg-kaart-titel" style="margin-bottom:12px;">📋 Voorraadmomenten (fysieke telling)</div>
+<div class="dg-kaart-titel" style="margin-bottom:12px;">Voorraadmomenten (fysieke telling)</div>
 <p style="color:var(--gray-400);font-size:0.82rem;margin-top:-8px;margin-bottom:16px;">Leg een fysieke telling vast om te vergelijken met de berekende voorraad — handig om afwijkingen op te sporen.</p>
 
 <div class="vrd-kaart" style="max-width:520px;margin-bottom:20px;">
@@ -1114,7 +1117,7 @@ function toggleTransactieVelden() {
         <div class="vrd-transactie">
             <div>
                 <b>{{ m.materiaal }}</b> · geteld: {{ m.hoeveelheid }} ton
-                {% if m.locatie %} · 📍{{ m.locatie }}{% endif %}
+                {% if m.locatie %} · {{ m.locatie }}{% endif %}
                 {% if m.verschil %}
                     <span style="color:{{ '#dc2626' if m.verschil|abs > 0.5 else 'var(--gray-400)' }};font-weight:700;">
                         ({{ '+' if m.verschil > 0 else '' }}{{ "{:,.1f}".format(m.verschil) }} vs berekend)
@@ -1179,6 +1182,108 @@ function toggleTransactieVelden() {
 # Daarnaast, onafhankelijk daarvan: Committed (gekoppeld aan een klant) vs
 # Vrije voorraad (nog geen koper).
 # ============================================================
+def _getal_of_0(waarde):
+    try:
+        return float(str(waarde).replace(",", "."))
+    except (ValueError, TypeError):
+        return 0.0
+
+def _vorige_periode_sleutel(periode_sleutel):
+    jaar, maand = periode_sleutel.split("-")
+    jaar, maand = int(jaar), int(maand)
+    maand -= 1
+    if maand == 0:
+        maand = 12
+        jaar -= 1
+    return f"{jaar:04d}-{maand:02d}"
+
+def _bereken_mutatiestaat(periode_sleutel, _diepte=0):
+    """periode_sleutel = 'YYYY-MM'. Basisformule: beginvoorraad + ontvangsten +
+    productie/verwerking − uitgaand ± correcties = eindvoorraad. Ontvangsten en
+    uitgaand worden automatisch berekend uit Handelsorders (gefilterd op deze
+    periode); beginvoorraad/productie/correcties zijn handmatig. Beginvoorraad
+    wordt, als er niks handmatig is ingevuld, automatisch voorgesteld als de
+    eindvoorraad van de vorige periode — LIVE herberekend (geen cache), zodat
+    een correctie in een oude periode altijd correct doorwerkt naar latere
+    periodes. _diepte is een veiligheidsgrens tegen oneindige recursie."""
+    jaar, maand = periode_sleutel.split("-")
+    jaar, maand = int(jaar), int(maand)
+
+    def _in_periode(datum_str):
+        for _formaat in ("%d-%m-%Y %H:%M", "%Y-%m-%d"):
+            try:
+                _d = datetime.datetime.strptime(datum_str, _formaat)
+                return _d.year == jaar and _d.month == maand
+            except (ValueError, TypeError):
+                continue
+        return False
+
+    alle_mutaties = laad_voorraadmutaties_periode()
+    mutaties_deze_periode = alle_mutaties.get(periode_sleutel, {})
+
+    _alle_handelsorders = laad_handelsorders()
+    _logistieke_orders_alle = laad_logistieke_orders()
+    _transport_planning_alle = laad_transport_planning()
+
+    alle_kwaliteiten = set()
+    for h in _alle_handelsorders:
+        if h.get("status") == "Definitief" and h.get("bedrijfseenheid") in ("Papier", "Plastic") and h.get("kwaliteit"):
+            alle_kwaliteiten.add(h["kwaliteit"])
+    for k in mutaties_deze_periode.keys():
+        alle_kwaliteiten.add(k)
+
+    rijen = []
+    for kwaliteit in sorted(alle_kwaliteiten):
+        handmatig = mutaties_deze_periode.get(kwaliteit, {})
+
+        if "beginvoorraad" in handmatig and handmatig["beginvoorraad"] != "":
+            beginvoorraad = _getal_of_0(handmatig["beginvoorraad"])
+            beginvoorraad_bron = "handmatig"
+        elif _diepte < 24:
+            _vorige_rijen = _bereken_mutatiestaat(_vorige_periode_sleutel(periode_sleutel), _diepte + 1)
+            _vorige_rij = next((r for r in _vorige_rijen if r["materiaal"] == kwaliteit), None)
+            beginvoorraad = _vorige_rij["eindvoorraad"] if _vorige_rij else 0.0
+            beginvoorraad_bron = "vorige periode" if _vorige_rij else "geen historie"
+        else:
+            beginvoorraad = 0.0
+            beginvoorraad_bron = "geen historie"
+
+        ontvangsten = 0.0
+        uitgaand = 0.0
+        for h in _alle_handelsorders:
+            if h.get("kwaliteit") != kwaliteit or h.get("status") != "Definitief":
+                continue
+            if h.get("order_type") == "inkoop":
+                modus = h.get("transportmodus","") or "Vrachtwagen"
+                if modus == "Schip":
+                    for t in _transport_planning_alle:
+                        if t.get("contract_referentie") == h["contractnummer"] and t.get("status") != "Geannuleerd" and _in_periode(t.get("aangemaakt","")):
+                            ontvangsten += parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+                else:
+                    for o in _logistieke_orders_alle:
+                        if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond") and _in_periode(o.get("aangemaakt","")):
+                            ontvangsten += parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            elif h.get("order_type") == "verkoop":
+                for t in _transport_planning_alle:
+                    if t.get("contract_referentie") == h["contractnummer"] and t.get("status") != "Geannuleerd" and _in_periode(t.get("aangemaakt","")):
+                        uitgaand += parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+                for o in _logistieke_orders_alle:
+                    if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond") and _in_periode(o.get("aangemaakt","")):
+                        uitgaand += parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+
+        productie_verwerking = _getal_of_0(handmatig.get("productie_verwerking", 0))
+        correcties = _getal_of_0(handmatig.get("correcties", 0))
+        ontvangsten = round(ontvangsten, 1)
+        uitgaand = round(uitgaand, 1)
+        eindvoorraad = round(beginvoorraad + ontvangsten + productie_verwerking - uitgaand + correcties, 1)
+
+        rijen.append({
+            "materiaal": kwaliteit, "beginvoorraad": round(beginvoorraad,1), "beginvoorraad_bron": beginvoorraad_bron,
+            "ontvangsten": ontvangsten, "productie_verwerking": productie_verwerking,
+            "uitgaand": uitgaand, "correcties": correcties, "eindvoorraad": eindvoorraad,
+        })
+    return rijen
+
 def _bereken_voorraadposities():
     _marktprijzen_alle = laad_marktprijzen()
     _handmatige_locaties = laad_voorraadwaardering()
@@ -1289,6 +1394,119 @@ def _bereken_beschikbaarheid_per_categorie(bedrijfseenheid_naam, alle_posities=N
         "verkocht_niet_uitgeleverd": verkocht_niet_uitgeleverd,
         "vrije_voorraad": vrij,
     }
+
+# ============================================================
+# Voorraad Alblasserdam — de periodieke mutatiestaat. Dit is het echte
+# hoofdoverzicht: beginvoorraad + ontvangsten + productie/verwerking −
+# uitgaand ± correcties = eindvoorraad, per materiaal, per periode (maand).
+# Beginvoorraad is het fundament — zonder een juiste beginvoorraad kun je de
+# voorraad niet correct door de periode heen volgen, dus die staat vooraan.
+# ============================================================
+@voorraad_bp.route("/voorraad/mutaties", methods=["GET", "POST"])
+def voorraad_mutaties_pagina():
+    _guard = vereist_afdeling_of_403("voorraad")
+    if _guard: return _guard
+
+    if request.method == "POST":
+        alle_mutaties = laad_voorraadmutaties_periode()
+        periode = request.form.get("periode", "").strip()
+        materiaal = request.form.get("materiaal", "").strip()
+        if periode and materiaal:
+            alle_mutaties.setdefault(periode, {}).setdefault(materiaal, {})
+            for veld in ("beginvoorraad", "productie_verwerking", "correcties"):
+                waarde = request.form.get(veld, None)
+                if waarde is not None and waarde != "":
+                    alle_mutaties[periode][materiaal][veld] = waarde
+            alle_mutaties[periode][materiaal]["gebruiker"] = session.get("gebruikersnaam", "")
+            alle_mutaties[periode][materiaal]["aangemaakt"] = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+            bewaar_voorraadmutaties_periode(alle_mutaties)
+        return redirect(url_for("voorraad.voorraad_mutaties_pagina", periode=periode))
+
+    periode = request.args.get("periode", "").strip() or datetime.date.today().strftime("%Y-%m")
+    _jaar, _maand = periode.split("-")
+    _periode_datum = datetime.date(int(_jaar), int(_maand), 1)
+    periode_vorige = _vorige_periode_sleutel(periode)
+    if _maand == "12":
+        periode_volgende = f"{int(_jaar)+1:04d}-01"
+    else:
+        periode_volgende = f"{int(_jaar):04d}-{int(_maand)+1:02d}"
+    _NL_MAANDEN = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"]
+    periode_label = f"{_NL_MAANDEN[_periode_datum.month-1]} {_periode_datum.year}"
+
+    rijen = _bereken_mutatiestaat(periode)
+    totaal_beginvoorraad = round(sum(r["beginvoorraad"] for r in rijen), 1)
+    totaal_ontvangsten = round(sum(r["ontvangsten"] for r in rijen), 1)
+    totaal_productie = round(sum(r["productie_verwerking"] for r in rijen), 1)
+    totaal_uitgaand = round(sum(r["uitgaand"] for r in rijen), 1)
+    totaal_correcties = round(sum(r["correcties"] for r in rijen), 1)
+    totaal_eindvoorraad = round(sum(r["eindvoorraad"] for r in rijen), 1)
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Voorraad Alblasserdam</span>
+</div>
+<div class="page-title">Voorraad Alblasserdam</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Beginvoorraad + ontvangsten + productie/verwerking − uitgaand ± correcties = eindvoorraad.</p>
+
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+    <a href="/voorraad/mutaties?periode={{ periode_vorige }}" style="font-size:13px;color:var(--gray-400);text-decoration:none;">← vorige</a>
+    <div style="font-size:15px;font-weight:800;color:var(--gray-800);min-width:160px;text-align:center;">{{ periode_label }}</div>
+    <a href="/voorraad/mutaties?periode={{ periode_volgende }}" style="font-size:13px;color:var(--gray-400);text-decoration:none;">volgende →</a>
+</div>
+
+<div style="border:none;border-top:1px solid var(--gray-200);overflow-x:auto;">
+    <div style="display:flex;padding:8px 4px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-400);border-bottom:2px solid var(--gray-800);min-width:900px;">
+        <span style="flex:1.3;">Materiaal</span>
+        <span style="width:110px;text-align:right;">Beginvoorraad</span>
+        <span style="width:110px;text-align:right;">Ontvangsten</span>
+        <span style="width:130px;text-align:right;">Productie / verwerking</span>
+        <span style="width:100px;text-align:right;">Uitgaand</span>
+        <span style="width:100px;text-align:right;">Correcties</span>
+        <span style="width:110px;text-align:right;">Eindvoorraad</span>
+    </div>
+    {% for r in rijen %}
+    <div style="display:flex;align-items:center;padding:8px 4px;font-size:12.5px;border-bottom:1px solid var(--gray-100);min-width:900px;">
+        <span style="flex:1.3;font-weight:600;color:var(--gray-800);">{{ r.materiaal }}</span>
+        <form method="POST" style="display:contents;">
+            <input type="hidden" name="periode" value="{{ periode }}">
+            <input type="hidden" name="materiaal" value="{{ r.materiaal }}">
+            <span style="width:110px;text-align:right;">
+                <input type="text" name="beginvoorraad" value="{{ r.beginvoorraad }}" onchange="this.form.requestSubmit()" title="Bron: {{ r.beginvoorraad_bron }}" style="width:85px;text-align:right;padding:3px 5px;border:1px solid var(--gray-200);border-radius:4px;font-size:11.5px;font-family:inherit;">
+            </span>
+            <span style="width:110px;text-align:right;color:var(--gray-600);">{{ r.ontvangsten }}</span>
+            <span style="width:130px;text-align:right;">
+                <input type="text" name="productie_verwerking" value="{{ r.productie_verwerking }}" onchange="this.form.requestSubmit()" style="width:85px;text-align:right;padding:3px 5px;border:1px solid var(--gray-200);border-radius:4px;font-size:11.5px;font-family:inherit;">
+            </span>
+            <span style="width:100px;text-align:right;color:var(--gray-600);">-{{ r.uitgaand }}</span>
+            <span style="width:100px;text-align:right;">
+                <input type="text" name="correcties" value="{{ r.correcties }}" onchange="this.form.requestSubmit()" style="width:75px;text-align:right;padding:3px 5px;border:1px solid var(--gray-200);border-radius:4px;font-size:11.5px;font-family:inherit;">
+            </span>
+        </form>
+        <span style="width:110px;text-align:right;font-weight:800;color:var(--gray-800);">{{ r.eindvoorraad }}</span>
+    </div>
+    {% else %}
+    <div class="lege-staat" style="min-width:900px;">Nog geen materiaal met definitieve orders bij Alblasserdam.</div>
+    {% endfor %}
+    {% if rijen %}
+    <div style="display:flex;align-items:center;padding:10px 4px;font-size:12.5px;font-weight:800;color:var(--gray-800);border-top:2px solid var(--gray-800);min-width:900px;">
+        <span style="flex:1.3;">Totaal</span>
+        <span style="width:110px;text-align:right;">{{ totaal_beginvoorraad }}</span>
+        <span style="width:110px;text-align:right;">{{ totaal_ontvangsten }}</span>
+        <span style="width:130px;text-align:right;">{{ totaal_productie }}</span>
+        <span style="width:100px;text-align:right;">-{{ totaal_uitgaand }}</span>
+        <span style="width:100px;text-align:right;">{{ totaal_correcties }}</span>
+        <span style="width:110px;text-align:right;">{{ totaal_eindvoorraad }}</span>
+    </div>
+    {% endif %}
+</div>
+<p style="color:var(--gray-300);font-size:11px;margin-top:10px;">Beginvoorraad wordt automatisch voorgesteld als de eindvoorraad van de vorige periode (klik in het veld om te overschrijven). Ontvangsten/uitgaand komen automatisch uit Handelsorders; productie/verwerking en correcties vul je zelf in.</p>
+    """
+    pagina = render_simple_page("Voorraad Alblasserdam", "voorraad", inhoud)
+    return render_template_string(pagina, rijen=rijen, periode=periode, periode_label=periode_label,
+                                    periode_vorige=periode_vorige, periode_volgende=periode_volgende,
+                                    totaal_beginvoorraad=totaal_beginvoorraad, totaal_ontvangsten=totaal_ontvangsten,
+                                    totaal_productie=totaal_productie, totaal_uitgaand=totaal_uitgaand,
+                                    totaal_correcties=totaal_correcties, totaal_eindvoorraad=totaal_eindvoorraad)
 
 @voorraad_bp.route("/voorraad/waardering", methods=["GET", "POST"])
 def voorraad_waardering_pagina():

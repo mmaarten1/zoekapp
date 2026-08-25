@@ -46,7 +46,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json", "transport_planning.json",
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
         "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
-        "login_pogingen.json", "voorraadwaardering.json",
+        "login_pogingen.json", "voorraadwaardering.json", "voorraadmutaties_periode.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -2120,4 +2120,25 @@ def laad_voorraadwaardering():
 
 def bewaar_voorraadwaardering(data):
     with open(VOORRAADWAARDERING_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ============================================================
+# Periodieke voorraadmutatiestaat (per materiaal, per periode YYYY-MM):
+# beginvoorraad + ontvangsten + productie/verwerking − uitgaand ± correcties
+# = eindvoorraad. Ontvangsten/uitgaand worden automatisch berekend uit
+# Handelsorders; beginvoorraad/productie/correcties zijn de handmatige
+# velden — beginvoorraad wordt bij een nieuwe periode automatisch
+# voorgesteld als de eindvoorraad van de vorige periode.
+# ============================================================
+VOORRAADMUTATIES_PERIODE_FILE = datapad("voorraadmutaties_periode.json")
+
+def laad_voorraadmutaties_periode():
+    try:
+        with open(VOORRAADMUTATIES_PERIODE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_voorraadmutaties_periode(data):
+    with open(VOORRAADMUTATIES_PERIODE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
