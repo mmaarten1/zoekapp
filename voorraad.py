@@ -1652,120 +1652,169 @@ def voorraad_mutaties_pagina():
 
 @voorraad_bp.route("/voorraad/waardering", methods=["GET", "POST"])
 def voorraad_waardering_pagina():
+    """Voorraadwaardering — volledig bewerkbaar. Ton/kostprijs/marktprijs per
+    materiaal per periode zijn alle drie handmatig te overschrijven; elk veld
+    krijgt een sensibele automatische standaardwaarde (ton uit de mutatiestaat,
+    kostprijs als gewogen gemiddelde uit Handelsorders, marktprijs uit
+    Marktprijzen), maar niets ligt vast. Boekwaarde/marktwaarde/resultaat zijn
+    pure rekenkundige afgeleiden van die drie velden."""
     _guard = vereist_afdeling_of_403("voorraad")
     if _guard: return _guard
 
     if request.method == "POST":
-        waardering = laad_voorraadwaardering()
-        contractnummer = request.form.get("contractnummer", "").strip()
-        locatie = request.form.get("locatie", "").strip()
-        if contractnummer:
-            waardering[contractnummer] = {
-                "locatie": locatie,
-                "gebruiker": session.get("gebruikersnaam", ""),
-                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
-            }
-            bewaar_voorraadwaardering(waardering)
-        return redirect(url_for("voorraad.voorraad_waardering_pagina"))
+        alle_waardering = laad_voorraadwaardering()
+        periode = request.form.get("periode", "").strip()
+        materiaal = request.form.get("materiaal", "").strip()
+        if periode and materiaal:
+            alle_waardering.setdefault(periode, {}).setdefault(materiaal, {})
+            for veld in ("ton", "kostprijs_per_ton", "marktprijs_per_ton"):
+                waarde = request.form.get(veld, None)
+                if waarde is not None and waarde != "":
+                    alle_waardering[periode][materiaal][veld] = waarde
+            alle_waardering[periode][materiaal]["gebruiker"] = session.get("gebruikersnaam", "")
+            alle_waardering[periode][materiaal]["aangemaakt"] = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+            bewaar_voorraadwaardering(alle_waardering)
+        return redirect(url_for("voorraad.voorraad_waardering_pagina", periode=periode))
 
-    posities = _bereken_voorraadposities()
-    posities_per_status = {}
-    for p in posities:
-        posities_per_status.setdefault(p["status"], []).append(p)
+    periode = request.args.get("periode", "").strip() or datetime.date.today().strftime("%Y-%m")
+    _jaar, _maand = periode.split("-")
+    periode_vorige = _vorige_periode_sleutel(periode)
+    if _maand == "12":
+        periode_volgende = f"{int(_jaar)+1:04d}-01"
+    else:
+        periode_volgende = f"{int(_jaar):04d}-{int(_maand)+1:02d}"
+    _NL_MAANDEN = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"]
+    periode_label = f"{_NL_MAANDEN[int(_maand)-1]} {int(_jaar)}"
 
-    totaal_ton = sum(p["geleverd_ton"] for p in posities)
-    totaal_boekwaarde = sum(p["boekwaarde"] for p in posities)
-    totaal_marktwaarde = sum(p["marktwaarde"] for p in posities if p["marktwaarde"] is not None)
-    totaal_ongerealiseerd = sum(p["ongerealiseerd_resultaat"] for p in posities if p["ongerealiseerd_resultaat"] is not None)
+    mutatiestaat_rijen = _bereken_mutatiestaat(periode)
+    _marktprijzen_alle = laad_marktprijzen()
+    _alle_handelsorders_wrd = laad_handelsorders()
+    alle_waardering = laad_voorraadwaardering()
+    handmatig_deze_periode = alle_waardering.get(periode, {})
 
-    beschikbaarheid_per_categorie = [
-        {"naam": "Papier & karton", **_bereken_beschikbaarheid_per_categorie("Papier", posities)},
-        {"naam": "Plastic", **_bereken_beschikbaarheid_per_categorie("Plastic", posities)},
-    ]
+    def _laatste_marktprijs(materiaal):
+        _relevante = sorted([p for p in _marktprijzen_alle if p.get("materiaal") == materiaal], key=lambda p: p.get("datum",""), reverse=True)
+        return _relevante[0]["prijs_per_ton"] if _relevante else None
+
+    def _gewogen_gemiddelde_kostprijs(kwaliteit):
+        _totaal_gewicht = 0.0
+        _totaal_waarde = 0.0
+        for h in _alle_handelsorders_wrd:
+            if h.get("kwaliteit") != kwaliteit or h.get("order_type") != "inkoop" or h.get("status") != "Definitief":
+                continue
+            if h.get("kostprijs_eur") is None:
+                continue
+            try:
+                _vol = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+            except (ValueError, TypeError):
+                continue
+            _totaal_gewicht += _vol
+            _totaal_waarde += _vol * h["kostprijs_eur"]
+        return round(_totaal_waarde / _totaal_gewicht, 2) if _totaal_gewicht > 0 else None
+
+    rijen = []
+    for r in mutatiestaat_rijen:
+        materiaal = r["materiaal"]
+        handmatig = handmatig_deze_periode.get(materiaal, {})
+
+        _ton_standaard = r["eindvoorraad"]
+        _kostprijs_standaard = _gewogen_gemiddelde_kostprijs(materiaal)
+        _marktprijs_standaard = _laatste_marktprijs(materiaal)
+
+        ton = _getal_of_0(handmatig["ton"]) if handmatig.get("ton") not in (None, "") else _ton_standaard
+        kostprijs = _getal_of_0(handmatig["kostprijs_per_ton"]) if handmatig.get("kostprijs_per_ton") not in (None, "") else (_kostprijs_standaard or 0)
+        marktprijs = _getal_of_0(handmatig["marktprijs_per_ton"]) if handmatig.get("marktprijs_per_ton") not in (None, "") else (_marktprijs_standaard or 0)
+
+        ton_overschreven = handmatig.get("ton") not in (None, "")
+        kostprijs_overschreven = handmatig.get("kostprijs_per_ton") not in (None, "")
+        marktprijs_overschreven = handmatig.get("marktprijs_per_ton") not in (None, "")
+
+        boekwaarde = round(ton * kostprijs, 2)
+        marktwaarde = round(ton * marktprijs, 2)
+        ongerealiseerd = round(marktwaarde - boekwaarde, 2)
+
+        rijen.append({
+            "materiaal": materiaal, "ton": round(ton,1), "ton_overschreven": ton_overschreven,
+            "kostprijs_per_ton": round(kostprijs,2), "kostprijs_overschreven": kostprijs_overschreven,
+            "marktprijs_per_ton": round(marktprijs,2), "marktprijs_overschreven": marktprijs_overschreven,
+            "boekwaarde": boekwaarde, "marktwaarde": marktwaarde, "ongerealiseerd_resultaat": ongerealiseerd,
+        })
+
+    totaal_boekwaarde = round(sum(r["boekwaarde"] for r in rijen), 2)
+    totaal_marktwaarde = round(sum(r["marktwaarde"] for r in rijen), 2)
+    totaal_ongerealiseerd = round(sum(r["ongerealiseerd_resultaat"] for r in rijen), 2)
+    totaal_ton = round(sum(r["ton"] for r in rijen), 1)
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Voorraadwaardering</span>
 </div>
 <div class="page-title">Voorraadwaardering</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Elke definitieve inkooporder is een voorraadpositie. Kostprijs en inkoopwaarde komen automatisch mee vanuit Handelsorders; marktprijs uit Marktprijzen.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Elk veld is direct te overschrijven. Standaardwaarden: ton uit de mutatiestaat, kostprijs als gewogen gemiddelde uit Handelsorders, marktprijs uit Marktprijzen.</p>
 
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:28px;">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+    <a href="/voorraad/waardering?periode={{ periode_vorige }}" style="font-size:13px;color:var(--gray-400);text-decoration:none;">&larr; vorige</a>
+    <div style="font-size:15px;font-weight:800;color:var(--gray-800);min-width:160px;text-align:center;">{{ periode_label }}</div>
+    <a href="/voorraad/waardering?periode={{ periode_volgende }}" style="font-size:13px;color:var(--gray-400);text-decoration:none;">volgende &rarr;</a>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px;">
     <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
-        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">{{ totaal_ton|round(1) }} t</div>
-        <div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-top:3px;">Totaal geleverd</div>
+        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">{{ totaal_ton }} t</div>
+        <div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-top:3px;">Totaal voorraad</div>
     </div>
     <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
-        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">€{{ "{:,.0f}".format(totaal_boekwaarde).replace(",", ".") }}</div>
+        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">&euro;{{ "{:,.0f}".format(totaal_boekwaarde).replace(",", ".") }}</div>
         <div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-top:3px;">Boekwaarde</div>
     </div>
     <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
-        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">€{{ "{:,.0f}".format(totaal_marktwaarde).replace(",", ".") }}</div>
+        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">&euro;{{ "{:,.0f}".format(totaal_marktwaarde).replace(",", ".") }}</div>
         <div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-top:3px;">Marktwaarde</div>
     </div>
     <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
-        <div style="font-size:1.4rem;font-weight:800;color:{{ '#16a34a' if totaal_ongerealiseerd >= 0 else '#dc2626' }};">{{ '+' if totaal_ongerealiseerd >= 0 else '' }}€{{ "{:,.0f}".format(totaal_ongerealiseerd).replace(",", ".") }}</div>
+        <div style="font-size:1.4rem;font-weight:800;color:{{ '#16a34a' if totaal_ongerealiseerd >= 0 else '#dc2626' }};">{{ '+' if totaal_ongerealiseerd >= 0 else '' }}&euro;{{ "{:,.0f}".format(totaal_ongerealiseerd).replace(",", ".") }}</div>
         <div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-top:3px;">Ongerealiseerd resultaat</div>
     </div>
 </div>
 
-<div style="font-size:11px;font-weight:800;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Beschikbaarheid per categorie</div>
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:28px;">
-    {% for c in beschikbaarheid_per_categorie %}
-    <div style="border:none;border-top:2px solid var(--gray-800);padding-top:10px;">
-        <div style="font-weight:800;color:var(--gray-800);font-size:14px;margin-bottom:10px;">{{ c.naam }}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:12px;">
-            <div style="color:var(--gray-500);">Fysieke voorraad</div><div style="text-align:right;font-weight:700;color:var(--gray-700);">{{ c.fysieke_voorraad }} t</div>
-            <div style="color:var(--gray-500);padding-left:10px;">— Gereserveerd</div><div style="text-align:right;color:#d97706;">{{ c.gereserveerd }} t</div>
-            <div style="color:var(--gray-500);padding-left:10px;">— Verkocht, niet uitgeleverd</div><div style="text-align:right;color:#1d4ed8;">{{ c.verkocht_niet_uitgeleverd }} t</div>
-            <div style="color:var(--gray-700);font-weight:700;padding-left:10px;border-top:1px solid var(--gray-100);padding-top:6px;">— Vrije voorraad</div><div style="text-align:right;font-weight:800;color:#16a34a;border-top:1px solid var(--gray-100);padding-top:6px;">{{ c.vrije_voorraad }} t</div>
-        </div>
-    </div>
-    {% endfor %}
-</div>
-
-{% for status_naam, groep in posities_per_status.items() %}
-<div style="font-size:11px;font-weight:800;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:24px 0 10px 0;border-top:2px solid var(--gray-800);padding-top:8px;">{{ status_naam }} ({{ groep|length }})</div>
 <div style="border:none;border-top:1px solid var(--gray-200);overflow-x:auto;">
-    <div style="display:flex;padding:8px 4px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-400);border-bottom:1px solid var(--gray-200);min-width:1100px;">
-        <span style="width:130px;">Voorraadnummer</span>
-        <span style="flex:1;">Materiaal / leverancier</span>
-        <span style="width:90px;">Entiteit</span>
-        <span style="width:110px;">Locatie</span>
-        <span style="width:80px;text-align:right;">Ton</span>
-        <span style="width:100px;text-align:right;">Kostprijs/t</span>
+    <div style="display:flex;padding:8px 4px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-400);border-bottom:2px solid var(--gray-800);min-width:900px;">
+        <span style="flex:1.2;">Materiaal</span>
+        <span style="width:100px;text-align:right;">Ton</span>
+        <span style="width:110px;text-align:right;">Kostprijs/t</span>
         <span style="width:110px;text-align:right;">Boekwaarde</span>
-        <span style="width:100px;text-align:right;">Marktprijs/t</span>
+        <span style="width:110px;text-align:right;">Marktprijs/t</span>
         <span style="width:110px;text-align:right;">Marktwaarde</span>
         <span style="width:110px;text-align:right;">Resultaat</span>
     </div>
-    {% for p in groep %}
-    <div style="display:flex;align-items:center;padding:8px 4px;font-size:12px;border-bottom:1px solid var(--gray-100);min-width:1100px;">
-        <span style="width:130px;font-family:var(--font-mono);color:var(--gray-500);"><a href="/handelsorders/{{ p.id }}" style="color:inherit;text-decoration:none;">{{ p.contractnummer }}</a></span>
-        <span style="flex:1;color:var(--gray-700);">{{ p.materiaal }} — {{ p.kwaliteit }}<br><span style="font-size:10.5px;color:var(--gray-400);">{{ p.leverancier }}</span></span>
-        <span style="width:90px;color:var(--gray-500);">{{ p.entiteit }}</span>
-        <span style="width:110px;">
-            <form method="POST" style="margin:0;display:flex;gap:3px;">
-                <input type="hidden" name="contractnummer" value="{{ p.contractnummer }}">
-                <input type="text" name="locatie" value="{{ p.locatie }}" placeholder="—" style="width:75px;padding:3px 5px;border:1px solid var(--gray-200);border-radius:4px;font-size:11px;font-family:inherit;">
-                <button type="submit" style="background:none;border:none;color:var(--brand-600);cursor:pointer;font-size:11px;padding:0 2px;">✓</button>
-            </form>
-        </span>
-        <span style="width:80px;text-align:right;color:var(--gray-600);">{{ p.geleverd_ton }}{% if p.resterend_ton > 0 %}<br><span style="font-size:10px;color:var(--gray-300);">+{{ p.resterend_ton }} te gaan</span>{% endif %}</span>
-        <span style="width:100px;text-align:right;color:var(--gray-600);">{% if p.kostprijs_per_ton is not none %}€{{ p.kostprijs_per_ton }}{% else %}—{% endif %}</span>
-        <span style="width:110px;text-align:right;color:var(--gray-600);">€{{ "{:,.0f}".format(p.boekwaarde).replace(",", ".") }}</span>
-        <span style="width:100px;text-align:right;color:var(--gray-600);">{% if p.marktprijs_per_ton is not none %}€{{ p.marktprijs_per_ton }}{% else %}—{% endif %}</span>
-        <span style="width:110px;text-align:right;color:var(--gray-600);">{% if p.marktwaarde is not none %}€{{ "{:,.0f}".format(p.marktwaarde).replace(",", ".") }}{% else %}—{% endif %}</span>
-        <span style="width:110px;text-align:right;font-weight:700;color:{{ '#16a34a' if (p.ongerealiseerd_resultaat or 0) >= 0 else '#dc2626' }};">{% if p.ongerealiseerd_resultaat is not none %}{{ '+' if p.ongerealiseerd_resultaat >= 0 else '' }}€{{ "{:,.0f}".format(p.ongerealiseerd_resultaat).replace(",", ".") }}{% else %}—{% endif %}</span>
+    {% for r in rijen %}
+    <div style="display:flex;align-items:center;padding:8px 4px;font-size:12.5px;border-bottom:1px solid var(--gray-100);min-width:900px;">
+        <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ r.materiaal }}</span>
+        <form method="POST" style="display:contents;">
+            <input type="hidden" name="periode" value="{{ periode }}">
+            <input type="hidden" name="materiaal" value="{{ r.materiaal }}">
+            <span style="width:100px;text-align:right;">
+                <input type="text" name="ton" value="{{ r.ton }}" onchange="this.form.requestSubmit()" style="width:75px;text-align:right;padding:3px 5px;border:1px solid {{ 'var(--brand-300)' if r.ton_overschreven else 'var(--gray-200)' }};border-radius:4px;font-size:11.5px;font-family:inherit;" title="{{ 'Handmatig overschreven' if r.ton_overschreven else 'Automatisch uit mutatiestaat' }}">
+            </span>
+            <span style="width:110px;text-align:right;">
+                <input type="text" name="kostprijs_per_ton" value="{{ r.kostprijs_per_ton }}" onchange="this.form.requestSubmit()" style="width:80px;text-align:right;padding:3px 5px;border:1px solid {{ 'var(--brand-300)' if r.kostprijs_overschreven else 'var(--gray-200)' }};border-radius:4px;font-size:11.5px;font-family:inherit;" title="{{ 'Handmatig overschreven' if r.kostprijs_overschreven else 'Gewogen gemiddelde uit Handelsorders' }}">
+            </span>
+            <span style="width:110px;text-align:right;color:var(--gray-600);">&euro;{{ "{:,.0f}".format(r.boekwaarde).replace(",", ".") }}</span>
+            <span style="width:110px;text-align:right;">
+                <input type="text" name="marktprijs_per_ton" value="{{ r.marktprijs_per_ton }}" onchange="this.form.requestSubmit()" style="width:80px;text-align:right;padding:3px 5px;border:1px solid {{ 'var(--brand-300)' if r.marktprijs_overschreven else 'var(--gray-200)' }};border-radius:4px;font-size:11.5px;font-family:inherit;" title="{{ 'Handmatig overschreven' if r.marktprijs_overschreven else 'Laatste marktprijs' }}">
+            </span>
+        </form>
+        <span style="width:110px;text-align:right;color:var(--gray-600);">&euro;{{ "{:,.0f}".format(r.marktwaarde).replace(",", ".") }}</span>
+        <span style="width:110px;text-align:right;font-weight:700;color:{{ '#16a34a' if r.ongerealiseerd_resultaat >= 0 else '#dc2626' }};">{{ '+' if r.ongerealiseerd_resultaat >= 0 else '' }}&euro;{{ "{:,.0f}".format(r.ongerealiseerd_resultaat).replace(",", ".") }}</span>
     </div>
+    {% else %}
+    <div class="lege-staat" style="min-width:900px;">Nog geen materiaal met definitieve orders bij Alblasserdam.</div>
     {% endfor %}
 </div>
-{% else %}
-<div class="lege-staat">Nog geen definitieve inkoopcontracten.</div>
-{% endfor %}
+<p style="color:var(--gray-300);font-size:11px;margin-top:10px;">Velden met een gekleurde rand zijn handmatig overschreven. Leeg het veld en sla op om terug te vallen op de automatische standaardwaarde.</p>
     """
     pagina = render_simple_page("Voorraadwaardering", "voorraad", inhoud)
-    return render_template_string(pagina, posities_per_status=posities_per_status,
+    return render_template_string(pagina, rijen=rijen, periode=periode, periode_label=periode_label,
+                                    periode_vorige=periode_vorige, periode_volgende=periode_volgende,
                                     totaal_ton=totaal_ton, totaal_boekwaarde=totaal_boekwaarde,
-                                    totaal_marktwaarde=totaal_marktwaarde, totaal_ongerealiseerd=totaal_ongerealiseerd,
-                                    beschikbaarheid_per_categorie=beschikbaarheid_per_categorie)
+                                    totaal_marktwaarde=totaal_marktwaarde, totaal_ongerealiseerd=totaal_ongerealiseerd)
