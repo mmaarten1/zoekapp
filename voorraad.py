@@ -23,6 +23,7 @@ from core import (
     laad_bedrijfseenheden, laad_marktprijzen, laad_logistieke_orders, laad_transport_planning,
     laad_voorraadmutaties_periode, bewaar_voorraadmutaties_periode,
     laad_voorraadlocaties, bewaar_voorraadlocaties,
+    laad_productiemutaties, bewaar_productiemutaties, laad_weegbrug,
 )
 
 voorraad_bp = Blueprint("voorraad", __name__)
@@ -244,9 +245,45 @@ def voorraad_pagina():
         r["locaties"] = alle_locaties.get(r["materiaal"], {})
     totaal_voorraad = round(sum(r["eindvoorraad"] for r in rijen), 1)
 
+    # Gewogen vrachtwagens die nog NIET aan een Handelsorders-contract gekoppeld
+    # zijn, tellen niet mee in de voorraad hierboven — dat is een aparte, bewuste
+    # stap in Live Operaties (zodat je bij meerdere openstaande contracten zelf
+    # kunt kiezen welke). Zonder die koppeling blijft de weging onzichtbaar in
+    # de voorraad, dus dat maken we hier expliciet zichtbaar.
+    # Twee dingen kunnen ontbreken tussen 'gewogen' en 'zichtbaar in voorraad':
+    # 1) een complete weging die nog helemaal geen logistieke order heeft (moet
+    #    eerst 'Afgehandeld' worden op Live Operaties), en
+    # 2) een logistieke order die wel bestaat, maar nog niet aan een specifiek
+    #    Handelsorders-contract gekoppeld is. Beide zijn bewuste, aparte stappen
+    #    (zodat je bij meerdere openstaande contracten zelf kunt kiezen), maar
+    #    zonder ze blijft de weging onzichtbaar in de voorraad hierboven.
+    _alle_logistieke_orders_hoofd = laad_logistieke_orders()
+    _gekoppelde_ordernummers = {o.get("ordernummer") for o in _alle_logistieke_orders_hoofd if o.get("ordernummer")}
+    _nog_af_te_handelen = [
+        w for w in laad_weegbrug()
+        if w.get("status") == "Compleet" and w.get("ordernummer","") not in _gekoppelde_ordernummers
+    ]
+    _niet_gekoppeld = [
+        o for o in _alle_logistieke_orders_hoofd
+        if o.get("status") == "Weegbon compleet" and not o.get("contract_referentie")
+    ]
+
     inhoud = """
 <div class="page-title">Voorraad — Alblasserdam</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Hoeveel ton van ieder materiaal ligt er nu fysiek op voorraad. Klik op een materiaal voor de verdeling per locatie.</p>
+
+{% if nog_af_te_handelen %}
+<div style="background:#fef2f2;border-radius:8px;padding:12px 16px;margin-bottom:10px;font-size:12.5px;color:#991b1b;">
+    <b>{{ nog_af_te_handelen|length }} complete weging{{ 'en' if nog_af_te_handelen|length != 1 else '' }} nog niet afgehandeld</b> — er bestaat nog geen order voor deze weging(en), dus ze tellen nog niet mee.
+    <a href="/live-operations" style="color:#991b1b;text-decoration:underline;font-weight:700;">Nu afhandelen in Live Operaties →</a>
+</div>
+{% endif %}
+{% if niet_gekoppeld %}
+<div style="background:#fef2f2;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:12.5px;color:#991b1b;">
+    <b>{{ niet_gekoppeld|length }} gewogen vrachtwagen{{ 's' if niet_gekoppeld|length != 1 else '' }} nog niet gekoppeld aan een contract</b> — deze tellen daardoor nog niet mee in de voorraad hierboven.
+    <a href="/live-operations" style="color:#991b1b;text-decoration:underline;font-weight:700;">Nu koppelen in Live Operaties →</a>
+</div>
+{% endif %}
 
 <div style="border:none;border-top:1px solid var(--gray-200);overflow-x:auto;margin-bottom:20px;">
     <div style="display:flex;padding:8px 4px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-400);border-bottom:2px solid var(--gray-800);min-width:500px;">
@@ -271,13 +308,15 @@ def voorraad_pagina():
 
 <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px;">
     <a href="/voorraad/mutaties" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Voorraad Alblasserdam — mutatiestaat →</a>
+    <a href="/voorraad/productie" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Productie / verwerking →</a>
     <a href="/voorraad/locaties" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Locaties →</a>
     <a href="/voorraad/waardering" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Voorraadwaardering →</a>
     <a href="/voorraad/beheer" style="color:var(--gray-400);text-decoration:none;">Shipments &amp; historisch beheer →</a>
 </div>
     """
     pagina = render_simple_page("Voorraad", "voorraad", inhoud)
-    return render_template_string(pagina, rijen=rijen, totaal_voorraad=totaal_voorraad)
+    return render_template_string(pagina, rijen=rijen, totaal_voorraad=totaal_voorraad,
+                                    niet_gekoppeld=_niet_gekoppeld, nog_af_te_handelen=_nog_af_te_handelen)
 
 # ============================================================
 # Locaties: dezelfde materiaalsoort kan op meerdere fysieke plekken binnen
@@ -364,6 +403,110 @@ def voorraad_locaties_pagina():
     """
     pagina = render_simple_page("Locaties", "voorraad", inhoud)
     return render_template_string(pagina, materialen_overzicht=materialen_overzicht)
+
+# ============================================================
+# Productie / verwerking: materiaaltransformatie als één traceerbare
+# mutatie. Eén input-materiaal wordt omgezet in één of meer output-
+# materialen (plus eventueel productieverlies) — dit voedt automatisch de
+# 'Productie/verwerking'-kolom in de mutatiestaat voor elk betrokken
+# materiaal tegelijk.
+# ============================================================
+@voorraad_bp.route("/voorraad/productie", methods=["GET", "POST"])
+def voorraad_productie_pagina():
+    _guard = vereist_afdeling_of_403("voorraad")
+    if _guard: return _guard
+
+    if request.method == "POST":
+        alle_mutaties = laad_productiemutaties()
+        input_materiaal = request.form.get("input_materiaal", "").strip()
+        input_hoeveelheid = request.form.get("input_hoeveelheid", "").strip()
+        output_materialen = request.form.getlist("output_materiaal")
+        output_hoeveelheden = request.form.getlist("output_hoeveelheid")
+        notitie = request.form.get("notitie", "").strip()
+
+        outputs = []
+        for m, h in zip(output_materialen, output_hoeveelheden):
+            m, h = m.strip(), h.strip()
+            if m and h:
+                outputs.append({"materiaal": m, "hoeveelheid": h})
+
+        if input_materiaal and input_hoeveelheid and outputs:
+            alle_mutaties.append({
+                "id": str(uuid.uuid4()),
+                "input_materiaal": input_materiaal, "input_hoeveelheid": input_hoeveelheid,
+                "outputs": outputs, "notitie": notitie,
+                "gebruiker": session.get("gebruikersnaam", ""),
+                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            })
+            bewaar_productiemutaties(alle_mutaties)
+        return redirect(url_for("voorraad.voorraad_productie_pagina"))
+
+    alle_mutaties = sorted(laad_productiemutaties(), key=lambda m: m.get("aangemaakt",""), reverse=True)
+    periode_huidig = datetime.date.today().strftime("%Y-%m")
+    _rijen_voor_materiaallijst = _bereken_mutatiestaat(periode_huidig)
+    materiaalnamen = sorted({r["materiaal"] for r in _rijen_voor_materiaallijst})
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Productie / verwerking</span>
+</div>
+<div class="page-title">Productie / verwerking</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Eén materiaal wordt omgezet in één of meer andere materialen — bijvoorbeeld Mixed Paper dat gesorteerd wordt tot OCC 1.04, balen en productieverlies. Alles telt automatisch mee in de mutatiestaat.</p>
+
+<form method="POST" style="max-width:600px;margin-bottom:32px;border:none;border-top:1px solid var(--gray-200);padding-top:16px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Input</div>
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
+        <input type="text" name="input_materiaal" placeholder="Materiaal (bv. Mixed Paper)" list="materiaal_lijst_productie" required style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        <input type="text" name="input_hoeveelheid" placeholder="ton" required style="width:100px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+    </div>
+    <datalist id="materiaal_lijst_productie">{% for m in materiaalnamen %}<option value="{{ m }}">{% endfor %}</datalist>
+
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Outputs (inclusief eventueel productieverlies als apart 'materiaal')</div>
+    <div id="outputs_lijst">
+        <div style="display:flex;gap:10px;margin-bottom:8px;">
+            <input type="text" name="output_materiaal" placeholder="Materiaal (bv. OCC 1.04)" list="materiaal_lijst_productie" style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+            <input type="text" name="output_hoeveelheid" placeholder="ton" style="width:100px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:8px;">
+            <input type="text" name="output_materiaal" placeholder="Materiaal" list="materiaal_lijst_productie" style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+            <input type="text" name="output_hoeveelheid" placeholder="ton" style="width:100px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        </div>
+    </div>
+    <button type="button" onclick="voegOutputToe()" style="background:none;border:none;color:var(--brand-600);font-size:12px;font-weight:600;cursor:pointer;padding:0;margin-bottom:16px;">+ Nog een output toevoegen</button>
+
+    <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;"></textarea>
+    <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Mutatie vastleggen</button>
+</form>
+
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Eerder vastgelegde mutaties</div>
+<div style="border:none;border-top:1px solid var(--gray-200);">
+    {% for m in alle_mutaties %}
+    <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <div style="color:var(--gray-800);">
+            <span style="font-weight:700;color:#dc2626;">-{{ m.input_hoeveelheid }}t {{ m.input_materiaal }}</span>
+            &rarr;
+            {% for o in m.outputs %}<span style="font-weight:700;color:#16a34a;">+{{ o.hoeveelheid }}t {{ o.materiaal }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">{{ m.gebruiker }} &middot; {{ m.aangemaakt }}{% if m.notitie %} &middot; {{ m.notitie }}{% endif %}</div>
+    </div>
+    {% else %}
+    <div class="lege-staat">Nog geen productiemutaties vastgelegd.</div>
+    {% endfor %}
+</div>
+
+<script>
+function voegOutputToe() {
+    var lijst = document.getElementById("outputs_lijst");
+    var rij = document.createElement("div");
+    rij.style.cssText = "display:flex;gap:10px;margin-bottom:8px;";
+    rij.innerHTML = '<input type="text" name="output_materiaal" placeholder="Materiaal" list="materiaal_lijst_productie" style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">' +
+                     '<input type="text" name="output_hoeveelheid" placeholder="ton" style="width:100px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">';
+    lijst.appendChild(rij);
+}
+</script>
+    """
+    pagina = render_simple_page("Productie / verwerking", "voorraad", inhoud)
+    return render_template_string(pagina, alle_mutaties=alle_mutaties, materiaalnamen=materiaalnamen)
 
 @voorraad_bp.route("/voorraad/beheer", methods=["GET", "POST"])
 def voorraad_beheer_pagina():
@@ -1367,11 +1510,31 @@ def _bereken_mutatiestaat(periode_sleutel, _diepte=0):
     _logistieke_orders_alle = laad_logistieke_orders()
     _transport_planning_alle = laad_transport_planning()
 
+    # Netto-effect van alle productiemutaties in deze periode, per materiaal:
+    # input-materiaal telt negatief mee, elk output-materiaal positief. Eén
+    # transformatie (bv. 100t Mixed Paper -> 80t OCC 1.04 + 15t balen + 5t
+    # verlies) raakt zo automatisch alle betrokken materialen tegelijk.
+    _productie_effect = {}
+    for pm in laad_productiemutaties():
+        if not _in_periode(pm.get("aangemaakt","")):
+            continue
+        _in_materiaal = pm.get("input_materiaal","")
+        _in_hoeveelheid = _getal_of_0(pm.get("input_hoeveelheid", 0))
+        if _in_materiaal:
+            _productie_effect[_in_materiaal] = _productie_effect.get(_in_materiaal, 0) - _in_hoeveelheid
+        for out in pm.get("outputs", []):
+            _out_materiaal = out.get("materiaal","")
+            _out_hoeveelheid = _getal_of_0(out.get("hoeveelheid", 0))
+            if _out_materiaal:
+                _productie_effect[_out_materiaal] = _productie_effect.get(_out_materiaal, 0) + _out_hoeveelheid
+
     alle_kwaliteiten = set()
     for h in _alle_handelsorders:
         if h.get("status") == "Definitief" and h.get("bedrijfseenheid") in ("Papier", "Plastic") and h.get("kwaliteit"):
             alle_kwaliteiten.add(h["kwaliteit"])
     for k in mutaties_deze_periode.keys():
+        alle_kwaliteiten.add(k)
+    for k in _productie_effect.keys():
         alle_kwaliteiten.add(k)
 
     rijen = []
@@ -1413,7 +1576,8 @@ def _bereken_mutatiestaat(periode_sleutel, _diepte=0):
                     if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond") and _in_periode(o.get("aangemaakt","")):
                         uitgaand += parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
 
-        productie_verwerking = _getal_of_0(handmatig.get("productie_verwerking", 0))
+        productie_uit_mutaties = _getal_of_0(_productie_effect.get(kwaliteit, 0))
+        productie_verwerking = round(productie_uit_mutaties + _getal_of_0(handmatig.get("productie_verwerking", 0)), 1)
         correcties = _getal_of_0(handmatig.get("correcties", 0))
         ontvangsten = round(ontvangsten, 1)
         uitgaand = round(uitgaand, 1)
