@@ -19,7 +19,8 @@ from core import (
     parse_hoeveelheid_getal, bereken_voorraad_status, is_huidige_gebruiker_admin,
     vereist_admin_of_403, render_simple_page, ENF_BEDRIJVEN,
     ALBLASSERDAM_NAAM, bepaal_shipment_flow_type, shipment_hoeveelheid, SHIPMENT_STATUSSEN,
-    vereist_afdeling_of_403, laad_handelsorders,
+    vereist_afdeling_of_403, laad_handelsorders, laad_voorraadwaardering, bewaar_voorraadwaardering,
+    laad_bedrijfseenheden,
 )
 
 voorraad_bp = Blueprint("voorraad", __name__)
@@ -523,6 +524,61 @@ def voorraad_pagina():
         fabrieken_overzicht.setdefault(naam, []).append(c)
     fabrieken_overzicht_lijst = sorted(fabrieken_overzicht.items())
 
+    # ============================================================
+    # Entiteitsstructuur: Alblasserdam (fysieke voorraad, per materiaalcategorie)
+    # vs. de back-to-back-handelsmarkten (UK/Spanje/Portugal — geen fysieke
+    # voorraad, alleen doorstroom; die tonen we via een link naar hun eigen
+    # Inkoop-/Verkoop-planning, al gefilterd per markt door dat systeem zelf).
+    # ============================================================
+    _alle_handelsorders_ent = laad_handelsorders()
+
+    def _resterend_inkoop_voor_bedrijfseenheid(bedrijfseenheid_naam):
+        _totaal_open = 0.0
+        for h in _alle_handelsorders_ent:
+            if h.get("order_type") != "inkoop" or h.get("status") != "Definitief":
+                continue
+            if h.get("bedrijfseenheid") != bedrijfseenheid_naam:
+                continue
+            try:
+                _volume = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+            except (ValueError, TypeError):
+                _volume = 0.0
+            modus = h.get("transportmodus","") or "Vrachtwagen"
+            if modus == "Schip":
+                _gepland = sum(
+                    parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+                    for t in laad_transport_planning()
+                    if t.get("contract_referentie") == h["contractnummer"] and t.get("status") != "Geannuleerd"
+                )
+            else:
+                _gepland = sum(
+                    parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                    for o in laad_logistieke_orders()
+                    if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
+                )
+            _totaal_open += max(0, _volume - _gepland)
+        return round(_totaal_open, 1)
+
+    _waardering = laad_voorraadwaardering()
+    _materiaal_taxonomie_ent = laad_materiaal_taxonomie()
+
+    def _daadwerkelijke_voorraad_voor_categorie(categorie_naam):
+        _materialen_in_categorie = [categorie_naam] + _materiaal_taxonomie_ent.get(categorie_naam, [])
+        _totaal = 0.0
+        for m in _materialen_in_categorie:
+            if m in _waardering:
+                try:
+                    _totaal += float(str(_waardering[m]["hoeveelheid"]).replace(",","."))
+                except (ValueError, TypeError):
+                    pass
+        return round(_totaal, 1)
+
+    alblasserdam_categorieen = [
+        {"naam": "Papier & karton", "bedrijfseenheid": "Papier", "verwacht_inkomend": _resterend_inkoop_voor_bedrijfseenheid("Papier"), "daadwerkelijk": _daadwerkelijke_voorraad_voor_categorie("Papier")},
+        {"naam": "Plastic", "bedrijfseenheid": "Plastic", "verwacht_inkomend": _resterend_inkoop_voor_bedrijfseenheid("Plastic"), "daadwerkelijk": _daadwerkelijke_voorraad_voor_categorie("Plastic")},
+    ]
+    back_to_back_markten = [be for be in laad_bedrijfseenheden() if be not in ("Papier", "Plastic")]
+
     inhoud = """
 <style>
 .vrd-kaart { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:14px 16px; }
@@ -542,6 +598,33 @@ def voorraad_pagina():
 </style>
 <div class="page-title">Voorraad</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Handelsvoorraad op de werf, alles in <b>ton</b>. Binnenkomend materiaal telt pas mee zodra het is goedgekeurd. Verkocht/vrij wordt live berekend uit je Orders en shipments.</p>
+
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:28px;padding:16px 4px;">
+    <div style="font-size:11px;font-weight:800;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Alblasserdam — fysieke voorraad</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:16px;">
+        {% for c in alblasserdam_categorieen %}
+        <div style="border:none;border-top:1px solid var(--gray-100);padding-top:10px;">
+            <div style="font-weight:700;color:var(--gray-800);font-size:13.5px;margin-bottom:6px;">{{ c.naam }}</div>
+            <div style="font-size:12px;color:var(--gray-500);">Verwacht inkomend: <b style="color:var(--gray-700);">{{ c.verwacht_inkomend }} t</b></div>
+            <div style="font-size:12px;color:var(--gray-500);">Daadwerkelijke voorraad: <b style="color:var(--gray-700);">{{ c.daadwerkelijk }} t</b></div>
+        </div>
+        {% endfor %}
+    </div>
+    <a href="/voorraad/waardering" style="font-size:12px;font-weight:600;color:var(--brand-600);text-decoration:none;">Voorraadwaardering bijwerken →</a>
+
+    {% if back_to_back_markten %}
+    <div style="font-size:11px;font-weight:800;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 12px 0;">Back-to-back handelsmarkten — geen fysieke voorraad</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        {% for markt in back_to_back_markten %}
+        <div style="border:1px solid var(--gray-200);border-radius:8px;padding:10px 14px;">
+            <div style="font-weight:700;color:var(--gray-800);font-size:13px;margin-bottom:6px;">{{ markt }} Trading</div>
+            <a href="/logistiek/inkoop-planning" style="font-size:11.5px;color:var(--brand-600);text-decoration:none;display:block;">Openstaande inkoop →</a>
+            <a href="/logistiek/verkoop-planning" style="font-size:11.5px;color:var(--brand-600);text-decoration:none;display:block;">Openstaande verkoop →</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
 
 <div class="vrd-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:16px;">
     <div class="vrd-kaart"><div class="vrd-getal">{{ "{:,.1f}".format(kpi_fysiek_totaal) }}</div><div class="vrd-label">📦 TOTAL STOCK (ton)</div></div>
@@ -1071,8 +1154,71 @@ function toggleTransactieVelden() {
                                     actieve_shipments=actieve_shipments, alle_shipments_dropdown=alle_shipments_dropdown,
                                     shipment_statussen=SHIPMENT_STATUSSEN, landen=_alle_bedrijven_landen,
                                     alle_contracten=alle_contracten, alle_handelsorder_contracten=alle_handelsorder_contracten,
+                                    alblasserdam_categorieen=alblasserdam_categorieen, back_to_back_markten=back_to_back_markten,
                                     is_admin=is_huidige_gebruiker_admin(), prefill=prefill,
                                     fabrieken_overzicht_lijst=fabrieken_overzicht_lijst,
                                     getoonde_shipments=getoonde_shipments, filter_flow_type=filter_flow_type,
                                     filter_shipment_status=filter_shipment_status, filter_shipment_materiaal=filter_shipment_materiaal,
                                     shipment_materialen=shipment_materialen)
+
+
+
+# ============================================================
+# Voorraadwaardering: handmatige fysieke telling per materiaal — apart van de
+# automatische in-/uitgaande stroom via weegbrug/shipments/transacties.
+# Bewust een eigen, kleine pagina (zoals gevraagd), niet vermengd met het
+# grote Voorraad-overzicht zelf.
+# ============================================================
+@voorraad_bp.route("/voorraad/waardering", methods=["GET", "POST"])
+def voorraad_waardering_pagina():
+    _guard = vereist_afdeling_of_403("voorraad")
+    if _guard: return _guard
+
+    if request.method == "POST":
+        waardering = laad_voorraadwaardering()
+        materiaal = request.form.get("materiaal", "").strip()
+        hoeveelheid = request.form.get("hoeveelheid", "").strip()
+        if materiaal and hoeveelheid:
+            waardering[materiaal] = {
+                "hoeveelheid": hoeveelheid,
+                "gebruiker": session.get("gebruikersnaam", ""),
+                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            }
+            bewaar_voorraadwaardering(waardering)
+        return redirect(url_for("voorraad.voorraad_waardering_pagina"))
+
+    materiaal_taxonomie = laad_materiaal_taxonomie()
+    alle_materiaalnamen = []
+    for categorie, kwaliteiten in materiaal_taxonomie.items():
+        alle_materiaalnamen.append(categorie)
+        alle_materiaalnamen.extend(kwaliteiten)
+    alle_materiaalnamen = sorted(set(alle_materiaalnamen))
+    huidige_waardering = laad_voorraadwaardering()
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Voorraadwaardering</span>
+</div>
+<div class="page-title">Voorraadwaardering — Alblasserdam</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Fysieke telling per materiaal: wat ligt er nu daadwerkelijk. Los van de automatische berekening op het hoofdoverzicht.</p>
+
+<div style="border:none;border-top:1px solid var(--gray-200);max-width:640px;">
+    {% for m in alle_materiaalnamen %}
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="flex:1;color:var(--gray-700);">{{ m }}</span>
+        <span style="width:130px;text-align:right;color:var(--gray-500);">
+            {% if huidige_waardering.get(m) %}{{ huidige_waardering[m].hoeveelheid }} t
+            <div style="font-size:10px;color:var(--gray-300);">{{ huidige_waardering[m].gebruiker }} · {{ huidige_waardering[m].aangemaakt }}</div>
+            {% else %}<span style="color:var(--gray-300);">nog niet ingevuld</span>{% endif %}
+        </span>
+        <form method="POST" style="display:flex;gap:6px;margin:0;">
+            <input type="hidden" name="materiaal" value="{{ m }}">
+            <input type="text" name="hoeveelheid" placeholder="ton" style="width:80px;padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12px;font-family:inherit;">
+            <button type="submit" style="padding:6px 12px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;">Opslaan</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+    """
+    pagina = render_simple_page("Voorraadwaardering", "voorraad", inhoud)
+    return render_template_string(pagina, alle_materiaalnamen=alle_materiaalnamen, huidige_waardering=huidige_waardering)

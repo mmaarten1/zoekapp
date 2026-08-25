@@ -46,7 +46,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json", "transport_planning.json",
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
         "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
-        "login_pogingen.json",
+        "login_pogingen.json", "voorraadwaardering.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -2102,3 +2102,22 @@ def haal_of_maak_csrf_token():
     if "csrf_token" not in session:
         session["csrf_token"] = secrets.token_hex(32)
     return session["csrf_token"]
+
+# ============================================================
+# Voorraadwaardering Alblasserdam: handmatig ingevoerde huidige voorraad per
+# materiaal, apart van de automatische in-/uitgaande stroom (die via
+# weegbrug/transacties/shipments loopt). Dit is de fysieke telling — "wat ligt
+# er nu daadwerkelijk" — bijgewerkt door wie het invoert, met tijdstip.
+# ============================================================
+VOORRAADWAARDERING_FILE = datapad("voorraadwaardering.json")
+
+def laad_voorraadwaardering():
+    try:
+        with open(VOORRAADWAARDERING_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_voorraadwaardering(data):
+    with open(VOORRAADWAARDERING_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
