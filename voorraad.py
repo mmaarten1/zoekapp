@@ -22,6 +22,7 @@ from core import (
     vereist_afdeling_of_403, laad_handelsorders, laad_voorraadwaardering, bewaar_voorraadwaardering,
     laad_bedrijfseenheden, laad_marktprijzen, laad_logistieke_orders, laad_transport_planning,
     laad_voorraadmutaties_periode, bewaar_voorraadmutaties_periode,
+    laad_voorraadlocaties, bewaar_voorraadlocaties,
 )
 
 voorraad_bp = Blueprint("voorraad", __name__)
@@ -190,7 +191,7 @@ def voorraad_shipments_actie():
     _terug_naar = request.form.get("terug_naar", "")
     if _terug_naar == "logistiek":
         return redirect(url_for("logistiek_pagina"))
-    return redirect(url_for("voorraad.voorraad_pagina"))
+    return redirect(url_for("voorraad.voorraad_beheer_pagina"))
 
 @voorraad_bp.route("/voorraad/contracten", methods=["POST"])
 def voorraad_contracten_actie():
@@ -221,10 +222,151 @@ def voorraad_contracten_actie():
             contracten = [c for c in contracten if c["id"] != contract_id]
             bewaar_contracten(contracten)
 
-    return redirect(url_for("voorraad.voorraad_pagina"))
+    return redirect(url_for("voorraad.voorraad_beheer_pagina"))
 
-@voorraad_bp.route("/voorraad", methods=["GET", "POST"])
+# ============================================================
+# Voorraadoverzicht (het hoofdoverzicht). Beantwoordt precies één vraag:
+# hoeveel ton van ieder materiaal ligt er nu fysiek op voorraad in
+# Alblasserdam? Gebaseerd op de eindvoorraad van de mutatiestaat voor de
+# huidige periode — geen statuskolommen (beschikbaar/gereserveerd/verkocht),
+# geen shipments, geen invoerformulieren. Dat zit allemaal in de
+# onderliggende, doorklikbare pagina's.
+# ============================================================
+@voorraad_bp.route("/voorraad")
 def voorraad_pagina():
+    _guard = vereist_afdeling_of_403("voorraad")
+    if _guard: return _guard
+
+    periode_huidig = datetime.date.today().strftime("%Y-%m")
+    rijen = _bereken_mutatiestaat(periode_huidig)
+    alle_locaties = laad_voorraadlocaties()
+    for r in rijen:
+        r["locaties"] = alle_locaties.get(r["materiaal"], {})
+    totaal_voorraad = round(sum(r["eindvoorraad"] for r in rijen), 1)
+
+    inhoud = """
+<div class="page-title">Voorraad — Alblasserdam</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Hoeveel ton van ieder materiaal ligt er nu fysiek op voorraad. Klik op een materiaal voor de verdeling per locatie.</p>
+
+<div style="border:none;border-top:1px solid var(--gray-200);overflow-x:auto;margin-bottom:20px;">
+    <div style="display:flex;padding:8px 4px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-400);border-bottom:2px solid var(--gray-800);min-width:500px;">
+        <span style="flex:1;">Materiaal</span>
+        <span style="width:140px;text-align:right;">Fysieke voorraad</span>
+    </div>
+    {% for r in rijen %}
+    <a href="/voorraad/locaties?materiaal={{ r.materiaal|urlencode }}" style="display:flex;align-items:center;padding:10px 4px;font-size:13px;border-bottom:1px solid var(--gray-100);min-width:500px;text-decoration:none;color:inherit;">
+        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ r.materiaal }}</span>
+        <span style="width:140px;text-align:right;font-weight:800;color:var(--gray-800);">{{ r.eindvoorraad }} t</span>
+    </a>
+    {% else %}
+    <div class="lege-staat" style="min-width:500px;">Nog geen materiaal met definitieve orders bij Alblasserdam.</div>
+    {% endfor %}
+    {% if rijen %}
+    <div style="display:flex;align-items:center;padding:10px 4px;font-size:13px;font-weight:800;color:var(--gray-800);border-top:2px solid var(--gray-800);min-width:500px;">
+        <span style="flex:1;">Totaal</span>
+        <span style="width:140px;text-align:right;">{{ totaal_voorraad }} t</span>
+    </div>
+    {% endif %}
+</div>
+
+<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px;">
+    <a href="/voorraad/mutaties" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Voorraad Alblasserdam — mutatiestaat →</a>
+    <a href="/voorraad/locaties" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Locaties →</a>
+    <a href="/voorraad/waardering" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Voorraadwaardering →</a>
+    <a href="/voorraad/beheer" style="color:var(--gray-400);text-decoration:none;">Shipments &amp; historisch beheer →</a>
+</div>
+    """
+    pagina = render_simple_page("Voorraad", "voorraad", inhoud)
+    return render_template_string(pagina, rijen=rijen, totaal_voorraad=totaal_voorraad)
+
+# ============================================================
+# Locaties: dezelfde materiaalsoort kan op meerdere fysieke plekken binnen
+# Alblasserdam liggen (Hal A, Hal B, Buiten, etc). Handmatige verdeling van
+# de totale eindvoorraad per materiaal — met een duidelijke check of de
+# optelsom klopt met het totaal uit het hoofdoverzicht.
+# ============================================================
+@voorraad_bp.route("/voorraad/locaties", methods=["GET", "POST"])
+def voorraad_locaties_pagina():
+    _guard = vereist_afdeling_of_403("voorraad")
+    if _guard: return _guard
+
+    if request.method == "POST":
+        alle_locaties = laad_voorraadlocaties()
+        materiaal = request.form.get("materiaal", "").strip()
+        locatienaam = request.form.get("locatienaam", "").strip()
+        hoeveelheid = request.form.get("hoeveelheid", "").strip()
+        if materiaal and locatienaam:
+            alle_locaties.setdefault(materiaal, {})
+            if hoeveelheid:
+                alle_locaties[materiaal][locatienaam] = {
+                    "hoeveelheid": hoeveelheid,
+                    "gebruiker": session.get("gebruikersnaam", ""),
+                    "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+                }
+            elif locatienaam in alle_locaties[materiaal]:
+                del alle_locaties[materiaal][locatienaam]
+            bewaar_voorraadlocaties(alle_locaties)
+        return redirect(url_for("voorraad.voorraad_locaties_pagina", materiaal=materiaal))
+
+    materiaal_gefilterd = request.args.get("materiaal", "").strip()
+    periode_huidig = datetime.date.today().strftime("%Y-%m")
+    rijen = _bereken_mutatiestaat(periode_huidig)
+    alle_locaties = laad_voorraadlocaties()
+
+    materialen_overzicht = []
+    for r in rijen:
+        if materiaal_gefilterd and r["materiaal"] != materiaal_gefilterd:
+            continue
+        _locaties_dit_materiaal = alle_locaties.get(r["materiaal"], {})
+        _toegewezen = sum(_getal_of_0(v.get("hoeveelheid", 0)) for v in _locaties_dit_materiaal.values())
+        materialen_overzicht.append({
+            "materiaal": r["materiaal"], "totaal": r["eindvoorraad"],
+            "locaties": sorted(_locaties_dit_materiaal.items()),
+            "toegewezen": round(_toegewezen, 1),
+            "niet_toegewezen": round(r["eindvoorraad"] - _toegewezen, 1),
+        })
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Locaties</span>
+</div>
+<div class="page-title">Locaties</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Verdeling van de voorraad per materiaal over fysieke locaties binnen Alblasserdam.</p>
+
+{% for m in materialen_overzicht %}
+<div style="border:none;border-top:2px solid var(--gray-800);padding-top:10px;margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+        <div style="font-weight:800;color:var(--gray-800);font-size:14px;">{{ m.materiaal }}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Totaal: <b style="color:var(--gray-800);">{{ m.totaal }} t</b></div>
+    </div>
+    {% for locatienaam, info in m.locaties %}
+    <div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="flex:1;color:var(--gray-700);">{{ locatienaam }}</span>
+        <span style="width:80px;text-align:right;color:var(--gray-600);">{{ info.hoeveelheid }} t</span>
+    </div>
+    {% endfor %}
+    {% if m.niet_toegewezen != 0 %}
+    <div style="display:flex;align-items:center;padding:6px 0;font-size:11.5px;color:{{ '#dc2626' if m.niet_toegewezen > 0 else '#d97706' }};">
+        <span style="flex:1;">{{ 'Nog niet aan een locatie toegewezen' if m.niet_toegewezen > 0 else 'Meer toegewezen dan er voorraad is — controleren' }}</span>
+        <span style="width:80px;text-align:right;">{{ m.niet_toegewezen }} t</span>
+    </div>
+    {% endif %}
+    <form method="POST" style="display:flex;gap:6px;margin-top:8px;">
+        <input type="hidden" name="materiaal" value="{{ m.materiaal }}">
+        <input type="text" name="locatienaam" placeholder="Locatie (bv. Hal A)" style="flex:1;padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;">
+        <input type="text" name="hoeveelheid" placeholder="ton" style="width:80px;padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;">
+        <button type="submit" style="padding:5px 12px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;">Opslaan</button>
+    </form>
+</div>
+{% else %}
+<div class="lege-staat">Geen materiaal gevonden.</div>
+{% endfor %}
+    """
+    pagina = render_simple_page("Locaties", "voorraad", inhoud)
+    return render_template_string(pagina, materialen_overzicht=materialen_overzicht)
+
+@voorraad_bp.route("/voorraad/beheer", methods=["GET", "POST"])
+def voorraad_beheer_pagina():
     _guard = vereist_afdeling_of_403("voorraad")
     if _guard: return _guard
     if request.method == "POST":
@@ -310,7 +452,7 @@ def voorraad_pagina():
                 momenten = [m for m in momenten if m["id"] != moment_id]
                 bewaar_voorraadmomenten(momenten)
 
-        return redirect(url_for("voorraad.voorraad_pagina"))
+        return redirect(url_for("voorraad.voorraad_beheer_pagina"))
 
     transacties = laad_voorraad()
     transacties_gesorteerd = sorted(transacties, key=lambda t: t.get("aangemaakt",""), reverse=True)

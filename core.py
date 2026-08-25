@@ -46,7 +46,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "contactpersonen.json", "containers.json", "weegbrug.json", "logistieke_orders.json", "transport_planning.json",
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
         "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
-        "login_pogingen.json", "voorraadwaardering.json", "voorraadmutaties_periode.json",
+        "login_pogingen.json", "voorraadwaardering.json", "voorraadmutaties_periode.json", "voorraadlocaties.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -2141,4 +2141,23 @@ def laad_voorraadmutaties_periode():
 
 def bewaar_voorraadmutaties_periode(data):
     with open(VOORRAADMUTATIES_PERIODE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ============================================================
+# Locaties binnen Alblasserdam: dezelfde materiaalsoort kan op meerdere
+# fysieke plekken liggen (Hal A, Hal B, Buiten, etc). Dit is een verdeling
+# van de totale (eind)voorraad per materiaal over locaties — het hoofd-
+# overzicht toont het totaal, deze data is de doorklik-detail.
+# ============================================================
+VOORRAADLOCATIES_FILE = datapad("voorraadlocaties.json")
+
+def laad_voorraadlocaties():
+    try:
+        with open(VOORRAADLOCATIES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_voorraadlocaties(data):
+    with open(VOORRAADLOCATIES_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
