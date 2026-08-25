@@ -1198,6 +1198,76 @@ def _contract_opties_voor_order(order):
     overig = [h for h in verrijkt if h not in passend]
     return passend, overig
 
+def verwerk_complete_weging_automatisch(weegrecord_id):
+    """Wordt aangeroepen zodra een weging compleet is (in weegbrug.py, direct na het
+    uitwegen). Maakt automatisch een logistieke order aan voor deze weging (als die
+    er nog niet is), en koppelt die automatisch aan een Handelsorders-contract als
+    er precies ÉÉN nog-openstaand contract is dat op leverancier, materiaal én
+    kwaliteit matcht. Bij nul of meerdere kandidaten blijft de order bewust
+    ongekoppeld — dat vereist een keuze, die blijft een handmatige stap in Live
+    Operaties (met een duidelijke waarschuwing op de Voorraad-pagina)."""
+    weegrecords = laad_weegbrug()
+    record = next((r for r in weegrecords if r["id"] == weegrecord_id), None)
+    if not record or record.get("status") != "Compleet":
+        return
+
+    orders = laad_logistieke_orders()
+    # Er bestaan twee koppelmechanismen tussen weegrecord en order (afhankelijk van
+    # welke flow gebruikt is): 'gekoppeld_weegbrug_id' op de order, of 'ordernummer'
+    # op het weegrecord zelf. Beide controleren voorkomt een dubbele order.
+    order = next((o for o in orders if o.get("gekoppeld_weegbrug_id") == weegrecord_id), None)
+    if not order and record.get("ordernummer"):
+        order = next((o for o in orders if o.get("ordernummer") == record["ordernummer"]), None)
+        if order and not order.get("gekoppeld_weegbrug_id"):
+            order["gekoppeld_weegbrug_id"] = weegrecord_id
+
+    if not order:
+        nu = datetime.datetime.now()
+        netto_ton = round(float(record["netto_gewicht"]) / 1000, 3) if record.get("netto_gewicht") else ""
+        order = {
+            "id": str(uuid.uuid4()),
+            "ordernummer": genereer_logistiek_ordernummer(orders),
+            "leverancier": record.get("leverancier", ""),
+            "transporteur": record.get("transporteur", ""),
+            "kenteken": record.get("kenteken", ""),
+            "materiaal": record.get("materiaal", ""),
+            "kwaliteit": record.get("kwaliteit", ""),
+            "verwachte_hoeveelheid": "",
+            "werkelijke_hoeveelheid": str(netto_ton),
+            "datum": nu.date().isoformat(),
+            "verwachte_aankomst": "",
+            "werkelijke_aankomst": record.get("aangemaakt","").split(" ")[0] if record.get("aangemaakt") else "",
+            "gekoppeld_weegbrug_id": weegrecord_id,
+            "contract_referentie": "", "prijstype": "", "prijs_per_ton": None, "totale_waarde": None,
+            "verantwoordelijke_afdeling": "",
+            "status": "Weegbon compleet",
+            "opmerkingen": "Automatisch aangemaakt bij compleet wegen van weegnummer " + record.get("weegnummer",""),
+            "aangemaakt_door": session.get("gebruikersnaam", ""),
+            "aangemaakt": nu.strftime("%d-%m-%Y %H:%M"),
+        }
+        orders.append(order)
+        record["ordernummer"] = order["ordernummer"]
+        bewaar_weegbrug(weegrecords)
+
+    if not order.get("contract_referentie"):
+        passend, _ = _contract_opties_voor_order(order)
+        passend_nog_open = [h for h in passend if h.get("resterend_ton", 0) > 0]
+        if len(passend_nog_open) == 1:
+            gekozen_contract = passend_nog_open[0]
+            order["contract_referentie"] = gekozen_contract["contractnummer"]
+            order["prijstype"] = "Contract"
+            try:
+                order["prijs_per_ton"] = float(str(gekozen_contract.get("prijs","0")).replace(",","."))
+            except (ValueError, TypeError):
+                order["prijs_per_ton"] = None
+            if order.get("werkelijke_hoeveelheid") and order.get("prijs_per_ton"):
+                try:
+                    order["totale_waarde"] = round(float(order["werkelijke_hoeveelheid"]) * order["prijs_per_ton"], 2)
+                except (ValueError, TypeError):
+                    pass
+
+    bewaar_logistieke_orders(orders)
+
 @logistieke_orders_bp.route("/weegbrug/<record_id>/afhandelen")
 def weegrecord_afhandelen(record_id):
     """Startpunt voor het afhandelen van een COMPLETE weging die nog geen eigen
