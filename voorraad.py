@@ -233,6 +233,139 @@ def voorraad_contracten_actie():
 # geen shipments, geen invoerformulieren. Dat zit allemaal in de
 # onderliggende, doorklikbare pagina's.
 # ============================================================
+def _bouw_mutatielog(periode=None):
+    """Verzamelt alle individuele voorraadmutaties uit de verschillende bronnen tot
+    één chronologische lijst: ontvangsten en uitgaand (uit Handelsorders/Weegbrug/
+    Transport Planning), productiemutaties, en handmatige correcties/aanvullingen.
+    Elke regel heeft minimaal: datum/tijd, materiaal, mutatietype, hoeveelheid,
+    referentie naar de bron, en gebruiker."""
+    regels = []
+
+    _alle_handelsorders_log = laad_handelsorders()
+    _handelsorder_lookup = {h["contractnummer"]: h for h in _alle_handelsorders_log}
+
+    for o in laad_logistieke_orders():
+        if not o.get("contract_referentie") or o.get("status") not in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond"):
+            continue
+        _bron_order = _handelsorder_lookup.get(o["contract_referentie"])
+        _order_type = _bron_order.get("order_type") if _bron_order else None
+        regels.append({
+            "datum": o.get("aangemaakt",""), "materiaal": f"{o.get('materiaal','')} — {o.get('kwaliteit','')}" if o.get("kwaliteit") else o.get("materiaal",""),
+            "type": "Ontvangst (vrachtwagen)" if _order_type != "verkoop" else "Uitgaand (vrachtwagen)",
+            "hoeveelheid": parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid","")) * (1 if _order_type != "verkoop" else -1),
+            "referentie": f"{o.get('ordernummer','')} · {o.get('contract_referentie','')}",
+            "gebruiker": o.get("aangemaakt_door",""),
+        })
+
+    for t in laad_transport_planning():
+        if not t.get("contract_referentie") or t.get("status") == "Geannuleerd":
+            continue
+        _bron_order = _handelsorder_lookup.get(t["contract_referentie"])
+        _order_type = _bron_order.get("order_type") if _bron_order else None
+        regels.append({
+            "datum": t.get("aangemaakt",""), "materiaal": t.get("materiaal",""),
+            "type": "Ontvangst (schip)" if _order_type != "verkoop" else "Uitgaand (schip)",
+            "hoeveelheid": parse_hoeveelheid_getal(t.get("hoeveelheid","")) * (1 if _order_type != "verkoop" else -1),
+            "referentie": t.get("contract_referentie",""),
+            "gebruiker": t.get("aangemaakt_door",""),
+        })
+
+    for pm in laad_productiemutaties():
+        regels.append({
+            "datum": pm.get("aangemaakt",""), "materiaal": pm.get("input_materiaal",""),
+            "type": "Productie (input)", "hoeveelheid": -_getal_of_0(pm.get("input_hoeveelheid",0)),
+            "referentie": pm.get("notitie","") or "Productiemutatie", "gebruiker": pm.get("gebruiker",""),
+        })
+        for out in pm.get("outputs", []):
+            regels.append({
+                "datum": pm.get("aangemaakt",""), "materiaal": out.get("materiaal",""),
+                "type": "Productie (output)", "hoeveelheid": _getal_of_0(out.get("hoeveelheid",0)),
+                "referentie": pm.get("notitie","") or "Productiemutatie", "gebruiker": pm.get("gebruiker",""),
+            })
+
+    for periode_sleutel, per_materiaal in laad_voorraadmutaties_periode().items():
+        for materiaal, info in per_materiaal.items():
+            if _getal_of_0(info.get("correcties", 0)) != 0:
+                regels.append({
+                    "datum": info.get("aangemaakt",""), "materiaal": materiaal, "type": "Correctie",
+                    "hoeveelheid": _getal_of_0(info.get("correcties", 0)),
+                    "referentie": f"Periode {periode_sleutel}", "gebruiker": info.get("gebruiker",""),
+                })
+            if _getal_of_0(info.get("productie_verwerking", 0)) != 0:
+                regels.append({
+                    "datum": info.get("aangemaakt",""), "materiaal": materiaal, "type": "Handmatige aanvulling",
+                    "hoeveelheid": _getal_of_0(info.get("productie_verwerking", 0)),
+                    "referentie": f"Periode {periode_sleutel}", "gebruiker": info.get("gebruiker",""),
+                })
+
+    def _valt_in_periode(datum_str, periode_sleutel):
+        for _formaat in ("%d-%m-%Y %H:%M", "%Y-%m-%d"):
+            try:
+                _d = datetime.datetime.strptime(datum_str, _formaat)
+                return _d.strftime("%Y-%m") == periode_sleutel
+            except (ValueError, TypeError):
+                continue
+        return False
+
+    if periode:
+        regels = [r for r in regels if _valt_in_periode(r["datum"], periode)]
+
+    def _sorteersleutel(r):
+        for _formaat in ("%d-%m-%Y %H:%M", "%Y-%m-%d"):
+            try:
+                return datetime.datetime.strptime(r["datum"], _formaat)
+            except (ValueError, TypeError):
+                continue
+        return datetime.datetime.min
+    regels.sort(key=_sorteersleutel, reverse=True)
+    return regels
+
+@voorraad_bp.route("/voorraad/mutatielog")
+def voorraad_mutatielog_pagina():
+    _guard = vereist_afdeling_of_403("voorraad")
+    if _guard: return _guard
+
+    periode = request.args.get("periode", "").strip()
+    regels = _bouw_mutatielog(periode or None)
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Voorraadmutaties</span>
+</div>
+<div class="page-title">Voorraadmutaties</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Elke individuele voorraadbeweging, chronologisch: ontvangsten, uitgaand, productie en correcties — met bron en gebruiker.</p>
+
+<form method="GET" style="margin-bottom:16px;">
+    <input type="text" name="periode" value="{{ periode }}" placeholder="Filter op periode (YYYY-MM), leeg = alles" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;width:260px;">
+    <button type="submit" style="padding:7px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;">Filteren</button>
+</form>
+
+<div style="border:none;border-top:1px solid var(--gray-200);overflow-x:auto;">
+    <div style="display:flex;padding:8px 4px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-400);border-bottom:2px solid var(--gray-800);min-width:800px;">
+        <span style="width:130px;">Datum/tijd</span>
+        <span style="flex:1;">Materiaal</span>
+        <span style="width:160px;">Type</span>
+        <span style="width:90px;text-align:right;">Hoeveelheid</span>
+        <span style="flex:1;">Referentie</span>
+        <span style="width:120px;">Gebruiker</span>
+    </div>
+    {% for r in regels %}
+    <div style="display:flex;align-items:center;padding:7px 4px;font-size:12px;border-bottom:1px solid var(--gray-100);min-width:800px;">
+        <span style="width:130px;color:var(--gray-400);">{{ r.datum }}</span>
+        <span style="flex:1;color:var(--gray-700);font-weight:600;">{{ r.materiaal }}</span>
+        <span style="width:160px;color:var(--gray-500);">{{ r.type }}</span>
+        <span style="width:90px;text-align:right;font-weight:700;color:{{ '#16a34a' if r.hoeveelheid >= 0 else '#dc2626' }};">{{ '+' if r.hoeveelheid >= 0 else '' }}{{ r.hoeveelheid }} t</span>
+        <span style="flex:1;color:var(--gray-400);font-size:11px;">{{ r.referentie }}</span>
+        <span style="width:120px;color:var(--gray-400);font-size:11px;">{{ r.gebruiker }}</span>
+    </div>
+    {% else %}
+    <div class="lege-staat" style="min-width:800px;">Geen mutaties gevonden{% if periode %} voor deze periode{% endif %}.</div>
+    {% endfor %}
+</div>
+    """
+    pagina = render_simple_page("Voorraadmutaties", "voorraad", inhoud)
+    return render_template_string(pagina, regels=regels, periode=periode)
+
 @voorraad_bp.route("/voorraad")
 def voorraad_pagina():
     _guard = vereist_afdeling_of_403("voorraad")
@@ -310,6 +443,7 @@ def voorraad_pagina():
     <a href="/voorraad/mutaties" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Voorraad Alblasserdam — mutatiestaat →</a>
     <a href="/voorraad/productie" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Productie / verwerking →</a>
     <a href="/voorraad/locaties" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Locaties →</a>
+    <a href="/voorraad/mutatielog" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Voorraadmutaties →</a>
     <a href="/voorraad/waardering" style="color:var(--brand-600);text-decoration:none;font-weight:600;">Voorraadwaardering →</a>
     <a href="/voorraad/beheer" style="color:var(--gray-400);text-decoration:none;">Shipments &amp; historisch beheer →</a>
 </div>
@@ -351,6 +485,7 @@ def voorraad_locaties_pagina():
     periode_huidig = datetime.date.today().strftime("%Y-%m")
     rijen = _bereken_mutatiestaat(periode_huidig)
     alle_locaties = laad_voorraadlocaties()
+    _alle_verkooporders = [h for h in laad_handelsorders() if h.get("order_type") == "verkoop" and h.get("status") in ("Concept", "Definitief")]
 
     materialen_overzicht = []
     for r in rijen:
@@ -358,11 +493,17 @@ def voorraad_locaties_pagina():
             continue
         _locaties_dit_materiaal = alle_locaties.get(r["materiaal"], {})
         _toegewezen = sum(_getal_of_0(v.get("hoeveelheid", 0)) for v in _locaties_dit_materiaal.values())
+        _gekoppelde_verkoop = [
+            {"contractnummer": h["contractnummer"], "id": h["id"], "klant": h.get("tegenpartij_naam",""),
+             "hoeveelheid": h.get("hoeveelheid_mt",""), "status": h.get("status","")}
+            for h in _alle_verkooporders if h.get("kwaliteit") == r["materiaal"]
+        ]
         materialen_overzicht.append({
             "materiaal": r["materiaal"], "totaal": r["eindvoorraad"],
             "locaties": sorted(_locaties_dit_materiaal.items()),
             "toegewezen": round(_toegewezen, 1),
             "niet_toegewezen": round(r["eindvoorraad"] - _toegewezen, 1),
+            "gekoppelde_verkoop": _gekoppelde_verkoop,
         })
 
     inhoud = """
@@ -388,6 +529,17 @@ def voorraad_locaties_pagina():
     <div style="display:flex;align-items:center;padding:6px 0;font-size:11.5px;color:{{ '#dc2626' if m.niet_toegewezen > 0 else '#d97706' }};">
         <span style="flex:1;">{{ 'Nog niet aan een locatie toegewezen' if m.niet_toegewezen > 0 else 'Meer toegewezen dan er voorraad is — controleren' }}</span>
         <span style="width:80px;text-align:right;">{{ m.niet_toegewezen }} t</span>
+    </div>
+    {% endif %}
+    {% if m.gekoppelde_verkoop %}
+    <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--gray-100);">
+        <div style="font-size:10.5px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Gekoppelde verkoop</div>
+        {% for v in m.gekoppelde_verkoop %}
+        <a href="/handelsorders/{{ v.id }}" style="display:flex;align-items:center;padding:3px 0;font-size:11.5px;text-decoration:none;color:var(--gray-600);">
+            <span style="flex:1;">{{ v.klant }} <span style="color:var(--gray-300);">({{ v.status }})</span></span>
+            <span style="width:80px;text-align:right;">{{ v.hoeveelheid }} t</span>
+        </a>
+        {% endfor %}
     </div>
     {% endif %}
     <form method="POST" style="display:flex;gap:6px;margin-top:8px;">
