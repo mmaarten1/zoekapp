@@ -13,6 +13,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_contactpersonen, bewaar_contactpersonen, laad_accountmanagers,
     is_huidige_gebruiker_admin, ENF_BEDRIJVEN, render_simple_page, vereist_afdeling_of_403,
+    bewaar_bedrijven,
 )
 
 contacten_bp = Blueprint("contacten", __name__)
@@ -109,22 +110,8 @@ def contacten():
     {% if zoekterm or gekozen_am %}<a href="/contacten" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
 </form>
 
-<div style="max-width:460px;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px 16px;margin-bottom:20px;">
-    <div class="dg-kaart-titel" style="margin-bottom:8px;">Contactpersoon toevoegen</div>
-    <form method="POST">
-        <input type="hidden" name="actie" value="toevoegen">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-            <input type="text" name="naam" placeholder="Naam" required style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
-            <input type="text" name="bedrijf" placeholder="Bedrijf" required list="bedrijvenLijstContacten" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
-        </div>
-        <datalist id="bedrijvenLijstContacten">{% for naam in bedrijfnamen_lijst %}<option value="{{ naam }}">{% endfor %}</datalist>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-            <input type="text" name="rol" placeholder="Rol (optioneel)" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
-            <input type="text" name="telefoon" placeholder="Telefoon (optioneel)" style="padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
-        </div>
-        <input type="email" name="email" placeholder="E-mail (optioneel)" style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;margin-bottom:8px;box-sizing:border-box;">
-        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Toevoegen</button>
-    </form>
+<div style="margin-bottom:20px;">
+    <a href="/contacten/nieuw" style="display:inline-block;padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">+ Contact toevoegen</a>
 </div>
 
 {% if contacten_lijst %}
@@ -197,3 +184,202 @@ def contacten():
     pagina = render_simple_page("Contacten", "contacten", inhoud)
     return render_template_string(pagina, contacten_lijst=contacten_lijst, zoekterm=zoekterm, gekozen_am=gekozen_am,
                                     alle_accountmanagers=alle_accountmanagers, bedrijfnamen_lijst=sorted(_bedrijven_land_lookup.keys())[:500])
+
+@contacten_bp.route("/contacten/nieuw")
+def contacten_nieuw_keuze():
+    """Startpunt van het aanmaken van een contactpersoon: eerst kiezen tussen een
+    nieuw bedrijf (bedrijf en contact tegelijk aanmaken) of een bestaand bedrijf
+    (extra contactpersoon toevoegen, of een bestaande vervangen)."""
+    _guard = vereist_afdeling_of_403("contacten")
+    if _guard: return _guard
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/contacten" style="color:var(--gray-400);text-decoration:none;">Contacten</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw</span>
+</div>
+<div class="page-title">Contactpersoon toevoegen</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:24px;font-size:0.85rem;">Hoort deze persoon bij een bedrijf dat al in het systeem staat, of bij een nieuw bedrijf?</p>
+
+<div style="display:flex;gap:16px;max-width:600px;">
+    <a href="/contacten/nieuw/bedrijf" style="flex:1;display:block;padding:20px;border:1px solid var(--gray-200);border-radius:10px;text-decoration:none;color:inherit;">
+        <div style="font-weight:700;color:var(--gray-800);font-size:14px;margin-bottom:6px;">Nieuw bedrijf</div>
+        <div style="font-size:12.5px;color:var(--gray-500);">Het bedrijf staat nog niet in het systeem — bedrijf en contactpersoon in één keer aanmaken.</div>
+    </a>
+    <a href="/contacten/nieuw/bestaand" style="flex:1;display:block;padding:20px;border:1px solid var(--gray-200);border-radius:10px;text-decoration:none;color:inherit;">
+        <div style="font-weight:700;color:var(--gray-800);font-size:14px;margin-bottom:6px;">Bestaand bedrijf</div>
+        <div style="font-size:12.5px;color:var(--gray-500);">Een extra contactpersoon toevoegen bij een bedrijf dat al bestaat, of een bestaande vervangen.</div>
+    </a>
+</div>
+    """
+    pagina = render_simple_page("Contact toevoegen", "contacten", inhoud)
+    return render_template_string(pagina)
+
+@contacten_bp.route("/contacten/nieuw/bedrijf", methods=["GET", "POST"])
+def contacten_nieuw_bedrijf():
+    """Nieuw bedrijf + contactpersoon in één keer aanmaken."""
+    _guard = vereist_afdeling_of_403("contacten")
+    if _guard: return _guard
+
+    fout = None
+    if request.method == "POST":
+        bedrijfsnaam = request.form.get("bedrijfsnaam", "").strip()
+        contactnaam = request.form.get("naam", "").strip()
+        if not bedrijfsnaam or not contactnaam:
+            fout = "Bedrijfsnaam en naam van de contactpersoon zijn verplicht."
+        elif any(b["naam"].strip().lower() == bedrijfsnaam.lower() for b in ENF_BEDRIJVEN):
+            fout = f"'{bedrijfsnaam}' bestaat al als bedrijf — kies bij 'Bestaand bedrijf' om daar een contactpersoon aan toe te voegen."
+        else:
+            nieuw_bedrijf = {
+                "naam": bedrijfsnaam, "url": "", "regio": request.form.get("regio", "").strip(),
+                "land": request.form.get("land", "").strip(), "klanttype": "",
+                "materialen": request.form.get("materialen", "").strip(), "volume": "",
+                "lat": None, "lon": None,
+            }
+            ENF_BEDRIJVEN.append(nieuw_bedrijf)
+            bewaar_bedrijven()
+
+            personen = laad_contactpersonen()
+            personen.append({
+                "id": str(uuid.uuid4()), "naam": contactnaam, "bedrijf": bedrijfsnaam,
+                "rol": request.form.get("rol", "").strip(), "email": request.form.get("email", "").strip(),
+                "telefoon": request.form.get("telefoon", "").strip(),
+                "laatst": datetime.date.today().isoformat(),
+                "gebruiker": session.get("gebruikersnaam", ""),
+                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            })
+            bewaar_contactpersonen(personen)
+            return redirect(url_for("contacten.contacten"))
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/contacten" style="color:var(--gray-400);text-decoration:none;">Contacten</a> &nbsp;/&nbsp;
+    <a href="/contacten/nieuw" style="color:var(--gray-400);text-decoration:none;">Nieuw</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw bedrijf</span>
+</div>
+<div class="page-title">Nieuw bedrijf + contactpersoon</div>
+{% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">{{ fout }}</div>{% endif %}
+
+<form method="POST" style="max-width:520px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Bedrijf</div>
+    <input type="text" name="bedrijfsnaam" placeholder="Bedrijfsnaam" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <input type="text" name="land" placeholder="Land (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        <input type="text" name="regio" placeholder="Regio/stad (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+    </div>
+    <input type="text" name="materialen" placeholder="Materialen (optioneel)" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:20px;">
+
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Contactpersoon</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <input type="text" name="naam" placeholder="Naam" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        <input type="text" name="rol" placeholder="Rol (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        <input type="email" name="email" placeholder="E-mail (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        <input type="text" name="telefoon" placeholder="Telefoon (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+    </div>
+    <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Bedrijf en contact aanmaken</button>
+</form>
+    """
+    pagina = render_simple_page("Nieuw bedrijf", "contacten", inhoud)
+    return render_template_string(pagina, fout=fout)
+
+@contacten_bp.route("/contacten/nieuw/bestaand", methods=["GET", "POST"])
+def contacten_nieuw_bestaand():
+    """Extra contactpersoon toevoegen bij een bestaand bedrijf, of een bestaande
+    contactpersoon van dat bedrijf vervangen."""
+    _guard = vereist_afdeling_of_403("contacten")
+    if _guard: return _guard
+
+    fout = None
+    if request.method == "POST":
+        bedrijfsnaam = request.form.get("bedrijfsnaam", "").strip()
+        modus = request.form.get("modus", "extra")
+        contactnaam = request.form.get("naam", "").strip()
+        if not bedrijfsnaam or not contactnaam:
+            fout = "Bedrijf en naam van de contactpersoon zijn verplicht."
+        else:
+            personen = laad_contactpersonen()
+            nieuwe_gegevens = {
+                "naam": contactnaam, "bedrijf": bedrijfsnaam,
+                "rol": request.form.get("rol", "").strip(), "email": request.form.get("email", "").strip(),
+                "telefoon": request.form.get("telefoon", "").strip(),
+                "laatst": datetime.date.today().isoformat(),
+                "gebruiker": session.get("gebruikersnaam", ""),
+                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            }
+            if modus == "vervangen":
+                te_vervangen_id = request.form.get("te_vervangen_id", "")
+                doel = next((p for p in personen if p["id"] == te_vervangen_id), None)
+                if doel:
+                    doel.update(nieuwe_gegevens)
+                    bewaar_contactpersonen(personen)
+                    return redirect(url_for("contacten.contacten"))
+                fout = "De te vervangen contactpersoon is niet gevonden."
+            else:
+                nieuwe_gegevens["id"] = str(uuid.uuid4())
+                personen.append(nieuwe_gegevens)
+                bewaar_contactpersonen(personen)
+                return redirect(url_for("contacten.contacten"))
+
+    gekozen_bedrijf = request.args.get("bedrijf", "").strip()
+    bedrijfnamen = sorted({b["naam"] for b in ENF_BEDRIJVEN})
+    personen_bij_bedrijf = [p for p in laad_contactpersonen() if p.get("bedrijf","").strip().lower() == gekozen_bedrijf.strip().lower()] if gekozen_bedrijf else []
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/contacten" style="color:var(--gray-400);text-decoration:none;">Contacten</a> &nbsp;/&nbsp;
+    <a href="/contacten/nieuw" style="color:var(--gray-400);text-decoration:none;">Nieuw</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Bestaand bedrijf</span>
+</div>
+<div class="page-title">Contactpersoon bij een bestaand bedrijf</div>
+{% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">{{ fout }}</div>{% endif %}
+
+<form method="GET" style="max-width:520px;margin-bottom:24px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Bedrijf kiezen</div>
+    <div style="display:flex;gap:8px;">
+        <input type="text" name="bedrijf" value="{{ gekozen_bedrijf }}" list="bedrijvenLijstBestaand" placeholder="Begin te typen..." required style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        <datalist id="bedrijvenLijstBestaand">{% for naam in bedrijfnamen %}<option value="{{ naam }}">{% endfor %}</datalist>
+        <button type="submit" style="padding:8px 16px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Verder</button>
+    </div>
+</form>
+
+{% if gekozen_bedrijf %}
+<form method="POST" style="max-width:520px;">
+    <input type="hidden" name="bedrijfsnaam" value="{{ gekozen_bedrijf }}">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ gekozen_bedrijf }}</div>
+
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700);margin-bottom:8px;cursor:pointer;">
+        <input type="radio" name="modus" value="extra" checked onchange="document.getElementById('vervangKeuze').style.display='none';">
+        Extra contactpersoon toevoegen
+    </label>
+    {% if personen_bij_bedrijf %}
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700);margin-bottom:12px;cursor:pointer;">
+        <input type="radio" name="modus" value="vervangen" onchange="document.getElementById('vervangKeuze').style.display='block';">
+        Een bestaande contactpersoon vervangen
+    </label>
+    <div id="vervangKeuze" style="display:none;margin-bottom:16px;padding:10px 12px;background:var(--gray-50);border-radius:8px;">
+        {% for p in personen_bij_bedrijf %}
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--gray-600);padding:4px 0;cursor:pointer;">
+            <input type="radio" name="te_vervangen_id" value="{{ p.id }}">
+            {{ p.naam }}{% if p.rol %} — {{ p.rol }}{% endif %}
+        </label>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="font-size:12px;color:var(--gray-300);margin-bottom:16px;">Nog geen bestaande contactpersonen bij dit bedrijf om te vervangen.</div>
+    {% endif %}
+
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Gegevens</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <input type="text" name="naam" placeholder="Naam" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        <input type="text" name="rol" placeholder="Rol (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        <input type="email" name="email" placeholder="E-mail (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        <input type="text" name="telefoon" placeholder="Telefoon (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+    </div>
+    <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Opslaan</button>
+</form>
+{% endif %}
+    """
+    pagina = render_simple_page("Bestaand bedrijf", "contacten", inhoud)
+    return render_template_string(pagina, fout=fout, gekozen_bedrijf=gekozen_bedrijf, bedrijfnamen=bedrijfnamen,
+                                    personen_bij_bedrijf=personen_bij_bedrijf)
