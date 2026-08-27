@@ -3525,12 +3525,16 @@ def gebruikers_beheer():
             doelnaam = request.form.get("gebruikersnaam", "")
             nieuwe_afdeling = request.form.get("afdeling", "")
             nieuwe_rol = request.form.get("rol", "")
+            nieuwe_org_afdeling = request.form.get("org_afdeling", "")
+            nieuw_team = request.form.get("team", "").strip()
             users = laad_users()
             if doelnaam in users:
                 if nieuwe_afdeling in AFDELINGEN or nieuwe_afdeling == "":
                     users[doelnaam]["afdeling"] = nieuwe_afdeling
                 if nieuwe_rol in ROLLEN:
                     users[doelnaam]["rol"] = nieuwe_rol
+                users[doelnaam]["org_afdeling"] = nieuwe_org_afdeling
+                users[doelnaam]["team"] = nieuw_team
                 bewaar_users(users)
                 bericht = f"Afdeling/rol van '{doelnaam}' bijgewerkt."
 
@@ -3595,11 +3599,19 @@ def gebruikers_beheer():
                 </div>
                 {% endif %}
             </div>
-            <form method="POST" style="display:flex;gap:6px;margin-top:6px;">
+            <form method="POST" style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
                 <input type="hidden" name="actie" value="wijzig_afdeling_rol">
                 <input type="hidden" name="gebruikersnaam" value="{{ naam }}">
+                <select name="org_afdeling" onchange="verversOrgTeamsVoorRij(this)" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
+                    <option value="">Geen org.-afdeling</option>
+                    {% for a in organisatiestructuur.keys() %}<option value="{{ a }}" {% if info.get("org_afdeling") == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+                </select>
+                <select name="team" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
+                    <option value="">Geen team</option>
+                    {% for t in organisatiestructuur.get(info.get("org_afdeling",""), []) %}<option value="{{ t }}" {% if info.get("team") == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                </select>
                 <select name="afdeling" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
-                    <option value="">Geen afdeling</option>
+                    <option value="">Geen toegangsrol</option>
                     {% for a in afdelingen %}<option value="{{ a }}" {% if info.get("afdeling") == a %}selected{% endif %}>{{ afdeling_labels[a] }}</option>{% endfor %}
                 </select>
                 <select name="rol" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
@@ -3611,6 +3623,18 @@ def gebruikers_beheer():
     </div>
     <script>
     var ORGANISATIESTRUCTUUR = {{ organisatiestructuur_json|safe }};
+    function verversOrgTeamsVoorRij(afdelingSelect) {
+        var teamSelect = afdelingSelect.parentElement.querySelector('select[name="team"]');
+        var teams = ORGANISATIESTRUCTUUR[afdelingSelect.value] || [];
+        teamSelect.innerHTML = '<option value="">Geen team</option>';
+        teams.forEach(function(t) {
+            var optie = document.createElement("option");
+            optie.value = t;
+            optie.textContent = t;
+            teamSelect.appendChild(optie);
+        });
+        afdelingSelect.form.submit();
+    }
     function verversOrgTeams() {
         var afdelingSelect = document.getElementById("org_afdeling_select");
         var teamSelect = document.getElementById("org_team_select");
