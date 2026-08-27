@@ -13,7 +13,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_contactpersonen, bewaar_contactpersonen, laad_accountmanagers,
     is_huidige_gebruiker_admin, ENF_BEDRIJVEN, render_simple_page, vereist_afdeling_of_403,
-    bewaar_bedrijven,
+    bewaar_bedrijven, PAPIERFABRIEKEN, laad_status,
 )
 
 contacten_bp = Blueprint("contacten", __name__)
@@ -321,7 +321,15 @@ def contacten_nieuw_bestaand():
                 return redirect(url_for("contacten.contacten"))
 
     gekozen_bedrijf = request.args.get("bedrijf", "").strip()
-    bedrijfnamen = sorted({b["naam"] for b in ENF_BEDRIJVEN})
+    # Alleen bedrijven die al bij Leveranciers of Klanten staan — dus daadwerkelijk
+    # een toegekende status óf accountmanager hebben, net als op die pagina's.
+    # Geen doorzoeking van de volledige, ongefilterde bedrijvendatabase.
+    status_alle = laad_status()
+    accountmanagers_alle = laad_accountmanagers()
+    bedrijfnamen = sorted({
+        b["naam"] for b in list(ENF_BEDRIJVEN) + list(PAPIERFABRIEKEN)
+        if status_alle.get(b["naam"]) or accountmanagers_alle.get(b["naam"])
+    })
     personen_bij_bedrijf = [p for p in laad_contactpersonen() if p.get("bedrijf","").strip().lower() == gekozen_bedrijf.strip().lower()] if gekozen_bedrijf else []
 
     inhoud = """
