@@ -1517,7 +1517,11 @@ PAGINA_HOOFD = """<!DOCTYPE html>
         }
         .sidebar-logo em { color: #fff; font-style: normal; }
         .sidebar-cap { padding: 0 var(--space-5) 8px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: #626d7a; margin-bottom: var(--space-2); }
-        .sidebar-nav { display: flex; flex-direction: column; gap: 1px; padding: 0 var(--space-3); }
+        .sidebar-nav { display: flex; flex-direction: column; gap: 1px; padding: 0 var(--space-3); flex: 1; overflow-y: auto; min-height: 0; }
+        .sidebar-nav::-webkit-scrollbar { width: 5px; }
+        .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-nav::-webkit-scrollbar-thumb { background: #3a4250; border-radius: 3px; }
+        .sidebar-nav { scrollbar-width: thin; scrollbar-color: #3a4250 transparent; }
         .sidebar-link {
             display: flex;
             align-items: center;
