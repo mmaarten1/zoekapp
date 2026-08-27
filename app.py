@@ -125,7 +125,7 @@ app.register_blueprint(orders_bp)
 from voorraad import voorraad_bp
 app.register_blueprint(voorraad_bp)
 
-from dashboard import dashboard_bp
+from dashboard import dashboard_bp, DASHBOARD_WIDGET_LABELS
 app.register_blueprint(dashboard_bp)
 
 from zoeken import zoeken_bp
@@ -3356,6 +3356,40 @@ def layout_instellingen():
 
         mijn_voorkeur["sidebar_volgorde"] = huidige_volgorde
         mijn_voorkeur["sidebar_verborgen"] = list(verborgen)
+
+        # Dashboard-widgets: zelfde principe, eigen sleutels binnen dezelfde voorkeur.
+        widget_keys = list(DASHBOARD_WIDGET_LABELS.keys())
+        widget_volgorde = mijn_voorkeur.get("dashboard_widget_volgorde") or widget_keys
+        for k in widget_keys:
+            if k not in widget_volgorde:
+                widget_volgorde.append(k)
+        widget_volgorde = [k for k in widget_volgorde if k in widget_keys]
+        widget_verborgen = set(mijn_voorkeur.get("dashboard_widget_verborgen", []))
+
+        if actie == "widget_omhoog":
+            key = request.form.get("key", "")
+            if key in widget_volgorde:
+                i = widget_volgorde.index(key)
+                if i > 0:
+                    widget_volgorde[i-1], widget_volgorde[i] = widget_volgorde[i], widget_volgorde[i-1]
+        elif actie == "widget_omlaag":
+            key = request.form.get("key", "")
+            if key in widget_volgorde:
+                i = widget_volgorde.index(key)
+                if i < len(widget_volgorde) - 1:
+                    widget_volgorde[i+1], widget_volgorde[i] = widget_volgorde[i], widget_volgorde[i+1]
+        elif actie == "widget_toggle_zichtbaar":
+            key = request.form.get("key", "")
+            if key in widget_verborgen:
+                widget_verborgen.discard(key)
+            else:
+                widget_verborgen.add(key)
+        elif actie == "widget_standaard_herstellen":
+            widget_volgorde = []
+            widget_verborgen = set()
+
+        mijn_voorkeur["dashboard_widget_volgorde"] = widget_volgorde
+        mijn_voorkeur["dashboard_widget_verborgen"] = list(widget_verborgen)
         alle_voorkeuren[gebruikersnaam] = mijn_voorkeur
         bewaar_layout_voorkeuren(alle_voorkeuren)
         return redirect(url_for("layout_instellingen"))
@@ -3364,6 +3398,13 @@ def layout_instellingen():
     volgorde = mijn_voorkeur.get("sidebar_volgorde", [])
     zichtbare_items = _sorteer_op_voorkeur(zichtbare_items, volgorde)
     verborgen_set = set(mijn_voorkeur.get("sidebar_verborgen", []))
+
+    widget_items = list(DASHBOARD_WIDGET_LABELS.items())
+    widget_volgorde_getoond = mijn_voorkeur.get("dashboard_widget_volgorde", [])
+    if widget_volgorde_getoond:
+        _widget_volgorde_index = {s: i for i, s in enumerate(widget_volgorde_getoond)}
+        widget_items = sorted(widget_items, key=lambda item: _widget_volgorde_index.get(item[0], len(widget_volgorde_getoond)))
+    widget_verborgen_set = set(mijn_voorkeur.get("dashboard_widget_verborgen", []))
 
     inhoud = """
 <div class="page-title">Mijn zijbalk</div>
@@ -3395,9 +3436,39 @@ def layout_instellingen():
     <input type="hidden" name="actie" value="standaard_herstellen">
     <button type="submit" style="padding:7px 14px;background:#fff;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;cursor:pointer;">Standaardvolgorde herstellen</button>
 </form>
+
+<div class="page-title" style="margin-top:36px;font-size:1.1rem;">Mijn Dashboard</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Volgorde en zichtbaarheid van de blokken op je Dashboard (alleen van toepassing op het commerciële dashboard).</p>
+<div style="border:none;border-top:1px solid var(--gray-200);max-width:420px;">
+    {% for key, label in widget_items %}
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--gray-100);font-size:13px;{% if key in widget_verborgen_set %}opacity:0.4;{% endif %}">
+        <span style="flex:1;color:var(--gray-700);">{{ label }}</span>
+        <form method="POST" style="margin:0;display:inline;">
+            <input type="hidden" name="actie" value="widget_toggle_zichtbaar">
+            <input type="hidden" name="key" value="{{ key }}">
+            <button type="submit" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:11px;padding:2px 6px;" title="{{ 'Weer tonen' if key in widget_verborgen_set else 'Verbergen' }}">{{ '👁' if key in widget_verborgen_set else '—' }}</button>
+        </form>
+        <form method="POST" style="margin:0;display:inline;">
+            <input type="hidden" name="actie" value="widget_omhoog">
+            <input type="hidden" name="key" value="{{ key }}">
+            <button type="submit" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:13px;padding:2px 6px;" title="Omhoog">↑</button>
+        </form>
+        <form method="POST" style="margin:0;display:inline;">
+            <input type="hidden" name="actie" value="widget_omlaag">
+            <input type="hidden" name="key" value="{{ key }}">
+            <button type="submit" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:13px;padding:2px 6px;" title="Omlaag">↓</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+<form method="POST" style="margin-top:16px;">
+    <input type="hidden" name="actie" value="widget_standaard_herstellen">
+    <button type="submit" style="padding:7px 14px;background:#fff;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;cursor:pointer;">Standaardvolgorde herstellen</button>
+</form>
     """
     pagina = render_simple_page("Mijn zijbalk", "instellingen", inhoud)
-    return render_template_string(pagina, zichtbare_items=zichtbare_items, verborgen_set=verborgen_set)
+    return render_template_string(pagina, zichtbare_items=zichtbare_items, verborgen_set=verborgen_set,
+                                    widget_items=widget_items, widget_verborgen_set=widget_verborgen_set)
 
 @app.route("/gebruikers-beheer", methods=["GET", "POST"])
 def gebruikers_beheer():

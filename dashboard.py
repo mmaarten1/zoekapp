@@ -19,9 +19,18 @@ from core import (
     shipment_hoeveelheid, render_simple_page, ENF_BEDRIJVEN, LANDEN,
     effectieve_afdeling, laad_weegbrug, laad_logistieke_orders, laad_transport_planning,
     laad_containers, vereist_afdeling_of_403, laad_handelsorders, laad_facturen, bepaal_factuur_status,
+    laad_layout_voorkeuren,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
+
+DASHBOARD_WIDGET_LABELS = {
+    "inkoop_pipeline": "Ingekocht per maand & Sales pipeline",
+    "kwaliteit_team_aandacht": "Inkoop per kwaliteit, Team-prestatie & Vraagt om aandacht",
+    "progressie_klanten": "Progressie, Topklanten, Klanten zonder contact & Recent gekoppeld",
+    "concept_orders": "Eigen orders die actie nodig hebben",
+    "leads_prijzen": "Nieuwe leads, Marktprijzen & Transportkosten",
+}
 
 SNAPSHOTS_FILE = datapad("snapshots.json")
 
@@ -533,6 +542,191 @@ def dashboard():
         {"label": "Follow-ups", "sub": "geen follow-up-systeem"},
     ]
 
+    DASHBOARD_WIDGETS = {
+        "inkoop_pipeline": '''
+<div class="db-rij">
+    <div class="db-kol" style="flex:1.6;">
+        <div class="db-sectie-titel">Ingekocht per maand <small>ton, laatste 12 maanden</small></div>
+        {% if inkoop_serie and inkoop_serie|sum > 0 %}
+        <div class="db-bars">
+            {% for label in maand_labels %}
+            <div class="db-bar-kol">
+                <div class="db-bar" style="height:{{ ((inkoop_serie[loop.index0] / max_inkoop_maand * 100)|round(1)) if max_inkoop_maand else 0 }}%;"></div>
+                <div class="db-bar-label">{{ label }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen inkoop-shipments om een trend te tonen.</div>
+        {% endif %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Sales pipeline <small>ingekocht per team, per persoon</small></div>
+        {% for t in pipeline_tellingen %}
+        <div style="margin-bottom:10px;">
+            <div style="font-size:11.5px;font-weight:700;color:var(--gray-700);margin-bottom:3px;">{{ t.team }} — {{ t.totaal }} t</div>
+            {% for p in t.personen %}
+            <div class="db-hbar-rij" style="margin-left:8px;">
+                <span class="db-hbar-naam" style="font-size:11px;">{{ p.naam }}</span>
+                <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (p.hoeveelheid/max_pipeline*100)|round(1) }}%;"></span></span>
+                <span class="db-hbar-getal">{{ p.hoeveelheid }} t</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen ingekochte, definitieve orders.</div>
+        {% endfor %}
+    </div>
+</div>
+''',
+        "kwaliteit_team_aandacht": '''
+<div class="db-rij">
+    <div class="db-kol">
+        <div class="db-sectie-titel">Inkoop per kwaliteit <small>ton, goedgekeurd</small></div>
+        {% for k in inkoop_kwaliteit_lijst %}
+        <div class="db-hbar-rij">
+            <span class="db-hbar-naam">{{ k[0] }}</span>
+            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (k[1]/max_inkoop_kwaliteit*100)|round(1) }}%;"></span></span>
+            <span class="db-hbar-getal">{{ "{:,.0f}".format(k[1]).replace(",", ".") }}t</span>
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen goedgekeurde inkoop.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Team-prestatie</div>
+        {% for t in team_prestaties_dash %}
+        <div class="db-hbar-rij">
+            <span class="db-hbar-naam">{{ t.naam }}</span>
+            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (t.waarde/max_team_waarde*100)|round(1) }}%;"></span></span>
+            <span class="db-hbar-getal">€{{ "{:,.0f}".format(t.waarde).replace(",", ".") }}</span>
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen accountmanagers of orders toegewezen.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Vraagt om aandacht</div>
+        {% if aandacht_items %}
+        {% for a in aandacht_items %}
+        <a class="db-att-item" href="{{ a.url }}">
+            <span class="db-att-dot"></span>
+            <span><span class="db-att-titel">{{ a.titel }}</span>{% if a.sub %}<br><span class="db-att-sub">{{ a.sub }}</span>{% endif %}</span>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="db-leeg">Niets dat aandacht vraagt.</div>
+        {% endif %}
+    </div>
+</div>
+''',
+        "progressie_klanten": '''
+<div class="db-rij">
+    <div class="db-kol">
+        <div class="db-sectie-titel">Progressie met bedrijven</div>
+        {% for f in progressie_funnel %}
+        <div class="db-hbar-rij">
+            <span class="db-hbar-naam">{{ f.label }}</span>
+            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (f.aantal/max_funnel*100)|round(1) }}%;"></span></span>
+            <span class="db-hbar-getal">{{ f.aantal }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Topklanten</div>
+        {% for b in topklanten %}
+        <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
+            <span><span class="db-lijst-naam">{{ b.naam }}</span><br><span class="db-lijst-sub">{{ b.land }}</span></span>
+            <span class="db-lijst-getal">{{ b.volume }} t/j</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Nog geen klanten.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Klanten zonder recent contact <small>&gt;30 dagen</small></div>
+        {% for k in klanten_zonder_contact %}
+        <a class="db-lijst-item" href="/bedrijf/{{ k.naam|urlencode }}">
+            <span class="db-lijst-naam">{{ k.naam }}</span>
+            <span class="db-lijst-getal">{% if k.dagen is not none %}{{ k.dagen }} dagen{% else %}nooit contact{% endif %}</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Alle klanten recent gesproken.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Recent gekoppeld aan contract</div>
+        {% for o in recent_gekoppelde_contracten %}
+        <a class="db-lijst-item" href="/logistiek/orders/{{ o.id }}">
+            <span><span class="db-lijst-naam">{{ o.leverancier }}</span><br><span class="db-lijst-sub">{{ o.contract_referentie }} — {{ o.materiaal }}</span></span>
+            <span class="db-lijst-getal">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} t{% endif %}</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Nog geen leveringen aan een contract gekoppeld.</div>
+        {% endfor %}
+    </div>
+</div>
+''',
+        "concept_orders": '''
+<div class="db-rij">
+    <div class="db-kol">
+        <div class="db-sectie-titel">Eigen orders die actie nodig hebben <small>nog concept</small></div>
+        {% for h in mijn_concept_orders %}
+        <a class="db-lijst-item" href="/handelsorders/{{ h.id }}">
+            <span><span class="db-lijst-naam">{{ h.tegenpartij_naam }}</span><br><span class="db-lijst-sub">{{ h.contractnummer }} — {{ "Inkoop" if h.order_type == "inkoop" else "Verkoop" }}</span></span>
+            <span class="db-lijst-getal">{{ h.hoeveelheid_mt or '—' }}{% if h.hoeveelheid_mt %} t{% endif %}</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Geen openstaande concept-orders.</div>
+        {% endfor %}
+    </div>
+</div>
+''',
+        "leads_prijzen": '''
+<div class="db-rij">
+    <div class="db-kol">
+        <div class="db-sectie-titel">Nieuwe leads</div>
+        {% for b in nieuwe_leads_lijst %}
+        <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
+            <span><span class="db-lijst-naam">{{ b.naam }}</span><br><span class="db-lijst-sub">{{ b.land }}</span></span>
+            <span class="db-lijst-getal">{{ b.volume|default("—", true) }} t/j</span>
+        </a>
+        {% else %}
+        <div class="db-leeg">Geen nieuwe leads zonder status.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Marktprijzen</div>
+        {% for p in marktprijzen_recent %}
+        <div class="db-lijst-item">
+            <span class="db-lijst-naam">{{ p.materiaal }}</span>
+            <span class="db-lijst-getal">€{{ "{:,.2f}".format(p.prijs_per_ton) }}/t</span>
+        </div>
+        {% else %}
+        <div class="db-leeg">Nog geen marktprijzen ingevoerd.</div>
+        {% endfor %}
+    </div>
+    <div class="db-kol">
+        <div class="db-sectie-titel">Transportkosten</div>
+        {% if aantal_forwarders %}
+        <div class="db-lijst-item"><span class="db-lijst-naam">Forwarders</span><span class="db-lijst-getal">{{ aantal_forwarders }}</span></div>
+        <div class="db-lijst-item"><span class="db-lijst-naam">Steden gedekt</span><span class="db-lijst-getal">{{ aantal_transport_steden }}</span></div>
+        {% else %}
+        <div class="db-leeg">Nog geen transportprijzen geimporteerd.</div>
+        {% endif %}
+    </div>
+</div>
+''',
+    }
+    _widget_voorkeur = laad_layout_voorkeuren().get(session.get("gebruikersnaam",""), {})
+    _widget_volgorde = _widget_voorkeur.get("dashboard_widget_volgorde", [])
+    _widget_verborgen = set(_widget_voorkeur.get("dashboard_widget_verborgen", []))
+    _widget_sleutels = list(DASHBOARD_WIDGETS.keys())
+    if _widget_volgorde:
+        _volgorde_index = {s: i for i, s in enumerate(_widget_volgorde)}
+        _widget_sleutels = sorted(_widget_sleutels, key=lambda s: _volgorde_index.get(s, len(_widget_volgorde)))
+    widgets_html = "".join(DASHBOARD_WIDGETS[s] for s in _widget_sleutels if s not in _widget_verborgen)
+
     inhoud = """
 <style>
 .db-topbar { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
@@ -652,174 +846,7 @@ def dashboard():
     </div>
 </div>
 
-<div class="db-rij">
-    <div class="db-kol" style="flex:1.6;">
-        <div class="db-sectie-titel">Ingekocht per maand <small>ton, laatste 12 maanden</small></div>
-        {% if inkoop_serie and inkoop_serie|sum > 0 %}
-        <div class="db-bars">
-            {% for label in maand_labels %}
-            <div class="db-bar-kol">
-                <div class="db-bar" style="height:{{ ((inkoop_serie[loop.index0] / max_inkoop_maand * 100)|round(1)) if max_inkoop_maand else 0 }}%;"></div>
-                <div class="db-bar-label">{{ label }}</div>
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="db-leeg">Nog geen inkoop-shipments om een trend te tonen.</div>
-        {% endif %}
-    </div>
-    <div class="db-kol">
-        <div class="db-sectie-titel">Sales pipeline <small>ingekocht per team, per persoon</small></div>
-        {% for t in pipeline_tellingen %}
-        <div style="margin-bottom:10px;">
-            <div style="font-size:11.5px;font-weight:700;color:var(--gray-700);margin-bottom:3px;">{{ t.team }} — {{ t.totaal }} t</div>
-            {% for p in t.personen %}
-            <div class="db-hbar-rij" style="margin-left:8px;">
-                <span class="db-hbar-naam" style="font-size:11px;">{{ p.naam }}</span>
-                <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (p.hoeveelheid/max_pipeline*100)|round(1) }}%;"></span></span>
-                <span class="db-hbar-getal">{{ p.hoeveelheid }} t</span>
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="db-leeg">Nog geen ingekochte, definitieve orders.</div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="db-rij">
-    <div class="db-kol">
-        <div class="db-sectie-titel">Inkoop per kwaliteit <small>ton, goedgekeurd</small></div>
-        {% for k in inkoop_kwaliteit_lijst %}
-        <div class="db-hbar-rij">
-            <span class="db-hbar-naam">{{ k[0] }}</span>
-            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (k[1]/max_inkoop_kwaliteit*100)|round(1) }}%;"></span></span>
-            <span class="db-hbar-getal">{{ "{:,.0f}".format(k[1]).replace(",", ".") }}t</span>
-        </div>
-        {% else %}
-        <div class="db-leeg">Nog geen goedgekeurde inkoop.</div>
-        {% endfor %}
-    </div>
-    <div class="db-kol">
-        <div class="db-sectie-titel">Team-prestatie</div>
-        {% for t in team_prestaties_dash %}
-        <div class="db-hbar-rij">
-            <span class="db-hbar-naam">{{ t.naam }}</span>
-            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (t.waarde/max_team_waarde*100)|round(1) }}%;"></span></span>
-            <span class="db-hbar-getal">€{{ "{:,.0f}".format(t.waarde).replace(",", ".") }}</span>
-        </div>
-        {% else %}
-        <div class="db-leeg">Nog geen accountmanagers of orders toegewezen.</div>
-        {% endfor %}
-    </div>
-    <div class="db-kol">
-        <div class="db-sectie-titel">Vraagt om aandacht</div>
-        {% if aandacht_items %}
-        {% for a in aandacht_items %}
-        <a class="db-att-item" href="{{ a.url }}">
-            <span class="db-att-dot"></span>
-            <span><span class="db-att-titel">{{ a.titel }}</span>{% if a.sub %}<br><span class="db-att-sub">{{ a.sub }}</span>{% endif %}</span>
-        </a>
-        {% endfor %}
-        {% else %}
-        <div class="db-leeg">Niets dat aandacht vraagt.</div>
-        {% endif %}
-    </div>
-</div>
-
-<div class="db-rij">
-    <div class="db-kol">
-        <div class="db-sectie-titel">Progressie met bedrijven</div>
-        {% for f in progressie_funnel %}
-        <div class="db-hbar-rij">
-            <span class="db-hbar-naam">{{ f.label }}</span>
-            <span class="db-hbar-track"><span class="db-hbar-fill" style="width:{{ (f.aantal/max_funnel*100)|round(1) }}%;"></span></span>
-            <span class="db-hbar-getal">{{ f.aantal }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    <div class="db-kol">
-        <div class="db-sectie-titel">Topklanten</div>
-        {% for b in topklanten %}
-        <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
-            <span><span class="db-lijst-naam">{{ b.naam }}</span><br><span class="db-lijst-sub">{{ b.land }}</span></span>
-            <span class="db-lijst-getal">{{ b.volume }} t/j</span>
-        </a>
-        {% else %}
-        <div class="db-leeg">Nog geen klanten.</div>
-        {% endfor %}
-    </div>
-    <div class="db-kol">
-        <div class="db-sectie-titel">Klanten zonder recent contact <small>&gt;30 dagen</small></div>
-        {% for k in klanten_zonder_contact %}
-        <a class="db-lijst-item" href="/bedrijf/{{ k.naam|urlencode }}">
-            <span class="db-lijst-naam">{{ k.naam }}</span>
-            <span class="db-lijst-getal">{% if k.dagen is not none %}{{ k.dagen }} dagen{% else %}nooit contact{% endif %}</span>
-        </a>
-        {% else %}
-        <div class="db-leeg">Alle klanten recent gesproken.</div>
-        {% endfor %}
-    </div>
-    <div class="db-kol">
-        <div class="db-sectie-titel">Recent gekoppeld aan contract</div>
-        {% for o in recent_gekoppelde_contracten %}
-        <a class="db-lijst-item" href="/logistiek/orders/{{ o.id }}">
-            <span><span class="db-lijst-naam">{{ o.leverancier }}</span><br><span class="db-lijst-sub">{{ o.contract_referentie }} — {{ o.materiaal }}</span></span>
-            <span class="db-lijst-getal">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} t{% endif %}</span>
-        </a>
-        {% else %}
-        <div class="db-leeg">Nog geen leveringen aan een contract gekoppeld.</div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="db-rij">
-    <div class="db-kol">
-        <div class="db-sectie-titel">Eigen orders die actie nodig hebben <small>nog concept</small></div>
-        {% for h in mijn_concept_orders %}
-        <a class="db-lijst-item" href="/handelsorders/{{ h.id }}">
-            <span><span class="db-lijst-naam">{{ h.tegenpartij_naam }}</span><br><span class="db-lijst-sub">{{ h.contractnummer }} — {{ "Inkoop" if h.order_type == "inkoop" else "Verkoop" }}</span></span>
-            <span class="db-lijst-getal">{{ h.hoeveelheid_mt or '—' }}{% if h.hoeveelheid_mt %} t{% endif %}</span>
-        </a>
-        {% else %}
-        <div class="db-leeg">Geen openstaande concept-orders.</div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="db-rij">
-    <div class="db-kol">
-        <div class="db-sectie-titel">Nieuwe leads</div>
-        {% for b in nieuwe_leads_lijst %}
-        <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
-            <span><span class="db-lijst-naam">{{ b.naam }}</span><br><span class="db-lijst-sub">{{ b.land }}</span></span>
-            <span class="db-lijst-getal">{{ b.volume|default("—", true) }} t/j</span>
-        </a>
-        {% else %}
-        <div class="db-leeg">Geen nieuwe leads zonder status.</div>
-        {% endfor %}
-    </div>
-    <div class="db-kol">
-        <div class="db-sectie-titel">Marktprijzen</div>
-        {% for p in marktprijzen_recent %}
-        <div class="db-lijst-item">
-            <span class="db-lijst-naam">{{ p.materiaal }}</span>
-            <span class="db-lijst-getal">€{{ "{:,.2f}".format(p.prijs_per_ton) }}/t</span>
-        </div>
-        {% else %}
-        <div class="db-leeg">Nog geen marktprijzen ingevoerd.</div>
-        {% endfor %}
-    </div>
-    <div class="db-kol">
-        <div class="db-sectie-titel">Transportkosten</div>
-        {% if aantal_forwarders %}
-        <div class="db-lijst-item"><span class="db-lijst-naam">Forwarders</span><span class="db-lijst-getal">{{ aantal_forwarders }}</span></div>
-        <div class="db-lijst-item"><span class="db-lijst-naam">Steden gedekt</span><span class="db-lijst-getal">{{ aantal_transport_steden }}</span></div>
-        {% else %}
-        <div class="db-leeg">Nog geen transportprijzen geimporteerd.</div>
-        {% endif %}
-    </div>
-</div>
+WIDGETS_HIER
 
 <div class="db-ph-titel">Nog te koppelen</div>
 <div class="db-ph-sub">Deze onderdelen staan klaar in het dashboard maar hebben nog geen datamodel — geen verzonnen cijfers, wel alvast de plek.</div>
@@ -845,6 +872,7 @@ def dashboard():
 <div class="db-leeg">Nog geen teamactiviteit.</div>
 {% endif %}
     """
+    inhoud = inhoud.replace("WIDGETS_HIER", widgets_html)
     pagina = render_simple_page("Dashboard", "dashboard", inhoud)
 
     if gedekt_volume_maand >= 1_000_000:
