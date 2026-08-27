@@ -47,7 +47,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
         "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
         "login_pogingen.json", "voorraadwaardering.json", "voorraadmutaties_periode.json", "voorraadlocaties.json",
-        "productiemutaties.json",
+        "productiemutaties.json", "organisatiestructuur.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -2185,4 +2185,25 @@ def laad_productiemutaties():
 
 def bewaar_productiemutaties(data):
     with open(PRODUCTIEMUTATIES_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ============================================================
+# Organisatiestructuur: beheerbare Afdelingen, elk met een lijst Teams.
+# Bijvoorbeeld: {"Papier": ["UK", "Spanje", "Italie", "Duitsland"], "Plastic": [],
+# "Backoffice": []}. Dit is een ANDER concept dan AFDELINGEN hierboven (dat is de
+# vaste rollenlijst voor toegangsrechten — accountmanager/backoffice/logistiek/
+# weegbrug/finance). Deze structuur is puur organisatorisch: wie hoort bij welk
+# team, voor groepering/filtering en het eigen 'team'-veld op een gebruiker.
+# ============================================================
+ORGANISATIESTRUCTUUR_FILE = datapad("organisatiestructuur.json")
+
+def laad_organisatiestructuur():
+    try:
+        with open(ORGANISATIESTRUCTUUR_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_organisatiestructuur(data):
+    with open(ORGANISATIESTRUCTUUR_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

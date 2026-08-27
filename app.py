@@ -35,6 +35,7 @@ from core import (
     companies_house_status, is_ch_financieel_gezond, laad_transport_data, laad_forwarder_wachtwoorden,
     bewaar_forwarder_wachtwoorden, is_account_tijdelijk_geblokkeerd, registreer_mislukte_inlogpoging,
     reset_mislukte_inlogpogingen, haal_of_maak_csrf_token,
+    laad_organisatiestructuur, bewaar_organisatiestructuur,
     PAGINA_HOOFD, sidebar_html, render_simple_page, is_huidige_gebruiker_admin, vereist_admin_of_403,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
@@ -3219,6 +3220,96 @@ def financiele_inzichten():
                                     nog_te_factureren=nog_te_factureren, contract_vergelijking=contract_vergelijking)
 
 
+@app.route("/organisatie-beheer", methods=["GET", "POST"])
+def organisatie_beheer():
+    """Beheerpagina voor de organisatiestructuur: Afdelingen (Papier, Plastic,
+    Backoffice, ...), elk met een lijst Teams (bv. Papier -> UK, Spanje, Italie,
+    Duitsland). Dit is puur organisatorisch (groepering/filtering, en het
+    'team'-veld van een gebruiker) — een ANDER concept dan de vaste toegangsrol
+    (accountmanager/backoffice/logistiek/weegbrug/finance), die bepaalt welke
+    pagina's iemand mag zien en apart blijft bij het aanmaken van een gebruiker."""
+    if not is_huidige_gebruiker_admin():
+        pagina = render_simple_page("Geen toegang", "instellingen", '<div class="page-title">Geen toegang</div><div class="lege-staat">Alleen admins kunnen de organisatiestructuur beheren.</div>')
+        return render_template_string(pagina), 403
+
+    if request.method == "POST":
+        structuur = laad_organisatiestructuur()
+        actie = request.form.get("actie", "")
+        if actie == "afdeling_toevoegen":
+            naam = request.form.get("afdeling_naam", "").strip()
+            if naam and naam not in structuur:
+                structuur[naam] = []
+                bewaar_organisatiestructuur(structuur)
+        elif actie == "afdeling_verwijderen":
+            naam = request.form.get("afdeling_naam", "").strip()
+            if naam in structuur:
+                del structuur[naam]
+                bewaar_organisatiestructuur(structuur)
+        elif actie == "team_toevoegen":
+            afdeling_naam = request.form.get("afdeling_naam", "").strip()
+            team_naam = request.form.get("team_naam", "").strip()
+            if afdeling_naam in structuur and team_naam and team_naam not in structuur[afdeling_naam]:
+                structuur[afdeling_naam].append(team_naam)
+                bewaar_organisatiestructuur(structuur)
+        elif actie == "team_verwijderen":
+            afdeling_naam = request.form.get("afdeling_naam", "").strip()
+            team_naam = request.form.get("team_naam", "").strip()
+            if afdeling_naam in structuur and team_naam in structuur[afdeling_naam]:
+                structuur[afdeling_naam].remove(team_naam)
+                bewaar_organisatiestructuur(structuur)
+        return redirect(url_for("organisatie_beheer"))
+
+    structuur = laad_organisatiestructuur()
+    inhoud = """
+<div class="page-title">Afdelingen & Teams</div>
+<a href="/gebruikers-beheer" style="display:inline-block;margin-bottom:16px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">← Gebruikers beheren</a>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Organisatorische indeling — wie hoort bij welk team. Los van de toegangsrol (die regel je bij Gebruikers beheren).</p>
+
+<div style="max-width:520px;margin-bottom:24px;">
+    <form method="POST" style="display:flex;gap:8px;">
+        <input type="hidden" name="actie" value="afdeling_toevoegen">
+        <input type="text" name="afdeling_naam" placeholder="Nieuwe afdeling (bv. Papier, Plastic, Backoffice)" required style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
+        <button type="submit" style="padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">+ Afdeling</button>
+    </form>
+</div>
+
+{% for afdeling_naam, teams in structuur.items() %}
+<div style="border:none;border-top:2px solid var(--gray-800);padding-top:10px;margin-bottom:24px;max-width:520px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-weight:800;color:var(--gray-800);font-size:14px;">{{ afdeling_naam }}</div>
+        <form method="POST" onsubmit="return confirm('Afdeling {{ afdeling_naam }} verwijderen? Bestaande gebruikers behouden hun huidige team-waarde, maar die is dan niet meer aan een afdeling gekoppeld.');" style="margin:0;">
+            <input type="hidden" name="actie" value="afdeling_verwijderen">
+            <input type="hidden" name="afdeling_naam" value="{{ afdeling_naam }}">
+            <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:12px;">Verwijderen</button>
+        </form>
+    </div>
+    {% for team_naam in teams %}
+    <div style="display:flex;align-items:center;padding:5px 0;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="flex:1;color:var(--gray-700);">{{ team_naam }}</span>
+        <form method="POST" style="margin:0;">
+            <input type="hidden" name="actie" value="team_verwijderen">
+            <input type="hidden" name="afdeling_naam" value="{{ afdeling_naam }}">
+            <input type="hidden" name="team_naam" value="{{ team_naam }}">
+            <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:11px;">✕</button>
+        </form>
+    </div>
+    {% else %}
+    <div style="font-size:11.5px;color:var(--gray-300);padding:5px 0;">Nog geen teams.</div>
+    {% endfor %}
+    <form method="POST" style="display:flex;gap:6px;margin-top:8px;">
+        <input type="hidden" name="actie" value="team_toevoegen">
+        <input type="hidden" name="afdeling_naam" value="{{ afdeling_naam }}">
+        <input type="text" name="team_naam" placeholder="Nieuw team (bv. UK, Spanje...)" style="flex:1;padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12px;font-family:inherit;">
+        <button type="submit" style="padding:6px 12px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;">+ Team</button>
+    </form>
+</div>
+{% else %}
+<div class="lege-staat">Nog geen afdelingen. Begin hierboven met de eerste.</div>
+{% endfor %}
+    """
+    pagina = render_simple_page("Afdelingen & Teams", "instellingen", inhoud)
+    return render_template_string(pagina, structuur=structuur)
+
 @app.route("/gebruikers-beheer", methods=["GET", "POST"])
 def gebruikers_beheer():
     if not is_huidige_gebruiker_admin():
@@ -3232,6 +3323,7 @@ def gebruikers_beheer():
         if actie == "toevoegen":
             nieuwe_naam = request.form.get("gebruikersnaam", "").strip()
             team = request.form.get("team", "").strip()
+            org_afdeling_nieuw = request.form.get("org_afdeling", "").strip()
             is_admin_nieuw = request.form.get("is_admin") == "on"
             afdeling_nieuw = request.form.get("afdeling", "")
             rol_nieuw = request.form.get("rol", "medewerker")
@@ -3243,7 +3335,8 @@ def gebruikers_beheer():
             else:
                 nieuw_wachtwoord = genereer_wachtwoord()
                 users[nieuwe_naam] = {
-                    "wachtwoord": generate_password_hash(nieuw_wachtwoord), "team": team, "is_admin": is_admin_nieuw,
+                    "wachtwoord": generate_password_hash(nieuw_wachtwoord), "team": team,
+                    "org_afdeling": org_afdeling_nieuw, "is_admin": is_admin_nieuw,
                     "afdeling": afdeling_nieuw if afdeling_nieuw in AFDELINGEN else "",
                     "rol": rol_nieuw if rol_nieuw in ROLLEN else "medewerker",
                 }
@@ -3284,6 +3377,7 @@ def gebruikers_beheer():
     users = laad_users()
     inhoud = """
     <div class="page-title">Gebruikers beheren</div>
+    <a href="/organisatie-beheer" style="display:inline-block;margin-bottom:16px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">Afdelingen &amp; Teams beheren →</a>
     {% if bericht %}<div style="background:{{ '#f0fdf4' if nieuw_wachtwoord or 'verwijderd' in bericht or 'nu' in bericht else '#fef2f2' }};color:{{ '#16a34a' if nieuw_wachtwoord or 'verwijderd' in bericht or 'nu' in bericht else '#dc2626' }};padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;">{{ bericht }}
         {% if nieuw_wachtwoord %}<br><b>Wachtwoord: <code style="background:#fff;padding:3px 8px;border-radius:4px;">{{ nieuw_wachtwoord }}</code></b><br><span style="font-size:12px;">Bewaar dit nu — dit wordt niet nogmaals getoond. Geef het handmatig door aan de gebruiker.</span>{% endif %}
     </div>{% endif %}
@@ -3293,9 +3387,15 @@ def gebruikers_beheer():
         <form method="POST">
             <input type="hidden" name="actie" value="toevoegen">
             <input type="text" name="gebruikersnaam" placeholder="Gebruikersnaam (bv. leander)" required style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
-            <input type="text" name="team" placeholder="Team (bv. papier-nl)" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+            <select name="org_afdeling" id="org_afdeling_select" onchange="verversOrgTeams()" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+                <option value="">Geen organisatie-afdeling</option>
+                {% for a in organisatiestructuur.keys() %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+            </select>
+            <select name="team" id="org_team_select" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
+                <option value="">Geen team</option>
+            </select>
             <select name="afdeling" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
-                <option value="">Geen afdeling</option>
+                <option value="">Geen toegangsrol</option>
                 {% for a in afdelingen %}<option value="{{ a }}">{{ afdeling_labels[a] }}</option>{% endfor %}
             </select>
             <select name="rol" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
@@ -3349,10 +3449,27 @@ def gebruikers_beheer():
         </div>
         {% endfor %}
     </div>
+    <script>
+    var ORGANISATIESTRUCTUUR = {{ organisatiestructuur_json|safe }};
+    function verversOrgTeams() {
+        var afdelingSelect = document.getElementById("org_afdeling_select");
+        var teamSelect = document.getElementById("org_team_select");
+        if (!afdelingSelect || !teamSelect) return;
+        var teams = ORGANISATIESTRUCTUUR[afdelingSelect.value] || [];
+        teamSelect.innerHTML = '<option value="">Geen team</option>';
+        teams.forEach(function(t) {
+            var optie = document.createElement("option");
+            optie.value = t;
+            optie.textContent = t;
+            teamSelect.appendChild(optie);
+        });
+    }
+    </script>
     """
     pagina = render_simple_page("Gebruikers beheren", "instellingen", inhoud)
     return render_template_string(pagina, users=users, bericht=bericht, nieuw_wachtwoord=nieuw_wachtwoord,
-                                    afdelingen=AFDELINGEN, afdeling_labels=AFDELING_LABELS, rollen=ROLLEN, rol_labels=ROL_LABELS)
+                                    afdelingen=AFDELINGEN, afdeling_labels=AFDELING_LABELS, rollen=ROLLEN, rol_labels=ROL_LABELS,
+                                    organisatiestructuur=laad_organisatiestructuur(), organisatiestructuur_json=json.dumps(laad_organisatiestructuur()))
 
 @app.route("/instellingen")
 def instellingen():
