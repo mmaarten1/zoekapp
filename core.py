@@ -47,7 +47,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
         "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
         "login_pogingen.json", "voorraadwaardering.json", "voorraadmutaties_periode.json", "voorraadlocaties.json",
-        "productiemutaties.json", "organisatiestructuur.json",
+        "productiemutaties.json", "organisatiestructuur.json", "layout_voorkeuren.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -1645,6 +1645,37 @@ PAGINA_HOOFD = """<!DOCTYPE html>
 </head>
 """
 
+ZIJBALK_ITEMS = [
+    ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
+    ("live_operations", "/live-operations", "OP", "Live Operaties"),
+    ("inkoop_planning", "/logistiek/inkoop-planning", "IP", "Inkoop-planning"),
+    ("verkoop_planning", "/logistiek/verkoop-planning", "VP", "Verkoop-planning"),
+    ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),
+    ("dashboard", "/dashboard", "DB", "Dashboard"),
+    ("logistieke_orders", "/logistiek/orders", "LO", "Orders logistiek"),
+    ("notities", "/notities-overzicht", "NT", "Notities"),
+    ("inzichten_logistiek", "/inzichten/logistiek", "IL", "Logistieke Inzichten"),
+    ("zoeken", "/", "ZK", "Zoeken"),
+    ("wereldkaart", "/wereldkaart", "WM", "World Map"),
+    ("inzichten", "/inzichten", "IZ", "Inzichten"),
+    ("materialen", "/materialen", "MT", "Materials"),
+    ("klanten", "/klanten", "KL", "Klanten"),
+    ("leveranciers", "/leveranciers", "LV", "Leveranciers"),
+    ("certificeringen", "/certificeringen", "CF", "Certifications"),
+    ("contacten", "/contacten", "CT", "Contacten"),
+    ("orders", "/orders", "OR", "Orders"),
+    ("handelsorders", "/handelsorders", "HO", "Handelsorders"),
+    ("logistiek", "/logistiek", "LG", "Logistiek"),
+    ("transport_overview", "/transport-overview", "TO", "Transport Overview"),
+    ("transport_planning", "/transport-planning", "TP", "Transport Planning"),
+    ("transport_rates", "/transport-rates", "TR", "Transport Rates"),
+    ("facturen", "/facturen", "FA", "Facturen"),
+    ("inzichten_financieel", "/inzichten/financieel", "IF", "Financiële Inzichten"),
+    ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
+    ("voorraad", "/voorraad", "VR", "Voorraad"),
+    ("instellingen", "/instellingen", "IN", "Instellingen"),
+]
+
 def sidebar_html(actief):
     """
     LET OP bij een nieuw zijbalk-item: de zoekpagina (zoeken.py, route '/')
@@ -1658,39 +1689,15 @@ def sidebar_html(actief):
     except Exception:
         aantal_open_orders = 0
 
-    items = [
-        ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
-        ("live_operations", "/live-operations", "OP", "Live Operaties"),
-        ("inkoop_planning", "/logistiek/inkoop-planning", "IP", "Inkoop-planning"),
-        ("verkoop_planning", "/logistiek/verkoop-planning", "VP", "Verkoop-planning"),
-        ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),
-        ("dashboard", "/dashboard", "DB", "Dashboard"),
-        ("logistieke_orders", "/logistiek/orders", "LO", "Orders logistiek"),
-        ("notities", "/notities-overzicht", "NT", "Notities"),
-        ("inzichten_logistiek", "/inzichten/logistiek", "IL", "Logistieke Inzichten"),
-        ("zoeken", "/", "ZK", "Zoeken"),
-        ("wereldkaart", "/wereldkaart", "WM", "World Map"),
-        ("inzichten", "/inzichten", "IZ", "Inzichten"),
-        ("materialen", "/materialen", "MT", "Materials"),
-        ("klanten", "/klanten", "KL", "Klanten"),
-        ("leveranciers", "/leveranciers", "LV", "Leveranciers"),
-        ("certificeringen", "/certificeringen", "CF", "Certifications"),
-        ("contacten", "/contacten", "CT", "Contacten"),
-        ("orders", "/orders", "OR", "Orders"),
-        ("handelsorders", "/handelsorders", "HO", "Handelsorders"),
-        ("logistiek", "/logistiek", "LG", "Logistiek"),
-        ("transport_overview", "/transport-overview", "TO", "Transport Overview"),
-        ("transport_planning", "/transport-planning", "TP", "Transport Planning"),
-        ("transport_rates", "/transport-rates", "TR", "Transport Rates"),
-        ("facturen", "/facturen", "FA", "Facturen"),
-        ("inzichten_financieel", "/inzichten/financieel", "IF", "Financiële Inzichten"),
-        ("marktprijzen", "/marktprijzen", "MP", "Marktprijzen"),
-        ("voorraad", "/voorraad", "VR", "Voorraad"),
-        ("instellingen", "/instellingen", "IN", "Instellingen"),
-    ]
+    items = ZIJBALK_ITEMS
     links = ""
-    for key, href, icoon, label in items:
-        if not mag_pagina_zien(key):
+    _layout_voorkeur = laad_layout_voorkeuren().get(session.get("gebruikersnaam",""), {})
+    _volgorde = _layout_voorkeur.get("sidebar_volgorde", [])
+    _verborgen = set(_layout_voorkeur.get("sidebar_verborgen", []))
+    _zichtbare_items = [item for item in items if mag_pagina_zien(item[0])]
+    _zichtbare_items = _sorteer_op_voorkeur(_zichtbare_items, _volgorde)
+    for key, href, icoon, label in _zichtbare_items:
+        if key in _verborgen and key != actief:
             continue
         cls = "sidebar-link active" if key == actief else "sidebar-link"
         badge_html = ""
@@ -1726,6 +1733,7 @@ def sidebar_html(actief):
             <div class="sidebar-me-naam">GEBRUIKERSNAAM_HIER</div>
             <div class="sidebar-me-rol">TEAM_HIER</div>
         </div>
+        <a class="sidebar-me-uit" href="/instellingen/layout" title="Mijn zijbalk aanpassen" style="margin-right:4px;">⚙</a>
         <a class="sidebar-me-uit" href="/logout" title="Uitloggen">⏻</a>
     </div>
 </aside>
@@ -2207,3 +2215,33 @@ def laad_organisatiestructuur():
 def bewaar_organisatiestructuur(data):
     with open(ORGANISATIESTRUCTUUR_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ============================================================
+# Persoonlijke layout-voorkeuren per gebruiker: eigen volgorde en
+# zichtbaarheid van de zijbalk-items, en eigen volgorde/zichtbaarheid van
+# Dashboard-secties. Bewust géén drag-and-drop (JS-afhankelijk, lastiger
+# betrouwbaar te testen) maar simpele omhoog/omlaag-knoppen — die werken
+# altijd, ook zonder JavaScript.
+# ============================================================
+LAYOUT_VOORKEUREN_FILE = datapad("layout_voorkeuren.json")
+
+def laad_layout_voorkeuren():
+    try:
+        with open(LAYOUT_VOORKEUREN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def bewaar_layout_voorkeuren(data):
+    with open(LAYOUT_VOORKEUREN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _sorteer_op_voorkeur(items, opgeslagen_volgorde, sleutel_index=0):
+    """Sorteert een lijst van items (elk item heeft de identificerende sleutel op
+    sleutel_index) op basis van een opgeslagen volgorde (lijst van sleutels).
+    Items die niet in de opgeslagen volgorde voorkomen (bv. nieuw toegevoegde
+    pagina's) komen aan het einde, in hun oorspronkelijke volgorde."""
+    if not opgeslagen_volgorde:
+        return items
+    volgorde_index = {sleutel: i for i, sleutel in enumerate(opgeslagen_volgorde)}
+    return sorted(items, key=lambda item: volgorde_index.get(item[sleutel_index], len(opgeslagen_volgorde) + items.index(item)))

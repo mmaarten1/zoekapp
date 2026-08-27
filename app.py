@@ -36,6 +36,7 @@ from core import (
     bewaar_forwarder_wachtwoorden, is_account_tijdelijk_geblokkeerd, registreer_mislukte_inlogpoging,
     reset_mislukte_inlogpogingen, haal_of_maak_csrf_token,
     laad_organisatiestructuur, bewaar_organisatiestructuur,
+    laad_layout_voorkeuren, bewaar_layout_voorkeuren, ZIJBALK_ITEMS, _sorteer_op_voorkeur,
     PAGINA_HOOFD, sidebar_html, render_simple_page, is_huidige_gebruiker_admin, vereist_admin_of_403,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
@@ -3309,6 +3310,94 @@ def organisatie_beheer():
     """
     pagina = render_simple_page("Afdelingen & Teams", "instellingen", inhoud)
     return render_template_string(pagina, structuur=structuur)
+
+@app.route("/instellingen/layout", methods=["GET", "POST"])
+def layout_instellingen():
+    """Persoonlijke zijbalk-volgorde en -zichtbaarheid, per gebruiker. Bewust
+    omhoog/omlaag-knoppen i.p.v. drag-and-drop: die werken altijd, ook zonder
+    JavaScript, en zijn betrouwbaarder te testen."""
+    gebruikersnaam = session.get("gebruikersnaam", "")
+    alle_voorkeuren = laad_layout_voorkeuren()
+    mijn_voorkeur = alle_voorkeuren.setdefault(gebruikersnaam, {})
+
+    if request.method == "POST":
+        actie = request.form.get("actie", "")
+        zichtbare_keys = [item[0] for item in ZIJBALK_ITEMS if mag_pagina_zien(item[0])]
+        huidige_volgorde = mijn_voorkeur.get("sidebar_volgorde") or zichtbare_keys
+        # Nieuwe/nog-niet-opgeslagen items altijd aan het einde toevoegen, zodat
+        # de omhoog/omlaag-knoppen op een volledige, actuele lijst werken.
+        for k in zichtbare_keys:
+            if k not in huidige_volgorde:
+                huidige_volgorde.append(k)
+        huidige_volgorde = [k for k in huidige_volgorde if k in zichtbare_keys]
+        verborgen = set(mijn_voorkeur.get("sidebar_verborgen", []))
+
+        if actie == "omhoog":
+            key = request.form.get("key", "")
+            if key in huidige_volgorde:
+                i = huidige_volgorde.index(key)
+                if i > 0:
+                    huidige_volgorde[i-1], huidige_volgorde[i] = huidige_volgorde[i], huidige_volgorde[i-1]
+        elif actie == "omlaag":
+            key = request.form.get("key", "")
+            if key in huidige_volgorde:
+                i = huidige_volgorde.index(key)
+                if i < len(huidige_volgorde) - 1:
+                    huidige_volgorde[i+1], huidige_volgorde[i] = huidige_volgorde[i], huidige_volgorde[i+1]
+        elif actie == "toggle_zichtbaar":
+            key = request.form.get("key", "")
+            if key in verborgen:
+                verborgen.discard(key)
+            else:
+                verborgen.add(key)
+        elif actie == "standaard_herstellen":
+            huidige_volgorde = []
+            verborgen = set()
+
+        mijn_voorkeur["sidebar_volgorde"] = huidige_volgorde
+        mijn_voorkeur["sidebar_verborgen"] = list(verborgen)
+        alle_voorkeuren[gebruikersnaam] = mijn_voorkeur
+        bewaar_layout_voorkeuren(alle_voorkeuren)
+        return redirect(url_for("layout_instellingen"))
+
+    zichtbare_items = [item for item in ZIJBALK_ITEMS if mag_pagina_zien(item[0])]
+    volgorde = mijn_voorkeur.get("sidebar_volgorde", [])
+    zichtbare_items = _sorteer_op_voorkeur(zichtbare_items, volgorde)
+    verborgen_set = set(mijn_voorkeur.get("sidebar_verborgen", []))
+
+    inhoud = """
+<div class="page-title">Mijn zijbalk</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Zet de volgorde die voor jou het handigst werkt, en verberg wat je niet gebruikt.</p>
+
+<div style="border:none;border-top:1px solid var(--gray-200);max-width:420px;">
+    {% for key, href, icoon, label in zichtbare_items %}
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--gray-100);font-size:13px;{% if key in verborgen_set %}opacity:0.4;{% endif %}">
+        <span style="flex:1;color:var(--gray-700);">{{ label }}</span>
+        <form method="POST" style="margin:0;display:inline;">
+            <input type="hidden" name="actie" value="toggle_zichtbaar">
+            <input type="hidden" name="key" value="{{ key }}">
+            <button type="submit" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:11px;padding:2px 6px;" title="{{ 'Weer tonen' if key in verborgen_set else 'Verbergen' }}">{{ '👁' if key in verborgen_set else '—' }}</button>
+        </form>
+        <form method="POST" style="margin:0;display:inline;">
+            <input type="hidden" name="actie" value="omhoog">
+            <input type="hidden" name="key" value="{{ key }}">
+            <button type="submit" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:13px;padding:2px 6px;" title="Omhoog">↑</button>
+        </form>
+        <form method="POST" style="margin:0;display:inline;">
+            <input type="hidden" name="actie" value="omlaag">
+            <input type="hidden" name="key" value="{{ key }}">
+            <button type="submit" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:13px;padding:2px 6px;" title="Omlaag">↓</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+<form method="POST" style="margin-top:16px;">
+    <input type="hidden" name="actie" value="standaard_herstellen">
+    <button type="submit" style="padding:7px 14px;background:#fff;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;cursor:pointer;">Standaardvolgorde herstellen</button>
+</form>
+    """
+    pagina = render_simple_page("Mijn zijbalk", "instellingen", inhoud)
+    return render_template_string(pagina, zichtbare_items=zichtbare_items, verborgen_set=verborgen_set)
 
 @app.route("/gebruikers-beheer", methods=["GET", "POST"])
 def gebruikers_beheer():
