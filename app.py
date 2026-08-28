@@ -1,7 +1,9 @@
 import os
 import secrets
 import json
-from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
+import io
+import csv
+from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 import requests
 import re
@@ -44,6 +46,7 @@ from core import (
     mag_pagina_zien, vereist_afdeling_of_403, PAGINA_AFDELINGEN,
     laad_containers, bewaar_containers, CONTAINER_TYPES, CONTAINER_STATUSSEN,
     laad_logistieke_orders, bewaar_logistieke_orders, laad_weegbrug, laad_documenten,
+    laad_handelsorders, laad_transport_planning,
     laad_bedrijfslogo_instelling, bewaar_bedrijfslogo_instelling, LOGO_MAP, LOGO_POSITIES,
 )
 
@@ -3086,13 +3089,65 @@ def genereer_wachtwoord():
     tekens = string.ascii_letters + string.digits
     return "".join(secrets.choice(tekens) for _ in range(10))
 
+def _bereken_contractvergelijking_financieel():
+    """Herbruikbaar voor zowel de Financiële Inzichten-pagina als de CSV-export
+    ervan. Vervangt het oude, losse contracten.json/shipments.json-systeem door
+    alle Definitieve Handelsorders (inkoop én verkoop), met geleverd/uitgeleverd
+    volume via logistieke_orders (vrachtwagen) en transport_planning (schip) —
+    zelfde principe als Contractvoortgang bij Commerciële Inzichten."""
+    def _geleverd_op_contract(contractnummer):
+        _via_orders = sum(
+            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            for o in laad_logistieke_orders()
+            if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
+        )
+        _via_transport = sum(
+            parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+            for t in laad_transport_planning()
+            if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
+        )
+        return round(_via_orders + _via_transport, 3)
+
+    contract_vergelijking = []
+    for h in laad_handelsorders():
+        if h.get("status") != "Definitief":
+            continue
+        try:
+            contract_vol = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+        except (ValueError, TypeError):
+            contract_vol = 0.0
+        werkelijk_vol = _geleverd_op_contract(h["contractnummer"])
+        contract_vergelijking.append({
+            "referentie": h.get("contractnummer",""), "tegenpartij": h.get("tegenpartij_naam",""), "materiaal": h.get("materiaal",""),
+            "order_type": "Inkoop" if h.get("order_type") == "inkoop" else "Verkoop",
+            "contract_volume": round(contract_vol,1), "werkelijk_volume": round(werkelijk_vol,1),
+            "verschil": round(werkelijk_vol - contract_vol, 1),
+        })
+    return contract_vergelijking
+
+@app.route("/inzichten/financieel/export/contractvergelijking")
+def export_contractvergelijking_csv():
+    """CSV-export van Contractvolume vs. werkelijk volume op Financiële Inzichten."""
+    _guard = vereist_afdeling_of_403("inzichten_financieel")
+    if _guard: return _guard
+
+    contract_vergelijking = _bereken_contractvergelijking_financieel()
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Contractnummer", "Type", "Tegenpartij", "Materiaal", "Contractvolume (MT)", "Werkelijk volume (MT)", "Verschil (MT)"])
+    for c in contract_vergelijking:
+        schrijver.writerow([c["referentie"], c["order_type"], c["tegenpartij"], c["materiaal"], c["contract_volume"], c["werkelijk_volume"], c["verschil"]])
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=contractvergelijking.csv"})
+
 @app.route("/inzichten/financieel")
 def financiele_inzichten():
     """Financiële Inzichten — alleen met echt berekenbare data. Bewust NIET gebouwd:
     'Claims' en 'Credit notes' (geen datamodel hiervoor aanwezig), en 'Winst komende
     30 dagen' (zelfde marge-datagat als bij Commerciële Inzichten — geen gekoppelde
-    inkoopprijs). Voor 'contractwaarde vs. werkelijke waarde' bestaat alleen een
-    contractVOLUME-veld (geen contractprijs), dus dat is hier volume, geen euro's."""
+    inkoopprijs). 'Contractvolume vs. werkelijke waarde' toont bewust volume, geen
+    euro's — dit is een volume-controle (klopt de levering met het contract), geen
+    winst/margecijfer; die horen bij Commerciële Inzichten."""
     _guard = vereist_afdeling_of_403("inzichten_financieel")
     if _guard: return _guard
 
@@ -3137,24 +3192,10 @@ def financiele_inzichten():
     alle_logistieke_orders = laad_logistieke_orders()
     nog_te_factureren = [o for o in alle_logistieke_orders if o.get("status") == "Klaar voor Finance"]
 
-    # --- Contractvolume vs. werkelijk geleverd volume (LET OP: volume, geen waarde — zie docstring) ---
-    alle_contracten = laad_contracten()
-    alle_shipments = laad_shipments()
-    contract_vergelijking = []
-    for c in alle_contracten:
-        try:
-            contract_vol = float(str(c.get("contract_volume","0")).replace(",",""))
-        except (ValueError, TypeError):
-            contract_vol = 0
-        werkelijk_vol = sum(
-            parse_hoeveelheid_getal(s.get("werkelijk_hoeveelheid","")) for s in alle_shipments
-            if s.get("materiaal","") == c.get("materiaal","") and (s.get("origin_leverancier","") == c.get("tegenpartij","") or s.get("destination_naam","") == c.get("tegenpartij",""))
-        )
-        contract_vergelijking.append({
-            "referentie": c.get("referentie",""), "tegenpartij": c.get("tegenpartij",""), "materiaal": c.get("materiaal",""),
-            "contract_volume": round(contract_vol,1), "werkelijk_volume": round(werkelijk_vol,1),
-            "verschil": round(werkelijk_vol - contract_vol, 1),
-        })
+    # --- Contractvolume vs. werkelijk geleverd volume (LET OP: volume, geen
+    # waarde — zie docstring) — herbruikt dezelfde functie als de CSV-export,
+    # zodat scherm en export nooit uit de pas lopen. ---
+    contract_vergelijking = _bereken_contractvergelijking_financieel()
 
     inhoud = """
 <div class="page-title">Financiële Inzichten</div>
@@ -3201,10 +3242,13 @@ def financiele_inzichten():
 </div>
 
 <div class="fi-sectie">
-    <div class="fi-kop">Contractvolume vs. werkelijk geleverd volume <span style="font-weight:400;color:var(--gray-400);">(volume, geen euro's — contracten hebben geen prijsveld)</span></div>
+    <div class="fi-kop" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Contractvolume vs. werkelijk geleverd volume <span style="font-weight:400;color:var(--gray-400);">(volume, niet gekoppeld aan winst/marge)</span></span>
+        <a href="/inzichten/financieel/export/contractvergelijking" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV</a>
+    </div>
     {% for c in contract_vergelijking %}
     <div class="fi-rij">
-        <span style="flex:1;color:var(--gray-700);">{{ c.referentie }} — {{ c.tegenpartij }} ({{ c.materiaal }})</span>
+        <span style="flex:1;color:var(--gray-700);">{{ c.referentie }} — {{ c.tegenpartij }} ({{ c.materiaal }}, {{ c.order_type }})</span>
         <span style="width:110px;text-align:right;color:var(--gray-500);">Contract: {{ c.contract_volume }}t</span>
         <span style="width:110px;text-align:right;color:var(--gray-500);">Werkelijk: {{ c.werkelijk_volume }}t</span>
         <span style="width:100px;text-align:right;font-weight:700;color:{{ '#16a34a' if c.verschil >= 0 else '#dc2626' }};">{{ '+' if c.verschil >= 0 else '' }}{{ c.verschil }}t</span>
