@@ -13,7 +13,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_contactpersonen, bewaar_contactpersonen, laad_accountmanagers,
     is_huidige_gebruiker_admin, ENF_BEDRIJVEN, render_simple_page, vereist_afdeling_of_403,
-    bewaar_bedrijven, PAPIERFABRIEKEN, laad_status,
+    bewaar_bedrijven, PAPIERFABRIEKEN, laad_status, bewaar_status,
 )
 
 contacten_bp = Blueprint("contacten", __name__)
@@ -238,6 +238,12 @@ def contacten_nieuw_bedrijf():
             ENF_BEDRIJVEN.append(nieuw_bedrijf)
             bewaar_bedrijven()
 
+            gekozen_status = request.form.get("status", "").strip()
+            if gekozen_status in ("leverancier", "klant"):
+                status_alle = laad_status()
+                status_alle[bedrijfsnaam] = gekozen_status
+                bewaar_status(status_alle)
+
             personen = laad_contactpersonen()
             personen.append({
                 "id": str(uuid.uuid4()), "naam": contactnaam, "bedrijf": bedrijfsnaam,
@@ -265,7 +271,12 @@ def contacten_nieuw_bedrijf():
         <input type="text" name="land" placeholder="Land (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
         <input type="text" name="regio" placeholder="Regio/stad (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
     </div>
-    <input type="text" name="materialen" placeholder="Materialen (optioneel)" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:20px;">
+    <input type="text" name="materialen" placeholder="Materialen (optioneel)" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:10px;">
+    <select name="status" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:20px;">
+        <option value="leverancier">Leverancier</option>
+        <option value="klant">Klant</option>
+        <option value="">Geen van beide — alleen contactpersoon vastleggen</option>
+    </select>
 
     <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Contactpersoon</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
