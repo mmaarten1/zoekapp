@@ -3258,9 +3258,35 @@ def organisatie_beheer():
             if afdeling_naam in structuur and team_naam in structuur[afdeling_naam]:
                 structuur[afdeling_naam].remove(team_naam)
                 bewaar_organisatiestructuur(structuur)
+        elif actie == "lid_toevoegen_aan_team":
+            afdeling_naam = request.form.get("afdeling_naam", "").strip()
+            team_naam = request.form.get("team_naam", "").strip()
+            gebruikersnaam_lid = request.form.get("gebruikersnaam_lid", "").strip()
+            users = laad_users()
+            if gebruikersnaam_lid in users and afdeling_naam in structuur and team_naam in structuur[afdeling_naam]:
+                users[gebruikersnaam_lid]["org_afdeling"] = afdeling_naam
+                users[gebruikersnaam_lid]["team"] = team_naam
+                bewaar_users(users)
+        elif actie == "lid_verwijderen_uit_team":
+            gebruikersnaam_lid = request.form.get("gebruikersnaam_lid", "").strip()
+            users = laad_users()
+            if gebruikersnaam_lid in users:
+                users[gebruikersnaam_lid]["org_afdeling"] = ""
+                users[gebruikersnaam_lid]["team"] = ""
+                bewaar_users(users)
         return redirect(url_for("organisatie_beheer"))
 
     structuur = laad_organisatiestructuur()
+    alle_users = laad_users()
+    # Per afdeling+team: welke bestaande gebruikers zitten daar al, en welke
+    # gebruikers zijn nog niet aan een team gekoppeld (bruikbaar voor de
+    # keuzelijst "toevoegen" — iemand kan maar in één team tegelijk zitten).
+    leden_per_team = {}
+    for gebruikersnaam_u, info_u in alle_users.items():
+        sleutel = (info_u.get("org_afdeling",""), info_u.get("team",""))
+        if sleutel[0] and sleutel[1]:
+            leden_per_team.setdefault(sleutel, []).append(gebruikersnaam_u)
+
     inhoud = """
 <div class="page-title">Afdelingen & Teams</div>
 <a href="/gebruikers-beheer" style="display:inline-block;margin-bottom:16px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">← Gebruikers beheren</a>
@@ -3275,7 +3301,7 @@ def organisatie_beheer():
 </div>
 
 {% for afdeling_naam, teams in structuur.items() %}
-<div style="border:none;border-top:2px solid var(--gray-800);padding-top:10px;margin-bottom:24px;max-width:520px;">
+<div style="border:none;border-top:2px solid var(--gray-800);padding-top:10px;margin-bottom:24px;max-width:600px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <div style="font-weight:800;color:var(--gray-800);font-size:14px;">{{ afdeling_naam }}</div>
         <form method="POST" onsubmit="return confirm('Afdeling {{ afdeling_naam }} verwijderen? Bestaande gebruikers behouden hun huidige team-waarde, maar die is dan niet meer aan een afdeling gekoppeld.');" style="margin:0;">
@@ -3285,13 +3311,37 @@ def organisatie_beheer():
         </form>
     </div>
     {% for team_naam in teams %}
-    <div style="display:flex;align-items:center;padding:5px 0;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
-        <span style="flex:1;color:var(--gray-700);">{{ team_naam }}</span>
-        <form method="POST" style="margin:0;">
-            <input type="hidden" name="actie" value="team_verwijderen">
+    <div style="padding:8px 0;border-bottom:1px solid var(--gray-100);">
+        <div style="display:flex;align-items:center;font-size:12.5px;margin-bottom:6px;">
+            <span style="flex:1;font-weight:700;color:var(--gray-700);">{{ team_naam }}</span>
+            <form method="POST" style="margin:0;">
+                <input type="hidden" name="actie" value="team_verwijderen">
+                <input type="hidden" name="afdeling_naam" value="{{ afdeling_naam }}">
+                <input type="hidden" name="team_naam" value="{{ team_naam }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:11px;">✕ team verwijderen</button>
+            </form>
+        </div>
+        {% for lid in leden_per_team.get((afdeling_naam, team_naam), []) %}
+        <div style="display:flex;align-items:center;padding:3px 0 3px 10px;font-size:12px;color:var(--gray-600);">
+            <span style="flex:1;">{{ lid }}</span>
+            <form method="POST" style="margin:0;">
+                <input type="hidden" name="actie" value="lid_verwijderen_uit_team">
+                <input type="hidden" name="gebruikersnaam_lid" value="{{ lid }}">
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:10.5px;">verwijderen uit team</button>
+            </form>
+        </div>
+        {% else %}
+        <div style="padding:3px 0 3px 10px;font-size:11.5px;color:var(--gray-300);">Nog geen leden.</div>
+        {% endfor %}
+        <form method="POST" style="display:flex;gap:6px;margin-top:6px;padding-left:10px;">
+            <input type="hidden" name="actie" value="lid_toevoegen_aan_team">
             <input type="hidden" name="afdeling_naam" value="{{ afdeling_naam }}">
             <input type="hidden" name="team_naam" value="{{ team_naam }}">
-            <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:11px;">✕</button>
+            <select name="gebruikersnaam_lid" required style="flex:1;padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;">
+                <option value="">Bestaande gebruiker kiezen...</option>
+                {% for gnaam in alle_users.keys() %}<option value="{{ gnaam }}">{{ gnaam }}{% if alle_users[gnaam].get('team') %} (nu: {{ alle_users[gnaam].team }}){% endif %}</option>{% endfor %}
+            </select>
+            <button type="submit" style="padding:5px 12px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">+ Lid</button>
         </form>
     </div>
     {% else %}
@@ -3309,7 +3359,7 @@ def organisatie_beheer():
 {% endfor %}
     """
     pagina = render_simple_page("Afdelingen & Teams", "instellingen", inhoud)
-    return render_template_string(pagina, structuur=structuur)
+    return render_template_string(pagina, structuur=structuur, alle_users=alle_users, leden_per_team=leden_per_team)
 
 @app.route("/instellingen/layout", methods=["GET", "POST"])
 def layout_instellingen():
