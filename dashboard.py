@@ -1021,6 +1021,80 @@ def export_volumeontwikkeling_csv():
     return Response(output.getvalue(), mimetype="text/csv",
                      headers={"Content-Disposition": f"attachment; filename=volumeontwikkeling_{gekozen_materiaal}_{gekozen_land}.csv"})
 
+def _bereken_omzet_inzichten(gekozen_materiaal, gekozen_land):
+    """Herbruikbaar voor zowel de Commerciële Inzichten-pagina als de CSV-export
+    ervan. Definitieve verkoop-Handelsorders, materiaal+land-gefilterd. De EUR-
+    prijs van een verkooporder wordt NIET opnieuw live opgevraagd (dat zou
+    inconsistent zijn — de koers verandert continu) maar opgezocht in
+    marktprijzen.json, waar die eenmalig, bij definitief maken, is vastgelegd
+    (bron='handelsorder', gekoppeld via order_id). Orders zonder zo'n
+    vastgelegd punt (zou niet moeten voorkomen bij Definitief) tellen niet mee
+    — geen gok, liever een lichte onderschatting dan een verzonnen prijs."""
+    _bedrijf_land_lookup = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
+    _marktprijs_per_order_id = {
+        p["order_id"]: p["prijs_per_ton"] for p in laad_marktprijzen()
+        if p.get("bron") == "handelsorder" and p.get("order_id")
+    }
+
+    def _maand_key_handelsorder(aangemaakt_str):
+        try:
+            d = datetime.datetime.strptime(aangemaakt_str.split(" ")[0], "%d-%m-%Y").date()
+            return (d.year, d.month)
+        except (ValueError, TypeError, IndexError):
+            return None
+
+    _verkoop_handelsorders_gefilterd = [
+        h for h in laad_handelsorders()
+        if h.get("order_type") == "verkoop" and h.get("status") == "Definitief"
+        and h.get("materiaal","") == gekozen_materiaal
+        and _bedrijf_land_lookup.get(h.get("tegenpartij_naam",""), "") == gekozen_land
+        and h.get("id") in _marktprijs_per_order_id
+    ]
+
+    def _omzet_order(h):
+        return _marktprijs_per_order_id[h["id"]] * parse_hoeveelheid_getal(h.get("hoeveelheid_mt",""))
+
+    _vandaag = datetime.date.today()
+    _deze_maand_key = (_vandaag.year, _vandaag.month)
+    _vorige_maand_datum = (_vandaag.replace(day=1) - datetime.timedelta(days=1))
+    _vorige_maand_key = (_vorige_maand_datum.year, _vorige_maand_datum.month)
+
+    omzet_deze_maand = round(sum(_omzet_order(h) for h in _verkoop_handelsorders_gefilterd if _maand_key_handelsorder(h.get("aangemaakt","")) == _deze_maand_key), 2)
+    omzet_vorige_maand = round(sum(_omzet_order(h) for h in _verkoop_handelsorders_gefilterd if _maand_key_handelsorder(h.get("aangemaakt","")) == _vorige_maand_key), 2)
+    omzet_verschil_pct = round((omzet_deze_maand - omzet_vorige_maand) / omzet_vorige_maand * 100, 1) if omzet_vorige_maand > 0 else None
+
+    totaal_omzet = sum(_omzet_order(h) for h in _verkoop_handelsorders_gefilterd)
+    totaal_volume = sum(parse_hoeveelheid_getal(h.get("hoeveelheid_mt","")) for h in _verkoop_handelsorders_gefilterd)
+    gem_verkoopprijs_per_ton = round(totaal_omzet / totaal_volume, 2) if totaal_volume > 0 else None
+
+    return {
+        "omzet_deze_maand": omzet_deze_maand, "omzet_vorige_maand": omzet_vorige_maand,
+        "omzet_verschil_pct": omzet_verschil_pct, "gem_verkoopprijs_per_ton": gem_verkoopprijs_per_ton,
+        "orders": _verkoop_handelsorders_gefilterd, "prijs_per_order_id": _marktprijs_per_order_id,
+    }
+
+@dashboard_bp.route("/inzichten/export/omzet")
+def export_omzet_csv():
+    """CSV-export van de onderliggende verkooporders achter de Omzet-cijfers."""
+    _guard = vereist_afdeling_of_403("inzichten")
+    if _guard: return _guard
+
+    gekozen_materiaal = request.args.get("materiaal", "")
+    gekozen_land = request.args.get("land", "")
+    resultaat = _bereken_omzet_inzichten(gekozen_materiaal, gekozen_land)
+
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Contractnummer", "Klant", "Kwaliteit", "Hoeveelheid (MT)", "Prijs per ton (EUR)", "Omzet (EUR)", "Datum"])
+    for h in resultaat["orders"]:
+        _hoeveelheid = parse_hoeveelheid_getal(h.get("hoeveelheid_mt",""))
+        _prijs = resultaat["prijs_per_order_id"][h["id"]]
+        schrijver.writerow([h["contractnummer"], h.get("tegenpartij_naam",""), h.get("kwaliteit",""),
+                             _hoeveelheid, _prijs, round(_prijs*_hoeveelheid,2), h.get("aangemaakt","")])
+
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": f"attachment; filename=omzet_{gekozen_materiaal}_{gekozen_land}.csv"})
+
 @dashboard_bp.route("/inzichten")
 def inzichten():
     """Commerciële Inzichten: rapportages op materiaal+land, alleen met echt
@@ -1058,27 +1132,14 @@ def inzichten():
         ]
         gewonnen_orders = [o for o in gefilterde_orders if o.get("status") == "Gewonnen"]
 
-        # --- Omzet deze maand vs. vorige maand ---
-        _vandaag = datetime.date.today()
-        _deze_maand_key = (_vandaag.year, _vandaag.month)
-        _vorige_maand_datum = (_vandaag.replace(day=1) - datetime.timedelta(days=1))
-        _vorige_maand_key = (_vorige_maand_datum.year, _vorige_maand_datum.month)
-
-        def _maand_key(datum_str):
-            try:
-                d = datetime.date.fromisoformat(datum_str)
-                return (d.year, d.month)
-            except (ValueError, TypeError):
-                return None
-
-        omzet_deze_maand = sum(_order_getal(o) for o in gewonnen_orders if _maand_key(o.get("datum","")) == _deze_maand_key)
-        omzet_vorige_maand = sum(_order_getal(o) for o in gewonnen_orders if _maand_key(o.get("datum","")) == _vorige_maand_key)
-        omzet_verschil_pct = round((omzet_deze_maand - omzet_vorige_maand) / omzet_vorige_maand * 100, 1) if omzet_vorige_maand > 0 else None
-
-        # --- Gemiddelde verkoopprijs per ton ---
-        totaal_omzet_gewonnen = sum(_order_getal(o) for o in gewonnen_orders)
-        totaal_volume_gewonnen = sum(_order_hoeveelheid(o) for o in gewonnen_orders)
-        gem_verkoopprijs_per_ton = round(totaal_omzet_gewonnen / totaal_volume_gewonnen, 2) if totaal_volume_gewonnen > 0 else None
+        # --- Omzet deze maand vs. vorige maand, en gem. verkoopprijs — herbruikt
+        # dezelfde functie als de CSV-export, zodat scherm en export nooit uit
+        # de pas lopen. ---
+        _omzet_resultaat = _bereken_omzet_inzichten(gekozen_materiaal, gekozen_land)
+        omzet_deze_maand = _omzet_resultaat["omzet_deze_maand"]
+        omzet_vorige_maand = _omzet_resultaat["omzet_vorige_maand"]
+        omzet_verschil_pct = _omzet_resultaat["omzet_verschil_pct"]
+        gem_verkoopprijs_per_ton = _omzet_resultaat["gem_verkoopprijs_per_ton"]
 
         # --- Volumeontwikkeling per maand (laatste 6 maanden) — herbruikt dezelfde
         # functie als de CSV-export, zodat scherm en export nooit uit de pas lopen. ---
@@ -1117,7 +1178,10 @@ def inzichten():
         contractvoortgang_lijst = _bereken_contractvoortgang_inzichten(gekozen_materiaal, gekozen_land)
 
         resultaat_html = render_template_string("""
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Omzet</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Omzet</div>
+    <a href="/inzichten/export/omzet?materiaal={{ gekozen_materiaal|urlencode }}&land={{ gekozen_land|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV exporteren</a>
+</div>
 <div class="ci-grid" style="margin-bottom:24px;">
     <div class="ci-kaart">
         <div class="ci-getal">€{{ "{:,.0f}".format(omzet_deze_maand).replace(",", ".") }}</div>
