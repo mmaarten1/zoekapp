@@ -18,7 +18,9 @@ Registratie in app.py met: app.register_blueprint(logistieke_orders_bp)
 """
 import uuid
 import datetime
-from flask import Blueprint, request, session, redirect, url_for, render_template_string, jsonify
+import io
+import csv
+from flask import Blueprint, request, session, redirect, url_for, render_template_string, jsonify, Response
 
 from core import (
     laad_logistieke_orders, bewaar_logistieke_orders, genereer_logistiek_ordernummer,
@@ -942,6 +944,71 @@ async function bevestigKoppeling() {
                                     f_kenteken=f_kenteken, f_materiaal=f_materiaal, f_ordernummer=f_ordernummer,
                                     f_status=f_status, f_herkomst=f_herkomst, f_bestemming=f_bestemming)
 
+def _bereken_vraag_vs_aanbod_logistiek():
+    """Herbruikbaar voor zowel de Logistieke Inzichten-pagina als de CSV-export
+    ervan. Openstaande vraag = Definitieve verkoop-Handelsorders die nog niet
+    volledig zijn uitgeleverd."""
+    _vandaag = datetime.date.today()
+    voorraad_status = bereken_voorraad_status()
+
+    def _binnenkomend_binnen_30d():
+        grens = (_vandaag + datetime.timedelta(days=30)).isoformat()
+        result = {}
+        for o in laad_logistieke_orders():
+            verwacht = o.get("verwachte_aankomst", "")
+            if verwacht and _vandaag.isoformat() <= verwacht <= grens and o.get("status") not in ("Afgerond", "Gefactureerd"):
+                mat = o.get("materiaal", "Onbekend")
+                result[mat] = result.get(mat, 0) + parse_hoeveelheid_getal(o.get("verwachte_hoeveelheid",""))
+        return result
+    binnenkomend_30d = _binnenkomend_binnen_30d()
+
+    def _uitgeleverd_op_verkoopcontract(contractnummer):
+        _via_orders = sum(
+            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            for o in laad_logistieke_orders()
+            if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
+        )
+        _via_transport = sum(
+            parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+            for t in laad_transport_planning()
+            if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
+        )
+        return round(_via_orders + _via_transport, 3)
+
+    open_vraag_per_materiaal = {}
+    for h in laad_handelsorders():
+        if h.get("order_type") == "verkoop" and h.get("status") == "Definitief":
+            try:
+                _totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+            except (ValueError, TypeError):
+                _totaal = 0.0
+            _resterend = _totaal - _uitgeleverd_op_verkoopcontract(h["contractnummer"])
+            if _resterend > 0:
+                mat = h.get("materiaal", "Onbekend")
+                open_vraag_per_materiaal[mat] = open_vraag_per_materiaal.get(mat, 0) + _resterend
+
+    vraag_vs_aanbod = []
+    for m in sorted(set(open_vraag_per_materiaal.keys()) | set(voorraad_status["fysiek_per_materiaal"].keys())):
+        aanbod = voorraad_status["fysiek_per_materiaal"].get(m, 0) + binnenkomend_30d.get(m, 0)
+        vraag = open_vraag_per_materiaal.get(m, 0)
+        vraag_vs_aanbod.append({"materiaal": m, "vraag": round(vraag,1), "aanbod": round(aanbod,1), "tekort": round(vraag - aanbod, 1) if vraag > aanbod else 0})
+    return vraag_vs_aanbod
+
+@logistieke_orders_bp.route("/inzichten/logistiek/export/vraag-aanbod")
+def export_vraag_aanbod_csv():
+    """CSV-export van de Vraag vs. aanbod-tabel op Logistieke Inzichten."""
+    _guard = vereist_afdeling_of_403("inzichten_logistiek")
+    if _guard: return _guard
+
+    vraag_vs_aanbod = _bereken_vraag_vs_aanbod_logistiek()
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Materiaal", "Vraag (MT)", "Aanbod (MT)", "Tekort (MT)"])
+    for v in vraag_vs_aanbod:
+        schrijver.writerow([v["materiaal"], v["vraag"], v["aanbod"], v["tekort"]])
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=vraag_vs_aanbod.csv"})
+
 @logistieke_orders_bp.route("/inzichten/logistiek")
 def logistieke_inzichten_pagina():
     """Logistieke Inzichten — alleen met echt berekenbare data. Bewust NIET gebouwd:
@@ -954,7 +1021,6 @@ def logistieke_inzichten_pagina():
 
     _vandaag = datetime.date.today()
     voorraad_status = bereken_voorraad_status()
-    alle_verkooporders = laad_orders()
     alle_logistieke_orders = laad_logistieke_orders()
     alle_shipments = laad_shipments()
     alle_weegrecords = laad_weegbrug()
@@ -982,24 +1048,10 @@ def logistieke_inzichten_pagina():
         "d30": round(binnenkomend_30d.get(m, 0), 1),
     } for m in alle_materialen_volume]
 
-    # --- Klanten die binnenkort volume nodig hebben (open verkooporders, verwachte_datum binnen 14 dagen) ---
-    _grens_klant = (_vandaag + datetime.timedelta(days=14)).isoformat()
-    klanten_binnenkort = sorted(
-        [o for o in alle_verkooporders if o.get("status") in ("Open", "Onderhandeling") and o.get("verwachte_datum","") and _vandaag.isoformat() <= o["verwachte_datum"] <= _grens_klant],
-        key=lambda o: o.get("verwachte_datum","")
-    )
-
-    # --- Openstaande orders vs. beschikbaar volume (per materiaal) ---
-    open_vraag_per_materiaal = {}
-    for o in alle_verkooporders:
-        if o.get("status") in ("Open", "Onderhandeling"):
-            mat = o.get("materiaal", "Onbekend")
-            open_vraag_per_materiaal[mat] = open_vraag_per_materiaal.get(mat, 0) + parse_hoeveelheid_getal(o.get("hoeveelheid",""))
-    vraag_vs_aanbod = []
-    for m in sorted(set(open_vraag_per_materiaal.keys()) | set(voorraad_status["fysiek_per_materiaal"].keys())):
-        aanbod = voorraad_status["fysiek_per_materiaal"].get(m, 0) + binnenkomend_30d.get(m, 0)
-        vraag = open_vraag_per_materiaal.get(m, 0)
-        vraag_vs_aanbod.append({"materiaal": m, "vraag": round(vraag,1), "aanbod": round(aanbod,1), "tekort": round(vraag - aanbod, 1) if vraag > aanbod else 0})
+    # --- Openstaande orders vs. beschikbaar volume (per materiaal) — herbruikt
+    # dezelfde functie als de CSV-export, zodat scherm en export nooit uit de
+    # pas lopen. ---
+    vraag_vs_aanbod = _bereken_vraag_vs_aanbod_logistiek()
 
     # --- Leveranciers-volumetrend (laatste 30 dagen vs. de 30 dagen daarvoor) ---
     _30d_geleden = (_vandaag - datetime.timedelta(days=30)).isoformat()
@@ -1081,7 +1133,10 @@ def logistieke_inzichten_pagina():
 </div>
 
 <div class="li-sectie">
-    <div class="li-kop">Openstaande vraag vs. beschikbaar aanbod (incl. binnenkomend)</div>
+    <div class="li-kop" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Openstaande vraag vs. beschikbaar aanbod (incl. binnenkomend)</span>
+        <a href="/inzichten/logistiek/export/vraag-aanbod" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;text-transform:none;">↓ CSV</a>
+    </div>
     {% for v in vraag_vs_aanbod %}
     <div class="li-rij">
         <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ v.materiaal }}</span>
@@ -1095,17 +1150,8 @@ def logistieke_inzichten_pagina():
 </div>
 
 <div class="li-sectie">
-    <div class="li-kop">Klanten die binnenkort volume nodig hebben (komende 14 dagen)</div>
-    {% for o in klanten_binnenkort %}
-    <div class="li-rij">
-        <span style="flex:1;color:var(--gray-700);">{{ o.bedrijf }}</span>
-        <span style="width:100px;color:var(--gray-500);">{{ o.materiaal }}</span>
-        <span style="width:90px;text-align:right;color:var(--gray-500);">{{ o.hoeveelheid }}</span>
-        <span style="width:100px;text-align:right;color:var(--gray-600);">{{ o.verwachte_datum }}</span>
-    </div>
-    {% else %}
-    <div class="li-rij" style="color:var(--gray-300);">Geen openstaande orders met verwachte datum binnen 14 dagen.</div>
-    {% endfor %}
+    <div class="li-kop">Klanten die binnenkort volume nodig hebben</div>
+    <div class="li-rij" style="color:var(--gray-300);">Nog niet beschikbaar — Handelsorders heeft geen verwachte-leverdatum-veld op verkoopcontracten. Zodra dat datamodel er is, kan dit onderdeel gebouwd worden.</div>
 </div>
 
 <div class="li-sectie">
@@ -1145,7 +1191,7 @@ def logistieke_inzichten_pagina():
     """
     pagina = render_simple_page("Logistieke Inzichten", "inzichten_logistiek", inhoud)
     return render_template_string(pagina, volume_overzicht=volume_overzicht, vraag_vs_aanbod=vraag_vs_aanbod,
-                                    klanten_binnenkort=klanten_binnenkort, leverancier_trend=leverancier_trend,
+                                    leverancier_trend=leverancier_trend,
                                     route_overzicht=route_overzicht, kosten_per_ton_gemiddeld=kosten_per_ton_gemiddeld,
                                     vertraagde_inkomend=vertraagde_inkomend)
 
