@@ -964,6 +964,63 @@ def export_contractvoortgang_csv():
     return Response(output.getvalue(), mimetype="text/csv",
                      headers={"Content-Disposition": f"attachment; filename=contractvoortgang_{gekozen_materiaal}_{gekozen_land}.csv"})
 
+def _bereken_volumeontwikkeling_inzichten(gekozen_materiaal, gekozen_land):
+    """Herbruikbaar voor zowel de Commerciële Inzichten-pagina als de CSV-export
+    ervan. Definitieve verkoop-Handelsorders, laatste 6 maanden."""
+    _bedrijf_land_lookup = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
+
+    def _maand_key_handelsorder(aangemaakt_str):
+        try:
+            d = datetime.datetime.strptime(aangemaakt_str.split(" ")[0], "%d-%m-%Y").date()
+            return (d.year, d.month)
+        except (ValueError, TypeError, IndexError):
+            return None
+
+    _verkoop_handelsorders_gefilterd = [
+        h for h in laad_handelsorders()
+        if h.get("order_type") == "verkoop" and h.get("status") == "Definitief"
+        and h.get("materiaal","") == gekozen_materiaal
+        and _bedrijf_land_lookup.get(h.get("tegenpartij_naam",""), "") == gekozen_land
+    ]
+
+    _vandaag = datetime.date.today()
+    _maand_labels = []
+    _maand_sleutels = []
+    _cursor = _vandaag.replace(day=1)
+    for _ in range(6):
+        _maand_sleutels.append((_cursor.year, _cursor.month))
+        _maand_labels.append(_cursor.strftime("%b %Y"))
+        _cursor = (_cursor - datetime.timedelta(days=1)).replace(day=1)
+    _maand_sleutels.reverse()
+    _maand_labels.reverse()
+    volume_per_maand = []
+    for sleutel, label in zip(_maand_sleutels, _maand_labels):
+        vol = sum(
+            parse_hoeveelheid_getal(h.get("hoeveelheid_mt",""))
+            for h in _verkoop_handelsorders_gefilterd if _maand_key_handelsorder(h.get("aangemaakt","")) == sleutel
+        )
+        volume_per_maand.append({"label": label, "volume": round(vol, 1)})
+    return volume_per_maand
+
+@dashboard_bp.route("/inzichten/export/volumeontwikkeling")
+def export_volumeontwikkeling_csv():
+    """CSV-export van de Volumeontwikkeling-grafiek op Commerciële Inzichten."""
+    _guard = vereist_afdeling_of_403("inzichten")
+    if _guard: return _guard
+
+    gekozen_materiaal = request.args.get("materiaal", "")
+    gekozen_land = request.args.get("land", "")
+    volume_per_maand = _bereken_volumeontwikkeling_inzichten(gekozen_materiaal, gekozen_land)
+
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Maand", "Volume (MT)"])
+    for v in volume_per_maand:
+        schrijver.writerow([v["label"], v["volume"]])
+
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": f"attachment; filename=volumeontwikkeling_{gekozen_materiaal}_{gekozen_land}.csv"})
+
 @dashboard_bp.route("/inzichten")
 def inzichten():
     """Commerciële Inzichten: rapportages op materiaal+land, alleen met echt
@@ -976,7 +1033,8 @@ def inzichten():
     LAND_LABELS = {"United Kingdom": "UK", "Spain": "Spanje", "France": "Frankrijk", "Germany": "Duitsland", "Netherlands": "Nederland"}
 
     alle_orders = laad_orders()
-    materiaal_opties = sorted({o.get("materiaal","").strip() for o in alle_orders if o.get("materiaal","").strip()})
+    _alle_handelsorders_ci = laad_handelsorders()
+    materiaal_opties = sorted({h.get("materiaal","").strip() for h in _alle_handelsorders_ci if h.get("materiaal","").strip()})
     gekozen_materiaal = request.args.get("materiaal", "")
     gekozen_land = request.args.get("land", "")
 
@@ -1022,20 +1080,9 @@ def inzichten():
         totaal_volume_gewonnen = sum(_order_hoeveelheid(o) for o in gewonnen_orders)
         gem_verkoopprijs_per_ton = round(totaal_omzet_gewonnen / totaal_volume_gewonnen, 2) if totaal_volume_gewonnen > 0 else None
 
-        # --- Volumeontwikkeling per maand (laatste 6 maanden) ---
-        _maand_labels = []
-        _maand_sleutels = []
-        _cursor = _vandaag.replace(day=1)
-        for _ in range(6):
-            _maand_sleutels.append((_cursor.year, _cursor.month))
-            _maand_labels.append(_cursor.strftime("%b %Y"))
-            _cursor = (_cursor - datetime.timedelta(days=1)).replace(day=1)
-        _maand_sleutels.reverse()
-        _maand_labels.reverse()
-        volume_per_maand = []
-        for sleutel, label in zip(_maand_sleutels, _maand_labels):
-            vol = sum(_order_hoeveelheid(o) for o in gewonnen_orders if _maand_key(o.get("datum","")) == sleutel)
-            volume_per_maand.append({"label": label, "volume": round(vol, 1)})
+        # --- Volumeontwikkeling per maand (laatste 6 maanden) — herbruikt dezelfde
+        # functie als de CSV-export, zodat scherm en export nooit uit de pas lopen. ---
+        volume_per_maand = _bereken_volumeontwikkeling_inzichten(gekozen_materiaal, gekozen_land)
         max_volume_maand = max([v["volume"] for v in volume_per_maand], default=1) or 1
 
         # --- Prijsontwikkeling per materiaal (uit marktprijzen, niet land-specifiek) ---
@@ -1087,7 +1134,10 @@ def inzichten():
     </div>
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Volumeontwikkeling per maand</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Volumeontwikkeling per maand</div>
+    <a href="/inzichten/export/volumeontwikkeling?materiaal={{ gekozen_materiaal|urlencode }}&land={{ gekozen_land|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV exporteren</a>
+</div>
 <div style="margin-bottom:24px;">
     {% for v in volume_per_maand %}
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
