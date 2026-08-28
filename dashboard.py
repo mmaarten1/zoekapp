@@ -1095,6 +1095,62 @@ def export_omzet_csv():
     return Response(output.getvalue(), mimetype="text/csv",
                      headers={"Content-Disposition": f"attachment; filename=omzet_{gekozen_materiaal}_{gekozen_land}.csv"})
 
+def _bereken_prijsontwikkeling_inzichten(gekozen_materiaal):
+    """Herbruikbaar voor zowel de pagina als de CSV-export. Niet land-specifiek
+    — marktprijzen worden niet per land bijgehouden."""
+    alle_marktprijzen = laad_marktprijzen()
+    return sorted(
+        [p for p in alle_marktprijzen if p.get("materiaal","") == gekozen_materiaal],
+        key=lambda p: p.get("datum","")
+    )[-12:]
+
+@dashboard_bp.route("/inzichten/export/prijsontwikkeling")
+def export_prijsontwikkeling_csv():
+    _guard = vereist_afdeling_of_403("inzichten")
+    if _guard: return _guard
+    gekozen_materiaal = request.args.get("materiaal", "")
+    prijspunten = _bereken_prijsontwikkeling_inzichten(gekozen_materiaal)
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Datum", "Prijs per ton (EUR)", "Bron"])
+    for p in prijspunten:
+        schrijver.writerow([p.get("datum",""), p.get("prijs_per_ton",""), p.get("bron","")])
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": f"attachment; filename=prijsontwikkeling_{gekozen_materiaal}.csv"})
+
+def _bereken_laadgewicht_inzichten(gekozen_materiaal, gekozen_land):
+    """Herbruikbaar voor zowel de pagina als de CSV-export."""
+    _bedrijf_land_lookup = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
+    weegrecords_gefilterd = [
+        r for r in laad_weegbrug()
+        if r.get("materiaal","").strip() == gekozen_materiaal
+        and _bedrijf_land_lookup.get(r.get("leverancier",""), "") == gekozen_land
+        and r.get("netto_gewicht")
+    ]
+    per_leverancier = {}
+    for r in weegrecords_gefilterd:
+        lev = r.get("leverancier","Onbekend")
+        per_leverancier.setdefault(lev, []).append(float(r["netto_gewicht"]))
+    return sorted(
+        [{"leverancier": lev, "gemiddeld": round(sum(gewichten)/len(gewichten), 0), "aantal": len(gewichten)} for lev, gewichten in per_leverancier.items()],
+        key=lambda x: -x["gemiddeld"]
+    )
+
+@dashboard_bp.route("/inzichten/export/laadgewicht")
+def export_laadgewicht_csv():
+    _guard = vereist_afdeling_of_403("inzichten")
+    if _guard: return _guard
+    gekozen_materiaal = request.args.get("materiaal", "")
+    gekozen_land = request.args.get("land", "")
+    gem_laadgewicht = _bereken_laadgewicht_inzichten(gekozen_materiaal, gekozen_land)
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Leverancier", "Gemiddeld laadgewicht (kg)", "Aantal wegingen"])
+    for l in gem_laadgewicht:
+        schrijver.writerow([l["leverancier"], l["gemiddeld"], l["aantal"]])
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": f"attachment; filename=laadgewicht_{gekozen_materiaal}_{gekozen_land}.csv"})
+
 @dashboard_bp.route("/inzichten")
 def inzichten():
     """Commerciële Inzichten: rapportages op materiaal+land, alleen met echt
@@ -1106,7 +1162,6 @@ def inzichten():
     LANDEN_KEUZE = ["United Kingdom", "Spain", "France", "Germany", "Netherlands"]
     LAND_LABELS = {"United Kingdom": "UK", "Spain": "Spanje", "France": "Frankrijk", "Germany": "Duitsland", "Netherlands": "Nederland"}
 
-    alle_orders = laad_orders()
     _alle_handelsorders_ci = laad_handelsorders()
     materiaal_opties = sorted({h.get("materiaal","").strip() for h in _alle_handelsorders_ci if h.get("materiaal","").strip()})
     gekozen_materiaal = request.args.get("materiaal", "")
@@ -1115,22 +1170,6 @@ def inzichten():
     resultaat_html = ""
     if gekozen_materiaal and gekozen_land:
         _bedrijf_land_lookup = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
-
-        def _order_getal(o):
-            try:
-                return float(str(o.get("prijs","0")).replace(",",".").replace("€",""))
-            except (ValueError, TypeError):
-                return 0.0
-
-        def _order_hoeveelheid(o):
-            return parse_hoeveelheid_getal(o.get("hoeveelheid",""))
-
-        gefilterde_orders = [
-            o for o in alle_orders
-            if o.get("materiaal","").strip() == gekozen_materiaal
-            and _bedrijf_land_lookup.get(o.get("bedrijf",""), "") == gekozen_land
-        ]
-        gewonnen_orders = [o for o in gefilterde_orders if o.get("status") == "Gewonnen"]
 
         # --- Omzet deze maand vs. vorige maand, en gem. verkoopprijs — herbruikt
         # dezelfde functie als de CSV-export, zodat scherm en export nooit uit
@@ -1146,29 +1185,13 @@ def inzichten():
         volume_per_maand = _bereken_volumeontwikkeling_inzichten(gekozen_materiaal, gekozen_land)
         max_volume_maand = max([v["volume"] for v in volume_per_maand], default=1) or 1
 
-        # --- Prijsontwikkeling per materiaal (uit marktprijzen, niet land-specifiek) ---
-        alle_marktprijzen = laad_marktprijzen()
-        prijspunten_materiaal = sorted(
-            [p for p in alle_marktprijzen if p.get("materiaal","") == gekozen_materiaal],
-            key=lambda p: p.get("datum","")
-        )[-12:]
+        # --- Prijsontwikkeling per materiaal (uit marktprijzen, niet land-specifiek)
+        # — herbruikt dezelfde functie als de CSV-export. ---
+        prijspunten_materiaal = _bereken_prijsontwikkeling_inzichten(gekozen_materiaal)
 
-        # --- Gemiddeld laadgewicht per leverancier (weegbrug, materiaal+land-gefilterd) ---
-        alle_weegrecords = laad_weegbrug()
-        weegrecords_gefilterd = [
-            r for r in alle_weegrecords
-            if r.get("materiaal","").strip() == gekozen_materiaal
-            and _bedrijf_land_lookup.get(r.get("leverancier",""), "") == gekozen_land
-            and r.get("netto_gewicht")
-        ]
-        per_leverancier = {}
-        for r in weegrecords_gefilterd:
-            lev = r.get("leverancier","Onbekend")
-            per_leverancier.setdefault(lev, []).append(float(r["netto_gewicht"]))
-        gem_laadgewicht_per_leverancier = sorted(
-            [{"leverancier": lev, "gemiddeld": round(sum(gewichten)/len(gewichten), 0), "aantal": len(gewichten)} for lev, gewichten in per_leverancier.items()],
-            key=lambda x: -x["gemiddeld"]
-        )
+        # --- Gemiddeld laadgewicht per leverancier (weegbrug, materiaal+land-
+        # gefilterd) — herbruikt dezelfde functie als de CSV-export. ---
+        gem_laadgewicht_per_leverancier = _bereken_laadgewicht_inzichten(gekozen_materiaal, gekozen_land)
 
         # --- Contractvoortgang: goedgekeurde inkoopcontracten voor dit materiaal, bij
         # leveranciers in het gekozen land — met geleverd/resterend tonnage. Dit maakt
@@ -1214,7 +1237,10 @@ def inzichten():
     {% endfor %}
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Prijsontwikkeling {{ gekozen_materiaal }} (marktprijzen)</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Prijsontwikkeling {{ gekozen_materiaal }} (marktprijzen)</div>
+    <a href="/inzichten/export/prijsontwikkeling?materiaal={{ gekozen_materiaal|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV</a>
+</div>
 {% if prijspunten_materiaal %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:24px;">
     {% for p in prijspunten_materiaal %}
@@ -1229,7 +1255,10 @@ def inzichten():
 <div class="lege-staat" style="margin-bottom:24px;">Nog geen marktprijspunten voor {{ gekozen_materiaal }}.</div>
 {% endif %}
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Gemiddeld laadgewicht per leverancier</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Gemiddeld laadgewicht per leverancier</div>
+    <a href="/inzichten/export/laadgewicht?materiaal={{ gekozen_materiaal|urlencode }}&land={{ gekozen_land|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV</a>
+</div>
 {% if gem_laadgewicht_per_leverancier %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     {% for l in gem_laadgewicht_per_leverancier %}
