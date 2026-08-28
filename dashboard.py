@@ -9,7 +9,9 @@ Registratie in app.py met: app.register_blueprint(dashboard_bp)
 """
 import json
 import datetime
-from flask import Blueprint, session, render_template_string, request
+import io
+import csv
+from flask import Blueprint, session, render_template_string, request, Response
 
 from core import (
     datapad, laad_status, laad_shipments, laad_voorraad, laad_orders,
@@ -914,6 +916,54 @@ WIDGETS_HIER
         activiteit=activiteit, recent_gekoppelde_contracten=recent_gekoppelde_contracten,
         mijn_concept_orders=mijn_concept_orders)
 
+def _bereken_contractvoortgang_inzichten(gekozen_materiaal, gekozen_land):
+    """Herbruikbaar voor zowel de Commerciële Inzichten-pagina als de CSV-export
+    ervan — zodat beide altijd exact dezelfde cijfers tonen. Gebaseerd op
+    Handelsorders (de actuele, actieve databron), niet het oude orders.json."""
+    _bedrijf_land_lookup = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
+
+    def _geleverd_op_contract(contractnummer):
+        return round(sum(
+            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            for o in laad_logistieke_orders()
+            if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
+        ), 3)
+
+    contractvoortgang_lijst = []
+    for h in laad_handelsorders():
+        if h.get("order_type") == "inkoop" and h.get("materiaal","") == gekozen_materiaal and h.get("status") == "Definitief" and _bedrijf_land_lookup.get(h.get("tegenpartij_naam",""), "") == gekozen_land:
+            try:
+                totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+            except (ValueError, TypeError):
+                totaal = 0.0
+            geleverd = _geleverd_op_contract(h["contractnummer"])
+            contractvoortgang_lijst.append({
+                "contractnummer": h["contractnummer"], "leverancier": h.get("tegenpartij_naam",""), "kwaliteit": h.get("kwaliteit",""),
+                "totaal": round(totaal,1), "geleverd": geleverd, "resterend": round(totaal-geleverd,1),
+            })
+    contractvoortgang_lijst.sort(key=lambda c: -c["resterend"])
+    return contractvoortgang_lijst
+
+@dashboard_bp.route("/inzichten/export/contractvoortgang")
+def export_contractvoortgang_csv():
+    """CSV-export van de Contractvoortgang-tabel op Commerciële Inzichten —
+    exact dezelfde cijfers als op het scherm, want dezelfde berekeningsfunctie."""
+    _guard = vereist_afdeling_of_403("inzichten")
+    if _guard: return _guard
+
+    gekozen_materiaal = request.args.get("materiaal", "")
+    gekozen_land = request.args.get("land", "")
+    contractvoortgang_lijst = _bereken_contractvoortgang_inzichten(gekozen_materiaal, gekozen_land)
+
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Contractnummer", "Leverancier", "Kwaliteit", "Totaal (MT)", "Geleverd (MT)", "Resterend (MT)"])
+    for c in contractvoortgang_lijst:
+        schrijver.writerow([c["contractnummer"], c["leverancier"], c["kwaliteit"], c["totaal"], c["geleverd"], c["resterend"]])
+
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": f"attachment; filename=contractvoortgang_{gekozen_materiaal}_{gekozen_land}.csv"})
+
 @dashboard_bp.route("/inzichten")
 def inzichten():
     """Commerciële Inzichten: rapportages op materiaal+land, alleen met echt
@@ -1015,26 +1065,9 @@ def inzichten():
         # --- Contractvoortgang: goedgekeurde inkoopcontracten voor dit materiaal, bij
         # leveranciers in het gekozen land — met geleverd/resterend tonnage. Dit maakt
         # zichtbaar wat er via Live Operaties/Weegbrug al daadwerkelijk gekoppeld is,
-        # rechtstreeks vanuit de commerciële kant. ---
-        def _geleverd_op_contract_inzichten(contractnummer):
-            return round(sum(
-                parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
-                for o in laad_logistieke_orders()
-                if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
-            ), 3)
-        contractvoortgang_lijst = []
-        for h in laad_handelsorders():
-            if h.get("order_type") == "inkoop" and h.get("materiaal","") == gekozen_materiaal and h.get("status") == "Definitief" and _bedrijf_land_lookup.get(h.get("tegenpartij_naam",""), "") == gekozen_land:
-                try:
-                    totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
-                except (ValueError, TypeError):
-                    totaal = 0.0
-                geleverd = _geleverd_op_contract_inzichten(h["contractnummer"])
-                contractvoortgang_lijst.append({
-                    "contractnummer": h["contractnummer"], "leverancier": h.get("tegenpartij_naam",""), "kwaliteit": h.get("kwaliteit",""),
-                    "totaal": round(totaal,1), "geleverd": geleverd, "resterend": round(totaal-geleverd,1),
-                })
-        contractvoortgang_lijst.sort(key=lambda c: -c["resterend"])
+        # rechtstreeks vanuit de commerciële kant. Herbruikt dezelfde functie als de
+        # CSV-export, zodat scherm en export nooit uit de pas kunnen lopen. ---
+        contractvoortgang_lijst = _bereken_contractvoortgang_inzichten(gekozen_materiaal, gekozen_land)
 
         resultaat_html = render_template_string("""
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Omzet</div>
@@ -1097,7 +1130,10 @@ def inzichten():
 <div class="lege-staat">Geen weegrecords voor deze combinatie.</div>
 {% endif %}
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Contractvoortgang (goedgekeurde inkoopcontracten)</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Contractvoortgang (goedgekeurde inkoopcontracten)</div>
+    <a href="/inzichten/export/contractvoortgang?materiaal={{ gekozen_materiaal|urlencode }}&land={{ gekozen_land|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV exporteren</a>
+</div>
 {% if contractvoortgang_lijst %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     {% for c in contractvoortgang_lijst %}
@@ -1115,7 +1151,7 @@ def inzichten():
         """, omzet_deze_maand=omzet_deze_maand, omzet_vorige_maand=omzet_vorige_maand,
              omzet_verschil_pct=omzet_verschil_pct, gem_verkoopprijs_per_ton=gem_verkoopprijs_per_ton,
              volume_per_maand=volume_per_maand, max_volume_maand=max_volume_maand,
-             prijspunten_materiaal=prijspunten_materiaal, gekozen_materiaal=gekozen_materiaal,
+             prijspunten_materiaal=prijspunten_materiaal, gekozen_materiaal=gekozen_materiaal, gekozen_land=gekozen_land,
              gem_laadgewicht_per_leverancier=gem_laadgewicht_per_leverancier,
              contractvoortgang_lijst=contractvoortgang_lijst)
 
