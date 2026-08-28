@@ -1009,6 +1009,128 @@ def export_vraag_aanbod_csv():
     return Response(output.getvalue(), mimetype="text/csv",
                      headers={"Content-Disposition": "attachment; filename=vraag_vs_aanbod.csv"})
 
+def _bereken_beschikbaar_volume_logistiek():
+    """Herbruikbaar voor zowel de pagina als de CSV-export."""
+    _vandaag = datetime.date.today()
+    voorraad_status = bereken_voorraad_status()
+
+    def _binnenkomend_binnen(dagen):
+        grens = (_vandaag + datetime.timedelta(days=dagen)).isoformat()
+        result = {}
+        for o in laad_logistieke_orders():
+            verwacht = o.get("verwachte_aankomst", "")
+            if verwacht and _vandaag.isoformat() <= verwacht <= grens and o.get("status") not in ("Afgerond", "Gefactureerd"):
+                mat = o.get("materiaal", "Onbekend")
+                result[mat] = result.get(mat, 0) + parse_hoeveelheid_getal(o.get("verwachte_hoeveelheid",""))
+        return result
+
+    binnenkomend_7d = _binnenkomend_binnen(7)
+    binnenkomend_14d = _binnenkomend_binnen(14)
+    binnenkomend_30d = _binnenkomend_binnen(30)
+    alle_materialen_volume = sorted(set(voorraad_status["fysiek_per_materiaal"].keys()) | set(binnenkomend_30d.keys()))
+    return [{
+        "materiaal": m,
+        "nu": round(voorraad_status["fysiek_per_materiaal"].get(m, 0), 1),
+        "d7": round(binnenkomend_7d.get(m, 0), 1),
+        "d14": round(binnenkomend_14d.get(m, 0), 1),
+        "d30": round(binnenkomend_30d.get(m, 0), 1),
+    } for m in alle_materialen_volume]
+
+@logistieke_orders_bp.route("/inzichten/logistiek/export/beschikbaar-volume")
+def export_beschikbaar_volume_csv():
+    _guard = vereist_afdeling_of_403("inzichten_logistiek")
+    if _guard: return _guard
+    volume_overzicht = _bereken_beschikbaar_volume_logistiek()
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Materiaal", "Nu (MT)", "+7 dagen (MT)", "+14 dagen (MT)", "+30 dagen (MT)"])
+    for v in volume_overzicht:
+        schrijver.writerow([v["materiaal"], v["nu"], v["d7"], v["d14"], v["d30"]])
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=beschikbaar_volume.csv"})
+
+def _bereken_leverancier_trend_logistiek():
+    """Herbruikbaar voor zowel de pagina als de CSV-export."""
+    _vandaag = datetime.date.today()
+    _30d_geleden = (_vandaag - datetime.timedelta(days=30)).isoformat()
+    _60d_geleden = (_vandaag - datetime.timedelta(days=60)).isoformat()
+
+    def _weeg_iso(r):
+        d = r.get("aangemaakt","").split(" ")[0] if r.get("aangemaakt") else ""
+        try:
+            return datetime.datetime.strptime(d, "%d-%m-%Y").date().isoformat()
+        except (ValueError, TypeError):
+            return ""
+
+    per_leverancier_recent = {}
+    per_leverancier_vorige = {}
+    for r in laad_weegbrug():
+        if r.get("status") != "Compleet" or not r.get("leverancier"):
+            continue
+        d_iso = _weeg_iso(r)
+        netto = parse_hoeveelheid_getal(r.get("netto_gewicht","")) / 1000
+        if d_iso >= _30d_geleden:
+            per_leverancier_recent[r["leverancier"]] = per_leverancier_recent.get(r["leverancier"], 0) + netto
+        elif d_iso >= _60d_geleden:
+            per_leverancier_vorige[r["leverancier"]] = per_leverancier_vorige.get(r["leverancier"], 0) + netto
+
+    leverancier_trend = []
+    for lev in sorted(set(per_leverancier_recent.keys()) | set(per_leverancier_vorige.keys())):
+        recent = per_leverancier_recent.get(lev, 0)
+        vorige = per_leverancier_vorige.get(lev, 0)
+        verschil_pct = round((recent - vorige) / vorige * 100, 1) if vorige > 0 else None
+        leverancier_trend.append({"leverancier": lev, "recent": round(recent,1), "vorige": round(vorige,1), "verschil_pct": verschil_pct})
+    leverancier_trend.sort(key=lambda x: (x["verschil_pct"] is None, -(x["verschil_pct"] or 0)))
+    return leverancier_trend
+
+@logistieke_orders_bp.route("/inzichten/logistiek/export/leverancier-trend")
+def export_leverancier_trend_csv():
+    _guard = vereist_afdeling_of_403("inzichten_logistiek")
+    if _guard: return _guard
+    leverancier_trend = _bereken_leverancier_trend_logistiek()
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Leverancier", "Recente 30 dagen (t)", "Vorige 30 dagen (t)", "Verschil (%)"])
+    for l in leverancier_trend:
+        schrijver.writerow([l["leverancier"], l["recent"], l["vorige"], l["verschil_pct"] if l["verschil_pct"] is not None else ""])
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=leverancier_volumetrend.csv"})
+
+def _bereken_transportkosten_route_logistiek():
+    """Herbruikbaar voor zowel de pagina als de CSV-export. Gebaseerd op het
+    oude shipments-systeem — transportkosten worden nergens in het nieuwe
+    transport_planning-systeem bijgehouden, dus hier bestaat (nog) geen
+    alternatieve, actuele databron voor."""
+    shipments_met_kosten = [s for s in laad_shipments() if s.get("transportkosten") and s.get("werkelijk_hoeveelheid")]
+    totaal_kosten = sum(parse_hoeveelheid_getal(s["transportkosten"]) for s in shipments_met_kosten)
+    totaal_ton_kosten = sum(parse_hoeveelheid_getal(s["werkelijk_hoeveelheid"]) for s in shipments_met_kosten)
+    kosten_per_ton_gemiddeld = round(totaal_kosten / totaal_ton_kosten, 2) if totaal_ton_kosten > 0 else None
+
+    per_route = {}
+    for s in shipments_met_kosten:
+        route = f"{s.get('origin_land','?')} → {s.get('destination_land','?')}"
+        per_route.setdefault(route, {"kosten": 0, "ton": 0})
+        per_route[route]["kosten"] += parse_hoeveelheid_getal(s["transportkosten"])
+        per_route[route]["ton"] += parse_hoeveelheid_getal(s["werkelijk_hoeveelheid"])
+    route_overzicht = sorted(
+        [{"route": r, "totaal_kosten": round(v["kosten"],2), "kosten_per_ton": round(v["kosten"]/v["ton"],2) if v["ton"]>0 else None} for r, v in per_route.items()],
+        key=lambda x: -x["totaal_kosten"]
+    )[:10]
+    return route_overzicht, kosten_per_ton_gemiddeld
+
+@logistieke_orders_bp.route("/inzichten/logistiek/export/transportkosten")
+def export_transportkosten_csv():
+    _guard = vereist_afdeling_of_403("inzichten_logistiek")
+    if _guard: return _guard
+    route_overzicht, _ = _bereken_transportkosten_route_logistiek()
+    output = io.StringIO()
+    schrijver = csv.writer(output, delimiter=";")
+    schrijver.writerow(["Route", "Totale kosten (EUR)", "Kosten per ton (EUR)"])
+    for r in route_overzicht:
+        schrijver.writerow([r["route"], r["totaal_kosten"], r["kosten_per_ton"] if r["kosten_per_ton"] is not None else ""])
+    return Response(output.getvalue(), mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=transportkosten_per_route.csv"})
+
 @logistieke_orders_bp.route("/inzichten/logistiek")
 def logistieke_inzichten_pagina():
     """Logistieke Inzichten — alleen met echt berekenbare data. Bewust NIET gebouwd:
@@ -1025,80 +1147,22 @@ def logistieke_inzichten_pagina():
     alle_shipments = laad_shipments()
     alle_weegrecords = laad_weegbrug()
 
-    # --- Beschikbaar volume nu + verwacht binnenkomend (7/14/30 dagen) ---
-    def _binnenkomend_binnen(dagen):
-        grens = (_vandaag + datetime.timedelta(days=dagen)).isoformat()
-        result = {}
-        for o in alle_logistieke_orders:
-            verwacht = o.get("verwachte_aankomst", "")
-            if verwacht and _vandaag.isoformat() <= verwacht <= grens and o.get("status") not in ("Afgerond", "Gefactureerd"):
-                mat = o.get("materiaal", "Onbekend")
-                result[mat] = result.get(mat, 0) + parse_hoeveelheid_getal(o.get("verwachte_hoeveelheid",""))
-        return result
-
-    binnenkomend_7d = _binnenkomend_binnen(7)
-    binnenkomend_14d = _binnenkomend_binnen(14)
-    binnenkomend_30d = _binnenkomend_binnen(30)
-    alle_materialen_volume = sorted(set(voorraad_status["fysiek_per_materiaal"].keys()) | set(binnenkomend_30d.keys()))
-    volume_overzicht = [{
-        "materiaal": m,
-        "nu": round(voorraad_status["fysiek_per_materiaal"].get(m, 0), 1),
-        "d7": round(binnenkomend_7d.get(m, 0), 1),
-        "d14": round(binnenkomend_14d.get(m, 0), 1),
-        "d30": round(binnenkomend_30d.get(m, 0), 1),
-    } for m in alle_materialen_volume]
+    # --- Beschikbaar volume nu + verwacht binnenkomend (7/14/30 dagen) — herbruikt
+    # dezelfde functie als de CSV-export. ---
+    volume_overzicht = _bereken_beschikbaar_volume_logistiek()
 
     # --- Openstaande orders vs. beschikbaar volume (per materiaal) — herbruikt
     # dezelfde functie als de CSV-export, zodat scherm en export nooit uit de
     # pas lopen. ---
     vraag_vs_aanbod = _bereken_vraag_vs_aanbod_logistiek()
 
-    # --- Leveranciers-volumetrend (laatste 30 dagen vs. de 30 dagen daarvoor) ---
-    _30d_geleden = (_vandaag - datetime.timedelta(days=30)).isoformat()
-    _60d_geleden = (_vandaag - datetime.timedelta(days=60)).isoformat()
-    def _weegdatum(r):
-        return r.get("aangemaakt","").split(" ")[0] if r.get("aangemaakt") else ""
-    def _weeg_iso(r):
-        d = _weegdatum(r)
-        try:
-            return datetime.datetime.strptime(d, "%d-%m-%Y").date().isoformat()
-        except (ValueError, TypeError):
-            return ""
-    per_leverancier_recent = {}
-    per_leverancier_vorige = {}
-    for r in alle_weegrecords:
-        if r.get("status") != "Compleet" or not r.get("leverancier"):
-            continue
-        d_iso = _weeg_iso(r)
-        netto = parse_hoeveelheid_getal(r.get("netto_gewicht","")) / 1000
-        if d_iso >= _30d_geleden:
-            per_leverancier_recent[r["leverancier"]] = per_leverancier_recent.get(r["leverancier"], 0) + netto
-        elif d_iso >= _60d_geleden:
-            per_leverancier_vorige[r["leverancier"]] = per_leverancier_vorige.get(r["leverancier"], 0) + netto
-    leverancier_trend = []
-    for lev in sorted(set(per_leverancier_recent.keys()) | set(per_leverancier_vorige.keys())):
-        recent = per_leverancier_recent.get(lev, 0)
-        vorige = per_leverancier_vorige.get(lev, 0)
-        verschil_pct = round((recent - vorige) / vorige * 100, 1) if vorige > 0 else None
-        leverancier_trend.append({"leverancier": lev, "recent": round(recent,1), "vorige": round(vorige,1), "verschil_pct": verschil_pct})
-    leverancier_trend.sort(key=lambda x: (x["verschil_pct"] is None, -(x["verschil_pct"] or 0)))
+    # --- Leveranciers-volumetrend (laatste 30 dagen vs. de 30 dagen daarvoor) —
+    # herbruikt dezelfde functie als de CSV-export. ---
+    leverancier_trend = _bereken_leverancier_trend_logistiek()
 
-    # --- Transportkosten: per ton, per route (land->land), hoogste kosten ---
-    shipments_met_kosten = [s for s in alle_shipments if s.get("transportkosten") and s.get("werkelijk_hoeveelheid")]
-    totaal_kosten = sum(parse_hoeveelheid_getal(s["transportkosten"]) for s in shipments_met_kosten)
-    totaal_ton_kosten = sum(parse_hoeveelheid_getal(s["werkelijk_hoeveelheid"]) for s in shipments_met_kosten)
-    kosten_per_ton_gemiddeld = round(totaal_kosten / totaal_ton_kosten, 2) if totaal_ton_kosten > 0 else None
-
-    per_route = {}
-    for s in shipments_met_kosten:
-        route = f"{s.get('origin_land','?')} → {s.get('destination_land','?')}"
-        per_route.setdefault(route, {"kosten": 0, "ton": 0})
-        per_route[route]["kosten"] += parse_hoeveelheid_getal(s["transportkosten"])
-        per_route[route]["ton"] += parse_hoeveelheid_getal(s["werkelijk_hoeveelheid"])
-    route_overzicht = sorted(
-        [{"route": r, "totaal_kosten": round(v["kosten"],2), "kosten_per_ton": round(v["kosten"]/v["ton"],2) if v["ton"]>0 else None} for r, v in per_route.items()],
-        key=lambda x: -x["totaal_kosten"]
-    )[:10]
+    # --- Transportkosten: per ton, per route (land->land), hoogste kosten —
+    # herbruikt dezelfde functie als de CSV-export. ---
+    route_overzicht, kosten_per_ton_gemiddeld = _bereken_transportkosten_route_logistiek()
 
     # --- Vertraagde inkomende orders (verwachte_aankomst verstreken, nog niet gekoppeld/uitgewogen) ---
     vertraagde_inkomend = [
@@ -1118,7 +1182,10 @@ def logistieke_inzichten_pagina():
 </style>
 
 <div class="li-sectie">
-    <div class="li-kop">Beschikbaar volume — nu en verwacht binnenkomend</div>
+    <div class="li-kop" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Beschikbaar volume — nu en verwacht binnenkomend</span>
+        <a href="/inzichten/logistiek/export/beschikbaar-volume" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;text-transform:none;">↓ CSV</a>
+    </div>
     {% for v in volume_overzicht %}
     <div class="li-rij">
         <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ v.materiaal }}</span>
@@ -1155,7 +1222,10 @@ def logistieke_inzichten_pagina():
 </div>
 
 <div class="li-sectie">
-    <div class="li-kop">Leveranciers-volumetrend (laatste 30 dagen t.o.v. de 30 dagen daarvoor)</div>
+    <div class="li-kop" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Leveranciers-volumetrend (laatste 30 dagen t.o.v. de 30 dagen daarvoor)</span>
+        <a href="/inzichten/logistiek/export/leverancier-trend" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;text-transform:none;">↓ CSV</a>
+    </div>
     {% for l in leverancier_trend %}
     <div class="li-rij">
         <span style="flex:1;color:var(--gray-700);">{{ l.leverancier }}</span>
@@ -1168,7 +1238,10 @@ def logistieke_inzichten_pagina():
 </div>
 
 <div class="li-sectie">
-    <div class="li-kop">Transportkosten {% if kosten_per_ton_gemiddeld %}— gemiddeld €{{ kosten_per_ton_gemiddeld }}/ton{% endif %}</div>
+    <div class="li-kop" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Transportkosten {% if kosten_per_ton_gemiddeld %}— gemiddeld €{{ kosten_per_ton_gemiddeld }}/ton{% endif %}</span>
+        <a href="/inzichten/logistiek/export/transportkosten" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;text-transform:none;">↓ CSV</a>
+    </div>
     {% for r in route_overzicht %}
     <div class="li-rij">
         <span style="flex:1;color:var(--gray-700);">{{ r.route }}</span>
