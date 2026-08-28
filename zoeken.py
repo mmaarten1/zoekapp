@@ -2782,6 +2782,7 @@ select.klik-bewerken-veld { cursor:pointer; }
         <div>
             <div class="veld-label">Contactpersoon</div>
             <input type="text" value="{{ bedrijf.contactpersoon or '' }}" data-veld="contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="Naam invullen..." class="klik-bewerken-veld">
+            <a href="/contacten/nieuw/bestaand?bedrijf={{ bedrijf.naam|urlencode }}" style="display:inline-block;margin-top:4px;font-size:11px;color:var(--brand-600);text-decoration:none;">+ Extra contactpersoon →</a>
         </div>
         <div>
             <div class="veld-label">Adres hoofdvestiging</div>
