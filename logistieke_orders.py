@@ -1204,6 +1204,41 @@ def logistieke_inzichten_pagina():
         <span>Openstaande vraag vs. beschikbaar aanbod (incl. binnenkomend)</span>
         <a href="/inzichten/logistiek/export/vraag-aanbod" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;text-transform:none;">↓ CSV</a>
     </div>
+    {% if vraag_vs_aanbod %}
+    <div style="height:180px;margin:10px 0;">
+        <canvas id="vraagAanbodChart"></canvas>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script>
+    (function() {
+        var labels = {{ vraag_vs_aanbod|map(attribute='materiaal')|list|tojson }};
+        var vraagData = {{ vraag_vs_aanbod|map(attribute='vraag')|list|tojson }};
+        var aanbodData = {{ vraag_vs_aanbod|map(attribute='aanbod')|list|tojson }};
+        var ctx = document.getElementById('vraagAanbodChart');
+        if (ctx && window.Chart) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Vraag (t)', data: vraagData, backgroundColor: '#dc2626' },
+                        { label: 'Aanbod (t)', data: aanbodData, backgroundColor: '#0d5c62' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, labels: { font: { size: 10.5 } } } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { font: { size: 10.5 } } },
+                        x: { ticks: { font: { size: 10.5 } } }
+                    }
+                }
+            });
+        }
+    })();
+    </script>
+    {% endif %}
     {% for v in vraag_vs_aanbod %}
     <div class="li-rij">
         <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ v.materiaal }}</span>

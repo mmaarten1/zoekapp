@@ -3246,6 +3246,42 @@ def financiele_inzichten():
         <span>Contractvolume vs. werkelijk geleverd volume <span style="font-weight:400;color:var(--gray-400);">(volume, niet gekoppeld aan winst/marge)</span></span>
         <a href="/inzichten/financieel/export/contractvergelijking" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV</a>
     </div>
+    {% if contract_vergelijking %}
+    <div style="height:200px;margin:10px 0;">
+        <canvas id="contractChart"></canvas>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script>
+    (function() {
+        var labels = {{ contract_vergelijking[:15]|map(attribute='referentie')|list|tojson }};
+        var contractData = {{ contract_vergelijking[:15]|map(attribute='contract_volume')|list|tojson }};
+        var werkelijkData = {{ contract_vergelijking[:15]|map(attribute='werkelijk_volume')|list|tojson }};
+        var ctx = document.getElementById('contractChart');
+        if (ctx && window.Chart) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Contract (t)', data: contractData, backgroundColor: '#94a3b8' },
+                        { label: 'Werkelijk (t)', data: werkelijkData, backgroundColor: '#0d5c62' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, labels: { font: { size: 10.5 } } } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { font: { size: 10.5 } } },
+                        x: { ticks: { font: { size: 9.5 } } }
+                    }
+                }
+            });
+        }
+    })();
+    </script>
+    {% if contract_vergelijking|length > 15 %}<div style="font-size:10.5px;color:var(--gray-300);margin-bottom:6px;">Grafiek toont de eerste 15 van {{ contract_vergelijking|length }} — de volledige lijst staat eronder en in de export.</div>{% endif %}
+    {% endif %}
     {% for c in contract_vergelijking %}
     <div class="fi-rij">
         <span style="flex:1;color:var(--gray-700);">{{ c.referentie }} — {{ c.tegenpartij }} ({{ c.materiaal }}, {{ c.order_type }})</span>
