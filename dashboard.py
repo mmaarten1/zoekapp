@@ -1285,6 +1285,43 @@ def inzichten():
     <a href="/inzichten/export/prijsontwikkeling?materiaal={{ gekozen_materiaal|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV</a>
 </div>
 {% if prijspunten_materiaal %}
+<div style="margin-bottom:16px;height:160px;">
+    <canvas id="prijsChart"></canvas>
+</div>
+<script>
+(function() {
+    var labels = {{ prijspunten_materiaal|map(attribute='datum')|list|tojson }};
+    var waarden = {{ prijspunten_materiaal|map(attribute='prijs_per_ton')|list|tojson }};
+    var ctx = document.getElementById('prijsChart');
+    if (ctx && window.Chart) {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Prijs per ton (EUR)',
+                    data: waarden,
+                    borderColor: '#c2410c',
+                    backgroundColor: 'rgba(194,65,12,0.08)',
+                    fill: true,
+                    tension: 0.25,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#c2410c',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { ticks: { font: { size: 10.5 }, callback: function(v) { return '€' + v; } } },
+                    x: { ticks: { font: { size: 10.5 } } }
+                }
+            }
+        });
+    }
+})();
+</script>
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:24px;">
     {% for p in prijspunten_materiaal %}
     <div style="display:flex;padding:7px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
