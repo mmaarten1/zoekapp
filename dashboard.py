@@ -1225,6 +1225,48 @@ def inzichten():
     <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Volumeontwikkeling per maand</div>
     <a href="/inzichten/export/volumeontwikkeling?materiaal={{ gekozen_materiaal|urlencode }}&land={{ gekozen_land|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV exporteren</a>
 </div>
+<div style="margin-bottom:24px;height:180px;">
+    <canvas id="volumeChart"></canvas>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+(function() {
+    var labels = {{ volume_per_maand|map(attribute='label')|list|tojson }};
+    var waarden = {{ volume_per_maand|map(attribute='volume')|list|tojson }};
+    var ctx = document.getElementById('volumeChart');
+    if (ctx && window.Chart) {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Volume (ton)',
+                    data: waarden,
+                    borderColor: '#0d5c62',
+                    backgroundColor: 'rgba(13,92,98,0.08)',
+                    fill: true,
+                    tension: 0.25,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#0d5c62',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { font: { size: 10.5 } } },
+                    x: { ticks: { font: { size: 10.5 } } }
+                }
+            }
+        });
+    }
+})();
+</script>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Volumeontwikkeling — details per maand</div>
+</div>
 <div style="margin-bottom:24px;">
     {% for v in volume_per_maand %}
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
@@ -1238,6 +1280,7 @@ def inzichten():
 </div>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+
     <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Prijsontwikkeling {{ gekozen_materiaal }} (marktprijzen)</div>
     <a href="/inzichten/export/prijsontwikkeling?materiaal={{ gekozen_materiaal|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV</a>
 </div>
