@@ -29,6 +29,18 @@ def transport_planning_pagina():
     if _guard: return _guard
 
     alle_transporten = laad_transport_planning()
+
+    # Vrachtwagen- en zeevaart-afdelingen zijn twee aparte teams binnen Peute die
+    # elk alleen hun eigen modus inplannen — logistiek (en admins) blijven alles
+    # zien. Geen aparte pagina's, gewoon een filter op basis van de ingelogde
+    # gebruiker's afdeling.
+    _eigen_afdeling = session.get("afdeling", "")
+    if not is_huidige_gebruiker_admin():
+        if _eigen_afdeling == "transport_vrachtwagen":
+            alle_transporten = [t for t in alle_transporten if t.get("transportmodus", "Vrachtwagen") != "Schip"]
+        elif _eigen_afdeling == "transport_zeevaart":
+            alle_transporten = [t for t in alle_transporten if t.get("transportmodus", "Vrachtwagen") == "Schip"]
+
     filter_fabriek = request.args.get("fabriek", "")
     filter_status = request.args.get("filter_status", "")
 
@@ -195,6 +207,14 @@ def transport_planning_nieuw():
             request_laadlocatie_override = "Alblasserdam"
     else:
         request_laadlocatie_override = "Alblasserdam"
+
+    # Zonder contract: de eigen afdeling (vrachtwagen/zeevaart) bepaalt een
+    # logische standaardkeuze — blijft gewoon aanpasbaar.
+    if not _vi_transportmodus:
+        if session.get("afdeling") == "transport_zeevaart":
+            _vi_transportmodus = "Schip"
+        else:
+            _vi_transportmodus = "Vrachtwagen"
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">

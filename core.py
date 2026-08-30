@@ -75,8 +75,8 @@ def bewaar_users(users):
 # Nog GEEN afscherming van schermen o.b.v. deze velden — dat komt in een
 # latere fase. Dit legt alleen de basis vast.
 # ============================================================
-AFDELINGEN = ["accountmanager", "backoffice", "logistiek", "weegbrug", "finance"]
-AFDELING_LABELS = {"accountmanager": "Accountmanager/Trader", "backoffice": "Backoffice", "logistiek": "Logistiek", "weegbrug": "Weegbrug", "finance": "Finance"}
+AFDELINGEN = ["accountmanager", "backoffice", "logistiek", "weegbrug", "finance", "transport_vrachtwagen", "transport_zeevaart"]
+AFDELING_LABELS = {"accountmanager": "Accountmanager/Trader", "backoffice": "Backoffice", "logistiek": "Logistiek", "weegbrug": "Weegbrug", "finance": "Finance", "transport_vrachtwagen": "Transport — Vrachtwagen", "transport_zeevaart": "Transport — Zeevaart"}
 ROLLEN = ["directeur", "manager", "medewerker"]
 ROL_LABELS = {"directeur": "Directeur", "manager": "Manager", "medewerker": "Medewerker"}
 
@@ -117,9 +117,9 @@ PAGINA_AFDELINGEN = {
     "afhandeling": ["logistiek", "weegbrug", "backoffice"],
     "live_operations": ["logistiek", "weegbrug", "backoffice"],
     "logistieke_orders_finance": ["finance", "logistiek", "weegbrug"],
-    "transport_planning": ["logistiek"],
-    "transport_rates": ["logistiek"],
-    "transport_overview": ["logistiek"],
+    "transport_planning": ["logistiek", "transport_vrachtwagen", "transport_zeevaart"],
+    "transport_rates": ["logistiek", "transport_vrachtwagen", "transport_zeevaart"],
+    "transport_overview": ["logistiek", "transport_vrachtwagen", "transport_zeevaart"],
     "facturen": ["finance"],
 }
 
