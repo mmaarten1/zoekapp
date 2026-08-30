@@ -246,11 +246,20 @@ def handelsorders_nieuw_inkoop():
         orders = laad_handelsorders()
         nu = datetime.datetime.now()
         leverancier = request.form.get("leverancier", "").strip()
+        incoterm_ingevoerd = request.form.get("incoterm", "").strip()
+        if not incoterm_ingevoerd:
+            inhoud = _inkoop_formulier_html()
+            pagina = render_simple_page("Nieuwe inkooporder", "handelsorders", inhoud)
+            context = _formulier_context()
+            context["leverancier"] = leverancier
+            context["fout"] = "Incoterm is verplicht."
+            return render_template_string(pagina, **context)
         nieuw = {
             "id": str(uuid.uuid4()),
             "order_type": "inkoop",
             "contractnummer": genereer_contractnummer(orders, "inkoop"),
             "tegenpartij_naam": leverancier,
+            "accountmanager": laad_accountmanagers().get(leverancier, ""),
             "bedrijfseenheid": request.form.get("bedrijfseenheid", "").strip(),
             "datum_aangemaakt": request.form.get("datum_aangemaakt", "") or nu.date().isoformat(),
             "incoterm": request.form.get("incoterm", "").strip(),
@@ -325,6 +334,7 @@ def _inkoop_formulier_html():
     <a href="/handelsorders" style="color:var(--gray-400);text-decoration:none;">Handelsorders</a> &nbsp;/&nbsp; <a href="/handelsorders/nieuw" style="color:var(--gray-400);text-decoration:none;">Nieuw</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Inkoop</span>
 </div>
 <div class="page-title">Nieuwe inkooporder</div>
+{% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">{{ fout }}</div>{% endif %}
 
 <form method="POST" style="max-width:720px;">
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Basisinformatie</div>
@@ -351,7 +361,7 @@ def _inkoop_formulier_html():
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Incoterm</label>
-        <select name="incoterm" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        <select name="incoterm" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for i in incoterms %}<option value="{{ i }}" {% if incoterm == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
         </select>
@@ -596,11 +606,21 @@ def handelsorders_nieuw_verkoop():
     if request.method == "POST":
         orders = laad_handelsorders()
         nu = datetime.datetime.now()
+        klant = request.form.get("klant", "").strip()
+        incoterm_ingevoerd = request.form.get("incoterm", "").strip()
+        if not incoterm_ingevoerd:
+            inhoud = _verkoop_formulier_html()
+            pagina = render_simple_page("Nieuwe verkooporder", "handelsorders", inhoud)
+            context = _formulier_context()
+            context["klant"] = klant
+            context["fout"] = "Incoterm is verplicht."
+            return render_template_string(pagina, **context)
         nieuw = {
             "id": str(uuid.uuid4()),
             "order_type": "verkoop",
             "contractnummer": genereer_contractnummer(orders, "verkoop"),
-            "tegenpartij_naam": request.form.get("klant", "").strip(),
+            "tegenpartij_naam": klant,
+            "accountmanager": laad_accountmanagers().get(klant, ""),
             "bedrijfseenheid": request.form.get("bedrijfseenheid", "").strip(),
             "datum_aangemaakt": request.form.get("datum_aangemaakt", "") or nu.date().isoformat(),
             "incoterm": request.form.get("incoterm", "").strip(),
@@ -641,6 +661,7 @@ def _verkoop_formulier_html():
     <a href="/handelsorders" style="color:var(--gray-400);text-decoration:none;">Handelsorders</a> &nbsp;/&nbsp; <a href="/handelsorders/nieuw" style="color:var(--gray-400);text-decoration:none;">Nieuw</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Verkoop</span>
 </div>
 <div class="page-title">Nieuwe verkooporder</div>
+{% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">{{ fout }}</div>{% endif %}
 
 <form method="POST" style="max-width:720px;">
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Basisinformatie</div>
@@ -667,7 +688,7 @@ def _verkoop_formulier_html():
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Incoterm</label>
-        <select name="incoterm" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+        <select name="incoterm" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for i in incoterms %}<option value="{{ i }}" {% if incoterm == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
         </select>
