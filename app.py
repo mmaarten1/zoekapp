@@ -122,6 +122,9 @@ app.register_blueprint(materialen_bp)
 from contacten import contacten_bp
 app.register_blueprint(contacten_bp)
 
+from taken import taken_bp
+app.register_blueprint(taken_bp)
+
 from orders import orders_bp
 app.register_blueprint(orders_bp)
 

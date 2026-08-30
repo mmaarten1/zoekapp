@@ -47,7 +47,7 @@ if os.path.abspath(DATA_DIR) != os.path.abspath("."):
         "incoterms.json", "betalingstermijnen.json", "valuta.json", "pod_havens.json", "bedrijfseenheden.json",
         "logo_instelling.json", "leverancier_instellingen.json", "handelsorders.json", "wisselkoers_cache.json",
         "login_pogingen.json", "voorraadwaardering.json", "voorraadmutaties_periode.json", "voorraadlocaties.json",
-        "productiemutaties.json", "organisatiestructuur.json", "layout_voorkeuren.json",
+        "productiemutaties.json", "organisatiestructuur.json", "layout_voorkeuren.json", "taken.json",
     ]
     for _bestand in _te_migreren:
         _doel = datapad(_bestand)
@@ -1665,6 +1665,7 @@ ZIJBALK_ITEMS = [
     ("dashboard", "/dashboard", "DB", "Dashboard"),
     ("logistieke_orders", "/logistiek/orders", "LO", "Orders logistiek"),
     ("notities", "/notities-overzicht", "NT", "Notities"),
+    ("taken", "/taken", "TK", "Takenlijst"),
     ("inzichten_logistiek", "/inzichten/logistiek", "IL", "Logistieke Inzichten"),
     ("zoeken", "/", "ZK", "Zoeken"),
     ("wereldkaart", "/wereldkaart", "WM", "World Map"),
@@ -2256,3 +2257,24 @@ def _sorteer_op_voorkeur(items, opgeslagen_volgorde, sleutel_index=0):
         return items
     volgorde_index = {sleutel: i for i, sleutel in enumerate(opgeslagen_volgorde)}
     return sorted(items, key=lambda item: volgorde_index.get(item[sleutel_index], len(opgeslagen_volgorde) + items.index(item)))
+
+# ============================================================
+# Takenlijst: persoonlijke of team-taken, met vier statussen
+# (Toegewezen -> Aangenomen -> In proces -> Afgehandeld). Een taak kan aan
+# een specifieke gebruiker toegewezen zijn (persoonlijk), aan een heel team
+# (iedereen in dat team kan 'm aannemen), of persoonlijk zijn maar gedeeld
+# met het team (zichtbaar voor het team, maar van één eigenaar).
+# ============================================================
+TAKEN_FILE = datapad("taken.json")
+TAAK_STATUSSEN = ["Toegewezen", "Aangenomen", "In proces", "Afgehandeld"]
+
+def laad_taken():
+    try:
+        with open(TAKEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def bewaar_taken(data):
+    with open(TAKEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
