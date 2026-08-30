@@ -15,7 +15,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_transport_planning, bewaar_transport_planning, genereer_transport_referentie,
     TRANSPORT_PLANNING_STATUSSEN, PAPIERFABRIEKEN, is_huidige_gebruiker_admin,
-    toegewezen_klant_fabrieken,
+    toegewezen_klant_fabrieken, laad_pod_havens, laad_handelsorders,
     vereist_afdeling_of_403, render_simple_page, TRANSPORT_DATA,
     vind_transport_tarieven_dichtbij, laad_documenten,
 )
@@ -142,9 +142,13 @@ def transport_planning_nieuw():
         nieuw = {
             "id": str(uuid.uuid4()),
             "referentienummer": genereer_transport_referentie(transporten),
+            "transportmodus": request.form.get("transportmodus", "Vrachtwagen").strip(),
             "fabriek": request.form.get("fabriek", "").strip(),
             "laadlocatie": request.form.get("laadlocatie", "Alblasserdam").strip(),
             "loslocatie": request.form.get("loslocatie", "").strip(),
+            "haven": request.form.get("haven", "").strip(),
+            "forwarder": request.form.get("forwarder", "").strip(),
+            "vervoerder": request.form.get("vervoerder", "").strip(),
             "laaddatum": request.form.get("laaddatum", "").strip(),
             "laadtijd": request.form.get("laadtijd", "").strip(),
             "losdatum": request.form.get("losdatum", "").strip(),
@@ -172,6 +176,26 @@ def transport_planning_nieuw():
     _vi_hoeveelheid = request.args.get("hoeveelheid", "").strip()
     _vi_contract = request.args.get("contract_referentie", "").strip()
     _vi_fabriek = request.args.get("fabriek", "").strip()
+
+    # Vanuit een contract geopend: haven, laadlocatie en transportmodus komen
+    # automatisch uit het Handelsorder over — vervangbaar, want soms verandert
+    # de situatie (andere haven, andere lading).
+    _vi_haven = ""
+    _vi_transportmodus = ""
+    if _vi_contract:
+        _gekoppeld_contract = next((h for h in laad_handelsorders() if h.get("contractnummer") == _vi_contract), None)
+        if _gekoppeld_contract:
+            _vi_haven = _gekoppeld_contract.get("pod_haven", "")
+            _vi_transportmodus = _gekoppeld_contract.get("transportmodus", "")
+            if _gekoppeld_contract.get("afhaal_locatienaam"):
+                request_laadlocatie_override = _gekoppeld_contract["afhaal_locatienaam"]
+            else:
+                request_laadlocatie_override = "Alblasserdam"
+        else:
+            request_laadlocatie_override = "Alblasserdam"
+    else:
+        request_laadlocatie_override = "Alblasserdam"
+
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/transport-planning" style="color:var(--gray-400);text-decoration:none;">Transport Planning</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw</span>
@@ -186,6 +210,13 @@ def transport_planning_nieuw():
 <form method="POST" style="max-width:680px;">
     <input type="hidden" name="contract_referentie" value="{{ vi_contract }}">
     <div style="margin-bottom:10px;">
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Transportmodus</label>
+        <select name="transportmodus" id="transportmodus_select" onchange="wisselTransportmodus()" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
+            <option value="Vrachtwagen" {% if vi_transportmodus == "Vrachtwagen" %}selected{% endif %}>Vrachtwagen</option>
+            <option value="Schip" {% if vi_transportmodus == "Schip" %}selected{% endif %}>Schip (zeevaart)</option>
+        </select>
+    </div>
+    <div style="margin-bottom:10px;">
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Fabriek</label>
         <input type="text" name="fabriek" value="{{ vi_fabriek }}" list="fabrieken_lijst" onblur="toonTariefSuggestie(this.value)" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         <datalist id="fabrieken_lijst">{% for naam in fabriek_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
@@ -194,11 +225,29 @@ def transport_planning_nieuw():
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Laadlocatie</label>
-            <input type="text" name="laadlocatie" value="Alblasserdam" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <input type="text" name="laadlocatie" value="{{ vi_laadlocatie }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
-        <div>
+        <div id="loslocatie_veld">
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Loslocatie</label>
             <input type="text" name="loslocatie" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+        </div>
+    </div>
+
+    <div id="zeevaart_velden" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Haven (POD)</label>
+                <input type="text" name="haven" value="{{ vi_haven }}" list="pod_havens_lijst" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+                <datalist id="pod_havens_lijst">{% for h in pod_havens %}<option value="{{ h }}">{% endfor %}</datalist>
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Forwarder</label>
+                <input type="text" name="forwarder" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            </div>
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Vervoerder (rederij, bv. MSC, Cosco)</label>
+            <input type="text" name="vervoerder" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
@@ -228,7 +277,7 @@ def transport_planning_nieuw():
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Hoeveelheid (ton)</label>
             <input type="text" name="hoeveelheid" value="{{ vi_hoeveelheid }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
-        <div>
+        <div id="aantal_trucks_veld">
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Aantal trucks</label>
             <input type="text" name="aantal_trucks" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
@@ -243,6 +292,7 @@ def transport_planning_nieuw():
             <input type="text" name="transporttarief" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
     </div>
+    <div id="vrachtwagen_velden">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Kenteken (indien bekend)</label>
@@ -253,6 +303,7 @@ def transport_planning_nieuw():
             <input type="text" name="chauffeur" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
     </div>
+    </div>
     <div style="margin-bottom:16px;">
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Opmerkingen</label>
         <textarea name="opmerkingen" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;"></textarea>
@@ -262,6 +313,15 @@ def transport_planning_nieuw():
 </form>
 
 <script>
+function wisselTransportmodus() {
+    var modus = document.getElementById("transportmodus_select").value;
+    var isSchip = (modus === "Schip");
+    document.getElementById("zeevaart_velden").style.display = isSchip ? "block" : "none";
+    document.getElementById("vrachtwagen_velden").style.display = isSchip ? "none" : "block";
+    document.getElementById("loslocatie_veld").style.display = isSchip ? "none" : "block";
+    document.getElementById("aantal_trucks_veld").style.display = isSchip ? "none" : "block";
+}
+wisselTransportmodus();
 async function toonTariefSuggestie(fabriekNaam) {
     var doel = document.getElementById("tarief_suggestie");
     if (!fabriekNaam) { doel.innerHTML = ""; return; }
@@ -283,7 +343,9 @@ async function toonTariefSuggestie(fabriekNaam) {
     pagina = render_simple_page("Transport plannen", "transport_planning", inhoud)
     return render_template_string(pagina, fabriek_namen=fabriek_namen, vi_leverancier=_vi_leverancier,
                                     vi_materiaal=_vi_materiaal, vi_hoeveelheid=_vi_hoeveelheid,
-                                    vi_contract=_vi_contract, vi_fabriek=_vi_fabriek)
+                                    vi_contract=_vi_contract, vi_fabriek=_vi_fabriek,
+                                    vi_haven=_vi_haven, vi_transportmodus=_vi_transportmodus,
+                                    vi_laadlocatie=request_laadlocatie_override, pod_havens=laad_pod_havens())
 
 @transport_planning_bp.route("/transport-planning/<transport_id>")
 def transport_planning_detail(transport_id):
@@ -315,16 +377,25 @@ def transport_planning_detail(transport_id):
 
     <div style="background:var(--gray-50);border-radius:8px;padding:14px 16px;font-size:12.5px;color:var(--gray-600);">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><b>Transportmodus:</b> {{ transport.transportmodus or 'Vrachtwagen' }}</div>
             <div><b>Laadlocatie:</b> {{ transport.laadlocatie or '—' }}</div>
+            {% if transport.transportmodus == "Schip" %}
+            <div><b>Haven (POD):</b> {{ transport.haven or '—' }}</div>
+            <div><b>Forwarder:</b> {{ transport.forwarder or '—' }}</div>
+            <div><b>Vervoerder:</b> {{ transport.vervoerder or '—' }}</div>
+            {% else %}
             <div><b>Loslocatie:</b> {{ transport.loslocatie or '—' }}</div>
+            {% endif %}
             <div><b>Laaddatum:</b> {{ transport.laaddatum or '—' }} {{ transport.laadtijd }}</div>
             <div><b>Losdatum:</b> {{ transport.losdatum or '—' }} {{ transport.lostijd }}</div>
             <div><b>Materiaal:</b> {{ transport.materiaal or '—' }}</div>
             <div><b>Hoeveelheid:</b> {{ transport.hoeveelheid or '—' }}{% if transport.hoeveelheid %} ton{% endif %}</div>
-            <div><b>Aantal trucks:</b> {{ transport.aantal_trucks or '—' }}</div>
+            {% if transport.transportmodus != "Schip" %}<div><b>Aantal trucks:</b> {{ transport.aantal_trucks or '—' }}</div>{% endif %}
             <div><b>Transporteur:</b> {{ transport.transporteur or '—' }}</div>
+            {% if transport.transportmodus != "Schip" %}
             <div><b>Kenteken:</b> {{ transport.kenteken or '—' }}</div>
             <div><b>Chauffeur:</b> {{ transport.chauffeur or '—' }}</div>
+            {% endif %}
             <div><b>Transporttarief:</b> {% if transport.transporttarief %}€{{ transport.transporttarief }}{% else %}—{% endif %}</div>
         </div>
         {% if transport.opmerkingen %}<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--gray-200);"><b>Opmerkingen:</b> {{ transport.opmerkingen }}</div>{% endif %}
