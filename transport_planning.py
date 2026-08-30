@@ -15,6 +15,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_transport_planning, bewaar_transport_planning, genereer_transport_referentie,
     TRANSPORT_PLANNING_STATUSSEN, PAPIERFABRIEKEN, is_huidige_gebruiker_admin,
+    toegewezen_klant_fabrieken,
     vereist_afdeling_of_403, render_simple_page, TRANSPORT_DATA,
     vind_transport_tarieven_dichtbij, laad_documenten,
 )
@@ -41,7 +42,7 @@ def transport_planning_pagina():
     # --- Per-fabriek overzicht, exact zoals gevraagd: geplande vrachten, nog te
     # plannen, vandaag geladen, onderweg, aangekomen, afgeleverd, problemen ---
     _vandaag = datetime.date.today().isoformat()
-    fabriek_namen = sorted({b["naam"] for b in PAPIERFABRIEKEN})
+    fabriek_namen = sorted({b["naam"] for b in toegewezen_klant_fabrieken()})
     per_fabriek = []
     for naam in fabriek_namen:
         transporten_fabriek = [t for t in alle_transporten if t.get("fabriek") == naam]
@@ -165,7 +166,7 @@ def transport_planning_nieuw():
         bewaar_transport_planning(transporten)
         return redirect(url_for("transport_planning.transport_planning_detail", transport_id=nieuw["id"]))
 
-    fabriek_namen = sorted({b["naam"] for b in PAPIERFABRIEKEN})
+    fabriek_namen = sorted({b["naam"] for b in toegewezen_klant_fabrieken()})
     _vi_leverancier = request.args.get("leverancier", "").strip()
     _vi_materiaal = request.args.get("materiaal", "").strip()
     _vi_hoeveelheid = request.args.get("hoeveelheid", "").strip()

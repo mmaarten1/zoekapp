@@ -183,6 +183,17 @@ def bewaar_accountmanagers(data):
     with open(ACCOUNTMANAGERS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+def toegewezen_klant_fabrieken():
+    """De fabrieken uit PAPIERFABRIEKEN die daadwerkelijk als klant zijn
+    toegekend — een toegekende status óf een toegewezen accountmanager, zelfde
+    filterprincipe als de Klanten-pagina zelf. Gebruik dit (niet de rauwe
+    PAPIERFABRIEKEN-lijst) overal waar een gebruiker een fabriek als klant moet
+    KIEZEN (bv. bij een verkooporder of transport inplannen) — anders komen er
+    duizenden nog niet-toegewezen fabrieken tussen te staan."""
+    status_alle = laad_status()
+    accountmanagers_alle = laad_accountmanagers()
+    return [f for f in PAPIERFABRIEKEN if status_alle.get(f["naam"]) or accountmanagers_alle.get(f["naam"])]
+
 def laad_status():
     try:
         with open(STATUS_FILE, "r", encoding="utf-8") as f:

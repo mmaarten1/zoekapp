@@ -23,6 +23,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_handelsorders, bewaar_handelsorders, genereer_contractnummer, HANDELSORDER_STATUSSEN,
     TRANSPORTMODI, ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_accountmanagers,
+    toegewezen_klant_fabrieken,
     laad_materiaal_taxonomie, laad_incoterms, laad_betalingstermijnen, laad_valuta, laad_pod_havens,
     laad_bedrijfseenheden, laad_leverancier_instellingen, leverancier_instelling_voor,
     genereer_supplier_reference, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
@@ -40,8 +41,10 @@ def _echte_relaties():
     return sorted({b["naam"] for b in ENF_BEDRIJVEN if status_alle.get(b["naam"]) or am_alle.get(b["naam"])})
 
 def _klant_namen():
-    """Klanten = fabrieken waaraan verkocht wordt (PAPIERFABRIEKEN)."""
-    return sorted({f["naam"] for f in PAPIERFABRIEKEN})
+    """Klanten = fabrieken waaraan verkocht wordt, en die al als klant zijn
+    toegekend (status of accountmanager) — niet de volledige, ongefilterde
+    PAPIERFABRIEKEN-database."""
+    return sorted({f["naam"] for f in toegewezen_klant_fabrieken()})
 
 def _getal(waarde):
     try:
