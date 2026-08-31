@@ -51,9 +51,11 @@ def add_melding():
 
 @meldingen_bp.route("/api/meldingen/<melding_id>/lezen", methods=["POST"])
 def markeer_gelezen(melding_id):
+    gebruiker = session.get("gebruikersnaam", "")
+    team = session.get("team", "")
     alle = laad_meldingen()
     for m in alle:
-        if m["id"] == melding_id:
+        if m["id"] == melding_id and (m.get("voor_gebruiker") == gebruiker or (m.get("voor_team") and m.get("voor_team") == team)):
             m["gelezen"] = True
     bewaar_meldingen(alle)
     return jsonify({"ok": True})
