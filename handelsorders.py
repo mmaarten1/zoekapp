@@ -1073,6 +1073,30 @@ def handelsorder_bewerken(order_id):
         velden += ["lever_adres", "lever_postcode", "lever_stad", "lever_land", "leverancier"]
 
     if request.method == "POST":
+        incoterm_ingevoerd = request.form.get("incoterm", "").strip()
+        if not incoterm_ingevoerd:
+            if order["order_type"] == "inkoop":
+                inhoud = _inkoop_formulier_html().replace('action=""', "").replace(
+                    '<form method="POST"', f'<form method="POST" action="/handelsorders/{order_id}/bewerken"'
+                )
+                titel = "Inkooporder wijzigen"
+            else:
+                inhoud = _verkoop_formulier_html().replace(
+                    '<form method="POST"', f'<form method="POST" action="/handelsorders/{order_id}/bewerken"'
+                )
+                titel = "Verkooporder wijzigen"
+            pagina = render_simple_page(titel, "handelsorders", inhoud)
+            context = _formulier_context()
+            context.update(order)
+            for veld in velden:
+                context[veld] = request.form.get(veld, order.get(veld, "")).strip()
+            if order["order_type"] == "inkoop":
+                context["leverancier"] = request.form.get("leverancier", order.get("tegenpartij_naam", "")).strip()
+            else:
+                context["klant"] = request.form.get("klant", order.get("tegenpartij_naam", "")).strip()
+            context["fout"] = "Incoterm is verplicht."
+            return render_template_string(pagina, **context)
+
         for veld in velden:
             order[veld] = request.form.get(veld, "").strip()
         if order["order_type"] == "inkoop":
