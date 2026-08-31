@@ -446,8 +446,23 @@ def weegbrug_uitwegen(record_id):
                 bewaar_logistieke_orders(orders)
 
         if status == "Compleet":
-            pdf_bytes = _genereer_weegbon_pdf(record)
-            _bewaar_weegbon_bij_document(record, pdf_bytes)
+            # Zodra een weging compleet is, moet die direct in de voorraad zichtbaar
+            # zijn — geen aparte handmatige 'Afhandelen'- en 'Koppelen'-stappen meer
+            # nodig voor het normale geval (precies één passend, nog-openstaand
+            # contract). Alleen bij een echte keuze (nul of meerdere kandidaten)
+            # blijft het bewust liggen voor Live Operaties.
+            from logistieke_orders import verwerk_complete_weging_automatisch
+            verwerk_complete_weging_automatisch(record["id"])
+
+            # Dit kan het weegrecord net een 'ordernummer' hebben gegeven (bij een
+            # kale weegopdracht die nog nergens aan gekoppeld was) — zonder dat
+            # verse record zou de weegbon-PDF NOOIT aan een document gekoppeld
+            # worden, want die koppeling vereist een ordernummer. Daarom hier
+            # opnieuw inladen, pas dan de PDF genereren/koppelen.
+            records_ververst = laad_weegbrug()
+            record_ververst = next((r for r in records_ververst if r["id"] == record_id), record)
+            pdf_bytes = _genereer_weegbon_pdf(record_ververst)
+            _bewaar_weegbon_bij_document(record_ververst, pdf_bytes)
 
         return redirect(url_for("weegbrug.weegbrug_pagina"))
 
