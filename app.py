@@ -15,6 +15,7 @@ import time
 from core import (
     datapad, laad_users, laad_accountmanagers, bewaar_accountmanagers,
     laad_status, bewaar_status, laad_voorraadmomenten, bewaar_voorraadmomenten,
+    toegewezen_klant_fabrieken,
     laad_shipments, bewaar_shipments, laad_cert_vervaldatums, bewaar_cert_vervaldatums,
     _cert_sleutel, laad_contactpersonen, bewaar_contactpersonen, sync_contactpersoon_naar_contacten,
     laad_facturen, bewaar_facturen, bepaal_factuur_status, laad_documenten,
@@ -2581,8 +2582,10 @@ def containerbeheer_pagina():
     if filter_land_cont:
         getoonde_containers = [c for c in getoonde_containers if c.get("land_herkomst") == filter_land_cont]
 
-    leverancier_namen_cont = sorted({b["naam"] for b in ENF_BEDRIJVEN})
-    fabriek_namen_cont = sorted({b["naam"] for b in PAPIERFABRIEKEN})
+    _status_alle_cont = laad_status()
+    _am_alle_cont = laad_accountmanagers()
+    leverancier_namen_cont = sorted({b["naam"] for b in ENF_BEDRIJVEN if _status_alle_cont.get(b["naam"]) or _am_alle_cont.get(b["naam"])})
+    fabriek_namen_cont = sorted({f["naam"] for f in toegewezen_klant_fabrieken()})
     landen_herkomst = sorted({c.get("land_herkomst","") for c in containers if c.get("land_herkomst")})
 
     per_land = []
