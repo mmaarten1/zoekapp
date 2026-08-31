@@ -123,11 +123,7 @@ def inkoop_planning_pagina():
     <span style="width:130px;text-align:right;color:var(--gray-500);">{{ c.gepland }} / {{ c.totaal }} MT</span>
     <span style="width:110px;text-align:right;font-weight:700;color:#dc2626;">{{ c.resterend }} MT open</span>
     <span style="width:90px;text-align:right;">
-        {% if c.transportmodus == "Schip" %}
         <a href="/transport-planning/nieuw?leverancier={{ c.leverancier|urlencode }}&materiaal={{ (c.materiaal ~ ' — ' ~ c.kwaliteit)|urlencode }}&hoeveelheid={{ c.resterend }}&contract_referentie={{ c.contractnummer|urlencode }}&fabriek={{ c.klant|urlencode }}" style="font-size:11px;font-weight:700;color:var(--brand-600);text-decoration:none;">Plan in →</a>
-        {% else %}
-        <a href="/weegbrug/opdracht?leverancier={{ c.leverancier|urlencode }}&materiaal={{ c.materiaal|urlencode }}&kwaliteit={{ c.kwaliteit|urlencode }}" style="font-size:11px;font-weight:700;color:var(--brand-600);text-decoration:none;">Plan in →</a>
-        {% endif %}
     </span>
 </div>
 {% endfor %}
@@ -147,7 +143,7 @@ def verkoop_planning_pagina():
     Analoog aan Inkoop-planning, maar dan uitgaand: gekoppeld aan Transport Planning
     (dat sowieso al 'Peute → fabrieken' als scope heeft, dus dit past er precies op).
     Zodra een accountmanager een verkooporder definitief maakt, verschijnt die hier."""
-    _guard = vereist_afdeling_of_403("inkoop_planning")
+    _guard = vereist_afdeling_of_403("verkoop_planning")
     if _guard: return _guard
 
     alle_transport_planning_vp = laad_transport_planning()
