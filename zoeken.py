@@ -872,6 +872,38 @@ HTML = '''
     </div>
 </aside>
 <script>
+var CSRF_TOKEN = "{{ csrf_token }}";
+// Vangnet voor formulieren die (nu of later) geen csrf_token-veld hebben —
+// zelfde patroon als render_simple_page() in core.py.
+document.addEventListener("submit", function(e) {
+    var form = e.target;
+    if (form.tagName === "FORM" && (form.method || "get").toLowerCase() === "post") {
+        if (!form.querySelector('input[name="csrf_token"]')) {
+            var veld = document.createElement("input");
+            veld.type = "hidden";
+            veld.name = "csrf_token";
+            veld.value = CSRF_TOKEN;
+            form.appendChild(veld);
+        }
+    }
+}, true);
+// Zelfde patroon als render_simple_page() in core.py: automatisch de CSRF-header
+// toevoegen aan elke fetch()-aanroep vanaf deze pagina (bv. wijzigBedrijfVeld,
+// wijzigMateriaalCheckbox) — zonder dit faalden die stilzwijgend met een 400.
+var _origineleFetch = window.fetch;
+window.fetch = function(url, opties) {
+    opties = opties || {};
+    var methode = (opties.method || "GET").toUpperCase();
+    if (["POST","PUT","DELETE","PATCH"].indexOf(methode) !== -1) {
+        opties.headers = opties.headers || {};
+        if (opties.headers instanceof Headers) {
+            opties.headers.set("X-CSRF-Token", CSRF_TOKEN);
+        } else {
+            opties.headers["X-CSRF-Token"] = CSRF_TOKEN;
+        }
+    }
+    return _origineleFetch.call(this, url, opties);
+};
 function toggleMobielMenu() {
     document.getElementById("mobielSidebar").classList.toggle("open");
     document.getElementById("mobielOverlay").classList.toggle("open");
