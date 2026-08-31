@@ -21,7 +21,7 @@ from core import (
     shipment_hoeveelheid, render_simple_page, ENF_BEDRIJVEN, LANDEN,
     effectieve_afdeling, laad_weegbrug, laad_logistieke_orders, laad_transport_planning,
     laad_containers, vereist_afdeling_of_403, laad_handelsorders, laad_facturen, bepaal_factuur_status,
-    laad_layout_voorkeuren,
+    laad_layout_voorkeuren, laad_taken,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -509,6 +509,21 @@ def dashboard():
         aandacht_items.append({"titel": f"{aantal_cert_verlopen} certificeringen verlopen (eigen bedrijven)", "sub": "controle nodig", "url": "/certificeringen"})
     if orders_verlopen:
         aandacht_items.append({"titel": f"{orders_verlopen} eigen orders over de einddatum", "sub": "nog niet definitief gemaakt", "url": "/handelsorders"})
+
+    # Eigen taken die vandaag of eerder vervallen (uit de Takenlijst-module) —
+    # hergebruikt dezelfde zichtbaarheidsregel als de Takenlijst-pagina zelf,
+    # zodat dit exact dezelfde taken zijn die je daar ook zou zien.
+    from taken import _eigen_team as _taken_eigen_team, _taak_zichtbaar_voor_mij as _taken_zichtbaar
+    _huidige_gebruiker_taken = session.get("gebruikersnaam", "")
+    _eigen_org_afdeling_taken, _eigen_team_taken = _taken_eigen_team()
+    _vandaag_taken = datetime.date.today().isoformat()
+    _vervallen_taken = [
+        t for t in laad_taken()
+        if t.get("status") != "Afgehandeld" and t.get("vervaldatum") and t["vervaldatum"] <= _vandaag_taken
+        and _taken_zichtbaar(t, _huidige_gebruiker_taken, _eigen_org_afdeling_taken, _eigen_team_taken)
+    ]
+    if _vervallen_taken:
+        aandacht_items.append({"titel": f"{len(_vervallen_taken)} taken vervallen of vervallen vandaag", "sub": "eigen takenlijst", "url": "/taken"})
 
     # ---------- Activiteit van het team ----------
     activiteit = []
