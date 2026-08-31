@@ -850,7 +850,6 @@ HTML = '''
         {% if mag_pagina_zien('leveranciers') %}<a href="/leveranciers" class="sidebar-link"><span class="icoon">LV</span> Leveranciers</a>{% endif %}
         {% if mag_pagina_zien('certificeringen') %}<a href="/certificeringen" class="sidebar-link"><span class="icoon">CF</span> Certifications</a>{% endif %}
         {% if mag_pagina_zien('contacten') %}<a href="/contacten" class="sidebar-link"><span class="icoon">CT</span> Contacten</a>{% endif %}
-        {% if mag_pagina_zien('orders') %}<a href="/orders" class="sidebar-link" style="display:flex;align-items:center;"><span class="icoon">OR</span> Orders{% if aantal_open_orders %}<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{{ aantal_open_orders }}</span>{% endif %}</a>{% endif %}
         {% if mag_pagina_zien('handelsorders') %}<a href="/handelsorders" class="sidebar-link"><span class="icoon">HO</span> Handelsorders</a>{% endif %}
         {% if mag_pagina_zien('logistiek') %}<a href="/logistiek" class="sidebar-link"><span class="icoon">LG</span> Logistiek</a>{% endif %}
         {% if mag_pagina_zien('transport_overview') %}<a href="/transport-overview" class="sidebar-link"><span class="icoon">TO</span> Transport Overview</a>{% endif %}
@@ -2395,7 +2394,6 @@ def index():
         alle_gebruikersnamen=sorted(laad_users().keys()),
         actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst,
         materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()),
-        aantal_open_orders=sum(1 for o in laad_orders() if o.get("status") in ("Open", "Onderhandeling")),
         mag_pagina_zien=mag_pagina_zien, weergave_balk=_bouw_weergave_balk())
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")

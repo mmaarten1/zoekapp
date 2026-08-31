@@ -1675,7 +1675,6 @@ ZIJBALK_ITEMS = [
     ("leveranciers", "/leveranciers", "LV", "Leveranciers"),
     ("certificeringen", "/certificeringen", "CF", "Certifications"),
     ("contacten", "/contacten", "CT", "Contacten"),
-    ("orders", "/orders", "OR", "Orders"),
     ("handelsorders", "/handelsorders", "HO", "Handelsorders"),
     ("logistiek", "/logistiek", "LG", "Logistiek"),
     ("transport_overview", "/transport-overview", "TO", "Transport Overview"),
@@ -1696,11 +1695,6 @@ def sidebar_html(actief):
     Elk nieuw item hier moet OOK handmatig toegevoegd worden in zoeken.py,
     naast de link voor 'logistiek' (zoek op 'class="sidebar-link"').
     """
-    try:
-        aantal_open_orders = sum(1 for o in laad_orders() if o.get("status") in ("Open", "Onderhandeling"))
-    except Exception:
-        aantal_open_orders = 0
-
     items = ZIJBALK_ITEMS
     links = ""
     _layout_voorkeur = laad_layout_voorkeuren().get(session.get("gebruikersnaam",""), {})
@@ -1712,10 +1706,7 @@ def sidebar_html(actief):
         if key in _verborgen and key != actief:
             continue
         cls = "sidebar-link active" if key == actief else "sidebar-link"
-        badge_html = ""
-        if key == "orders" and aantal_open_orders > 0:
-            badge_html = f'<span style="background:var(--brand-600);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:auto;">{aantal_open_orders}</span>'
-        links += "<a href=\"" + href + "\" class=\"" + cls + "\" style=\"display:flex;align-items:center;\"><span class=\"icoon\">" + icoon + "</span> " + label + badge_html + "</a>\n        "
+        links += "<a href=\"" + href + "\" class=\"" + cls + "\" style=\"display:flex;align-items:center;\"><span class=\"icoon\">" + icoon + "</span> " + label + "</a>\n        "
 
     weergave_balk = ""
     if is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur":
