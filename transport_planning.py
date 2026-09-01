@@ -15,7 +15,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_transport_planning, bewaar_transport_planning, genereer_transport_referentie,
     TRANSPORT_PLANNING_STATUSSEN, PAPIERFABRIEKEN, is_huidige_gebruiker_admin,
-    toegewezen_klant_fabrieken, laad_pod_havens, laad_handelsorders,
+    toegewezen_klant_fabrieken, laad_pod_havens, laad_handelsorders, parse_hoeveelheid_getal,
     vereist_afdeling_of_403, render_simple_page, TRANSPORT_DATA,
     vind_transport_tarieven_dichtbij, laad_documenten,
 )
@@ -367,6 +367,53 @@ async function toonTariefSuggestie(fabriekNaam) {
                                     vi_haven=_vi_haven, vi_transportmodus=_vi_transportmodus,
                                     vi_laadlocatie=request_laadlocatie_override, pod_havens=laad_pod_havens())
 
+@transport_planning_bp.route("/transport-planning/<transport_id>/koppel-verkoop", methods=["POST"])
+def transport_planning_koppel_verkoop(transport_id):
+    """Een schip-transport koppelen aan het verkoopcontract waar de lading
+    voor bestemd is — de bestemming van deze inkoop. Leeg gekozen ontkoppelt."""
+    _guard = vereist_afdeling_of_403("transport_planning")
+    if _guard: return _guard
+
+    transporten = laad_transport_planning()
+    transport = next((t for t in transporten if t["id"] == transport_id), None)
+    if transport:
+        transport["verkoopcontract_referentie"] = request.form.get("verkoopcontract", "").strip()
+        bewaar_transport_planning(transporten)
+    return redirect(url_for("transport_planning.transport_planning_detail", transport_id=transport_id))
+
+def _verkoopcontract_opties_voor_transport(transport):
+    """Alle open (resterend > 0), Definitieve verkoop-Handelsorders — de beste
+    materiaal-match voor dit transport bovenaan. Materiaal staat op een
+    transport als gecombineerde 'Categorie — Kwaliteit'-string, dus dit is een
+    zachte sortering, geen harde filter (anders sluit je te snel iets uit)."""
+    _alle_transporten_vc = laad_transport_planning()
+
+    def _gepland_verkoop(contractnummer):
+        return round(sum(
+            parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+            for t in _alle_transporten_vc
+            if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
+        ), 3)
+
+    opties = []
+    for h in laad_handelsorders():
+        if h.get("order_type") != "verkoop" or h.get("status") != "Definitief":
+            continue
+        try:
+            totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
+        except (ValueError, TypeError):
+            totaal = 0.0
+        resterend = round(totaal - _gepland_verkoop(h["contractnummer"]), 1)
+        if resterend <= 0:
+            continue
+        _materiaal_match = bool(transport.get("materiaal")) and h.get("materiaal","") in transport.get("materiaal","")
+        opties.append({
+            "contractnummer": h["contractnummer"], "tegenpartij_naam": h.get("tegenpartij_naam",""),
+            "resterend": resterend, "_match": _materiaal_match,
+        })
+    opties.sort(key=lambda o: (not o["_match"], o["contractnummer"]))
+    return opties
+
 @transport_planning_bp.route("/transport-planning/<transport_id>")
 def transport_planning_detail(transport_id):
     _guard = vereist_afdeling_of_403("transport_planning")
@@ -377,6 +424,14 @@ def transport_planning_detail(transport_id):
     if not transport:
         pagina = render_simple_page("Niet gevonden", "transport_planning", '<div class="page-title">Transport niet gevonden</div><div class="lege-staat">Dit transport bestaat niet (meer). <a href="/transport-planning">Terug naar Transport Planning</a></div>')
         return render_template_string(pagina), 404
+
+    verkoopcontract_opties = []
+    verkoopcontract_gekoppeld = None
+    if transport.get("transportmodus") == "Schip":
+        if transport.get("verkoopcontract_referentie"):
+            verkoopcontract_gekoppeld = next((h for h in laad_handelsorders() if h.get("contractnummer") == transport["verkoopcontract_referentie"]), None)
+        else:
+            verkoopcontract_opties = _verkoopcontract_opties_voor_transport(transport)
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
@@ -420,6 +475,31 @@ def transport_planning_detail(transport_id):
         </div>
         {% if transport.opmerkingen %}<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--gray-200);"><b>Opmerkingen:</b> {{ transport.opmerkingen }}</div>{% endif %}
     </div>
+
+    {% if transport.transportmodus == "Schip" %}
+    <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:16px 4px;margin-top:16px;">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Verkoopcontract (bestemming)</div>
+        {% if transport.verkoopcontract_referentie %}
+        <div style="font-size:13px;color:var(--gray-700);">
+            <a href="/handelsorders/{{ verkoopcontract_gekoppeld.id }}" style="font-weight:700;color:var(--brand-600);text-decoration:none;">{{ transport.verkoopcontract_referentie }}</a>
+            {% if verkoopcontract_gekoppeld %} — {{ verkoopcontract_gekoppeld.tegenpartij_naam }}{% endif %}
+        </div>
+        <form method="POST" action="/transport-planning/{{ transport.id }}/koppel-verkoop" style="margin-top:8px;">
+            <input type="hidden" name="verkoopcontract" value="">
+            <button type="submit" style="font-size:11.5px;color:var(--gray-400);background:none;border:none;cursor:pointer;padding:0;">Ontkoppelen</button>
+        </form>
+        {% else %}
+        <form method="POST" action="/transport-planning/{{ transport.id }}/koppel-verkoop">
+            <select name="verkoopcontract" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;margin-bottom:8px;">
+                <option value="">— kies een verkoopcontract —</option>
+                {% for v in verkoopcontract_opties %}<option value="{{ v.contractnummer }}">{{ v.contractnummer }} — {{ v.tegenpartij_naam }} ({{ v.resterend }}t open)</option>{% endfor %}
+            </select>
+            <button type="submit" style="padding:7px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Koppelen</button>
+        </form>
+        {% if not verkoopcontract_opties %}<div style="font-size:11.5px;color:var(--gray-300);margin-top:6px;">Geen open verkoopcontracten gevonden voor {{ transport.materiaal or 'dit materiaal' }}.</div>{% endif %}
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 
 <div style="flex:1;min-width:300px;">
@@ -463,7 +543,8 @@ laadTransportDocs();
 </script>
     """
     pagina = render_simple_page(transport["referentienummer"], "transport_planning", inhoud)
-    return render_template_string(pagina, transport=transport, statussen=TRANSPORT_PLANNING_STATUSSEN)
+    return render_template_string(pagina, transport=transport, statussen=TRANSPORT_PLANNING_STATUSSEN,
+                                    verkoopcontract_opties=verkoopcontract_opties, verkoopcontract_gekoppeld=verkoopcontract_gekoppeld)
 
 @transport_planning_bp.route("/transport-planning/<transport_id>/status", methods=["POST"])
 def transport_planning_status(transport_id):

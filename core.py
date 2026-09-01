@@ -113,6 +113,7 @@ PAGINA_AFDELINGEN = {
     "weegbrug": ["logistiek", "weegbrug"],
     "logistieke_orders": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
     "inkoop_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
+    "scheepvaart": ["logistiek", "backoffice", "accountmanager", "transport_zeevaart"],
     "verkoop_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
     "afhandeling": ["logistiek", "weegbrug", "backoffice"],
     "live_operations": ["logistiek", "weegbrug", "backoffice"],
@@ -1661,6 +1662,7 @@ ZIJBALK_ITEMS = [
     ("live_operations", "/live-operations", "OP", "Live Operaties"),
     ("inkoop_planning", "/logistiek/inkoop-planning", "IP", "Inkoop-planning"),
     ("verkoop_planning", "/logistiek/verkoop-planning", "VP", "Verkoop-planning"),
+    ("scheepvaart", "/logistiek/scheepvaart", "SV", "Scheepvaart"),
     ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),
     ("dashboard", "/dashboard", "DB", "Dashboard"),
     ("logistieke_orders", "/logistiek/orders", "LO", "Orders logistiek"),
@@ -1717,11 +1719,10 @@ def effectieve_layout_voorkeur(gebruikersnaam):
 
 def sidebar_html(actief):
     """
-    LET OP bij een nieuw zijbalk-item: de zoekpagina (zoeken.py, route '/')
-    heeft een EIGEN, hardcoded kopie van de zijbalk in zijn HTML-template
-    (niet via deze functie) — dit is al twee keer over het hoofd gezien.
-    Elk nieuw item hier moet OOK handmatig toegevoegd worden in zoeken.py,
-    naast de link voor 'logistiek' (zoek op 'class="sidebar-link"').
+    Genereert de volledige zijbalk-HTML (inclusief mobiel-menu, weergave-balk,
+    en gebruikersinfo onderaan) — gebruikt door alle pagina's, inclusief de
+    zoekpagina (zoeken.py), die deze functie rechtstreeks aanroept i.p.v. een
+    eigen kopie te onderhouden.
     """
     items = ZIJBALK_ITEMS
     links = ""
