@@ -189,49 +189,49 @@ def scheepvaart_pagina():
 <div class="page-title">Scheepvaart</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Wat nog ingepland moet worden voor export per schip — Definitieve inkoopcontracten, nog niet (volledig) ingepland. Klik op een contract om in te plannen en te koppelen aan het verkoopcontract.</p>
 
-<div style="overflow-x:auto;border:1px solid var(--gray-200);border-radius:8px;">
-<table style="border-collapse:collapse;min-width:1400px;width:100%;font-size:12.5px;">
-    <thead>
-        <tr style="background:var(--gray-50);border-bottom:1px solid var(--gray-200);text-align:left;">
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Land</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Contractnummer</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Leverancier</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Incoterm</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Afhaallocatie</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;text-align:right;">MT (resterend)</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Materiaal</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Kwaliteit</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;text-align:right;">Prijs</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Klant (bestemming)</th>
-            <th style="padding:10px 14px;min-width:280px;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Opmerkingen</th>
-            <th style="padding:10px 14px;white-space:nowrap;color:#7d8792;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Aangemaakt</th>
-            <th style="padding:10px 14px;white-space:nowrap;"></th>
-        </tr>
-    </thead>
-    <tbody>
+<style>
+.sv-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; white-space:nowrap; }
+.sv-tabel-rij { display:flex; align-items:center; padding:11px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; text-decoration:none; color:inherit; white-space:nowrap; }
+.sv-tabel-rij:hover { background:var(--gray-50); }
+</style>
+
+<div style="overflow-x:auto;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);border-radius:var(--radius-lg,8px);">
+    <div class="sv-tabel-kop" style="min-width:1400px;">
+        <span style="width:60px;">Land</span>
+        <span style="width:140px;">Contractnummer</span>
+        <span style="width:190px;">Leverancier</span>
+        <span style="width:80px;">Incoterm</span>
+        <span style="width:150px;">Afhaallocatie</span>
+        <span style="width:110px;text-align:right;">MT (resterend)</span>
+        <span style="width:110px;">Materiaal</span>
+        <span style="width:130px;">Kwaliteit</span>
+        <span style="width:110px;text-align:right;">Prijs</span>
+        <span style="width:160px;">Klant (bestemming)</span>
+        <span style="flex:1;min-width:280px;">Opmerkingen</span>
+        <span style="width:130px;">Aangemaakt</span>
+        <span style="width:100px;"></span>
+    </div>
     {% for r in rijen %}
-        <tr style="border-bottom:1px solid var(--gray-100);">
-            <td style="padding:9px 14px;white-space:nowrap;color:var(--gray-500);">{{ r.land or '—' }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;font-family:var(--font-mono);color:var(--gray-700);font-weight:600;">{{ r.contractnummer }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;color:var(--gray-700);">{{ r.leverancier }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;color:var(--gray-500);">{{ r.incoterm or '—' }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;color:var(--gray-500);">{{ r.afhaallocatie or '—' }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;text-align:right;font-family:var(--font-mono);color:var(--gray-700);font-weight:600;">{{ r.resterend }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;color:var(--gray-500);">{{ r.materiaal or '—' }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;color:var(--gray-500);">{{ r.kwaliteit or '—' }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;text-align:right;font-family:var(--font-mono);color:var(--gray-500);">{% if r.prijs %}{{ r.prijs }} {{ r.valuta }}{% else %}—{% endif %}</td>
-            <td style="padding:9px 14px;white-space:nowrap;color:var(--gray-500);">{{ r.klant or '—' }}</td>
-            <td style="padding:9px 14px;color:var(--gray-500);">{{ r.opmerkingen or '—' }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;color:var(--gray-400);font-size:11.5px;">{{ r.aangemaakt or '—' }}</td>
-            <td style="padding:9px 14px;white-space:nowrap;">
-                <a href="/transport-planning/nieuw?leverancier={{ r.leverancier|urlencode }}&materiaal={{ (r.materiaal ~ ' — ' ~ r.kwaliteit)|urlencode }}&hoeveelheid={{ r.resterend }}&contract_referentie={{ r.contractnummer|urlencode }}&fabriek={{ r.klant|urlencode }}" style="font-size:11.5px;font-weight:700;color:var(--brand-600);text-decoration:none;">Inplannen →</a>
-            </td>
-        </tr>
+    <div class="sv-tabel-rij" style="min-width:1400px;">
+        <span style="width:60px;color:var(--gray-500);">{{ r.land or '—' }}</span>
+        <span style="width:140px;font-family:var(--font-mono);color:var(--gray-800);font-weight:700;">{{ r.contractnummer }}</span>
+        <span style="width:190px;color:var(--gray-700);overflow:hidden;text-overflow:ellipsis;">{{ r.leverancier }}</span>
+        <span style="width:80px;color:var(--gray-500);">{{ r.incoterm or '—' }}</span>
+        <span style="width:150px;color:var(--gray-500);overflow:hidden;text-overflow:ellipsis;">{{ r.afhaallocatie or '—' }}</span>
+        <span style="width:110px;text-align:right;font-family:var(--font-mono);color:var(--gray-700);font-weight:600;">{{ r.resterend }}</span>
+        <span style="width:110px;color:var(--gray-500);">{{ r.materiaal or '—' }}</span>
+        <span style="width:130px;color:var(--gray-500);">{{ r.kwaliteit or '—' }}</span>
+        <span style="width:110px;text-align:right;font-family:var(--font-mono);color:var(--gray-500);">{% if r.prijs %}{{ r.prijs }} {{ r.valuta }}{% else %}—{% endif %}</span>
+        <span style="width:160px;color:var(--gray-500);overflow:hidden;text-overflow:ellipsis;">{{ r.klant or '—' }}</span>
+        <span style="flex:1;min-width:280px;color:var(--gray-500);white-space:normal;">{{ r.opmerkingen or '—' }}</span>
+        <span style="width:130px;color:var(--gray-400);font-size:11.5px;">{{ r.aangemaakt or '—' }}</span>
+        <span style="width:100px;">
+            <a href="/transport-planning/nieuw?leverancier={{ r.leverancier|urlencode }}&materiaal={{ (r.materiaal ~ ' — ' ~ r.kwaliteit)|urlencode }}&hoeveelheid={{ r.resterend }}&contract_referentie={{ r.contractnummer|urlencode }}&fabriek={{ r.klant|urlencode }}" style="font-size:11.5px;font-weight:700;color:var(--brand-600);text-decoration:none;">Inplannen →</a>
+        </span>
+    </div>
     {% else %}
-        <tr><td colspan="13" style="padding:24px;text-align:center;color:var(--gray-300);">Niets openstaand — alle scheepvaart-inkoop is volledig ingepland.</td></tr>
+    <div class="sv-tabel-rij" style="justify-content:center;color:var(--gray-300);cursor:default;min-width:1400px;">Niets openstaand — alle scheepvaart-inkoop is volledig ingepland.</div>
     {% endfor %}
-    </tbody>
-</table>
 </div>
     """
     pagina = render_simple_page("Scheepvaart", "scheepvaart", inhoud)
