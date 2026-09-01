@@ -64,12 +64,19 @@ def weegbrug_pagina():
     alle_records = laad_weegbrug()
     filter_status = request.args.get("filter_status", "")
     filter_kenteken = request.args.get("kenteken", "").strip().lower()
+    filter_weegnummer = request.args.get("filter_weegnummer", "").strip().lower()
+    filter_datum = request.args.get("filter_datum", "").strip()
+    filter_leverancier = request.args.get("filter_leverancier", "").strip().lower()
 
     getoonde = alle_records
     if filter_status:
         getoonde = [r for r in getoonde if r.get("status") == filter_status]
     if filter_kenteken:
         getoonde = [r for r in getoonde if filter_kenteken in r.get("kenteken","").lower()]
+    if filter_weegnummer:
+        getoonde = [r for r in getoonde if filter_weegnummer in r.get("weegnummer","").lower()]
+    if filter_leverancier:
+        getoonde = [r for r in getoonde if filter_leverancier in r.get("leverancier","").lower()]
 
     def _weegmoment(r):
         """De datum van de weging zelf (inweegmoment, ISO-formaat) — voor een
@@ -89,6 +96,12 @@ def weegbrug_pagina():
     for r in getoonde:
         _moment = _weegmoment(r)
         r["weegdatum_label"] = _moment.strftime("%d-%m-%Y %H:%M") if _moment != datetime.datetime.min else "—"
+    if filter_datum:
+        try:
+            _filter_datum_genormaliseerd = datetime.datetime.strptime(filter_datum, "%Y-%m-%d").strftime("%d-%m-%Y")
+            getoonde = [r for r in getoonde if r["weegdatum_label"].startswith(_filter_datum_genormaliseerd)]
+        except ValueError:
+            pass
     getoonde = sorted(getoonde, key=_weegmoment, reverse=True)
 
     voertuigen_op_locatie = [r for r in alle_records if r.get("status") == "Ingewogen"]
@@ -146,20 +159,24 @@ def weegbrug_pagina():
 </div>
 {% endif %}
 
-<form method="GET" style="display:flex;gap:8px;margin-bottom:16px;">
+<form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
     <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
         <option value="">Alle statussen</option>
         {% for st in statussen %}<option value="{{ st }}" {% if filter_status == st %}selected{% endif %}>{{ badges[st].kort }}</option>{% endfor %}
     </select>
+    <input type="text" name="filter_weegnummer" value="{{ filter_weegnummer }}" placeholder="Zoek op weegnummer" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+    <input type="date" name="filter_datum" value="{{ filter_datum }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+    <input type="text" name="filter_leverancier" value="{{ filter_leverancier }}" placeholder="Zoek op leverancier" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
     <input type="text" name="kenteken" value="{{ filter_kenteken }}" placeholder="Zoek op kenteken" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
     <button type="submit" style="padding:7px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;background:#fff;cursor:pointer;">Filteren</button>
+    {% if filter_status or filter_weegnummer or filter_datum or filter_leverancier or filter_kenteken %}<a href="/weegbrug" style="padding:7px 14px;font-size:12.5px;color:var(--gray-400);text-decoration:none;align-self:center;">Wissen</a>{% endif %}
 </form>
 
 {% if getoonde %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="wb-tabel-kop">
-        <span style="width:110px;">Weegnummer</span>
         <span style="width:120px;">Datum weging</span>
+        <span style="width:110px;">Weegnummer</span>
         <span style="width:100px;">Kenteken</span>
         <span style="flex:1;">Leverancier</span>
         <span style="flex:1;">Materiaal</span>
@@ -170,8 +187,8 @@ def weegbrug_pagina():
     {% for r in getoonde %}
     <div class="wb-tabel-rij" style="cursor:default;">
         <a href="/weegbrug/{{ r.id }}" style="display:contents;color:inherit;text-decoration:none;">
-        <span style="width:110px;font-family:var(--font-mono);color:var(--gray-500);">{{ r.weegnummer }}</span>
         <span style="width:120px;font-family:var(--font-mono);color:var(--gray-500);font-size:11.5px;">{{ r.weegdatum_label }}</span>
+        <span style="width:110px;font-family:var(--font-mono);color:var(--gray-500);">{{ r.weegnummer }}</span>
         <span style="width:100px;font-weight:700;color:var(--gray-800);">{{ r.kenteken or "—" }}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.leverancier or '—' }}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.materiaal or '—' }}</span>
@@ -203,6 +220,7 @@ def weegbrug_pagina():
     pagina = render_simple_page("Weegbrug", "weegbrug", inhoud)
     return render_template_string(pagina, getoonde=getoonde, statussen=list(WEEGBRUG_STATUS_BADGES.keys()),
                                     badges=WEEGBRUG_STATUS_BADGES, filter_status=filter_status, filter_kenteken=filter_kenteken,
+                                    filter_weegnummer=filter_weegnummer, filter_datum=filter_datum, filter_leverancier=filter_leverancier,
                                     voertuigen_op_locatie=voertuigen_op_locatie, opdrachten_klaar_voor_wegen=opdrachten_klaar_voor_wegen,
                                     kpi_vandaag=kpi_vandaag, kpi_compleet_vandaag=kpi_compleet_vandaag, kpi_probleem=kpi_probleem)
 
