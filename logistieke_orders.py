@@ -195,7 +195,7 @@ def scheepvaart_pagina():
 .sv-tabel-rij:hover { background:var(--gray-50); }
 </style>
 
-<div style="overflow-x:auto;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);border-radius:var(--radius-lg,8px);">
+<div style="overflow-x:auto;">
     <div class="sv-tabel-kop" style="min-width:1400px;">
         <span style="width:60px;">Land</span>
         <span style="width:140px;">Contractnummer</span>
@@ -215,14 +215,14 @@ def scheepvaart_pagina():
     <div class="sv-tabel-rij" style="min-width:1400px;">
         <span style="width:60px;color:var(--gray-500);">{{ r.land or '—' }}</span>
         <span style="width:140px;font-family:var(--font-mono);color:var(--gray-800);font-weight:700;">{{ r.contractnummer }}</span>
-        <span style="width:190px;color:var(--gray-700);overflow:hidden;text-overflow:ellipsis;">{{ r.leverancier }}</span>
+        <span style="width:190px;color:var(--gray-700);white-space:normal;">{{ r.leverancier }}</span>
         <span style="width:80px;color:var(--gray-500);">{{ r.incoterm or '—' }}</span>
-        <span style="width:150px;color:var(--gray-500);overflow:hidden;text-overflow:ellipsis;">{{ r.afhaallocatie or '—' }}</span>
+        <span style="width:150px;color:var(--gray-500);white-space:normal;">{{ r.afhaallocatie or '—' }}</span>
         <span style="width:110px;text-align:right;font-family:var(--font-mono);color:var(--gray-700);font-weight:600;">{{ r.resterend }}</span>
         <span style="width:110px;color:var(--gray-500);">{{ r.materiaal or '—' }}</span>
         <span style="width:130px;color:var(--gray-500);">{{ r.kwaliteit or '—' }}</span>
         <span style="width:110px;text-align:right;font-family:var(--font-mono);color:var(--gray-500);">{% if r.prijs %}{{ r.prijs }} {{ r.valuta }}{% else %}—{% endif %}</span>
-        <span style="width:160px;color:var(--gray-500);overflow:hidden;text-overflow:ellipsis;">{{ r.klant or '—' }}</span>
+        <span style="width:160px;color:var(--gray-500);white-space:normal;">{{ r.klant or '—' }}</span>
         <span style="flex:1;min-width:280px;color:var(--gray-500);white-space:normal;">{{ r.opmerkingen or '—' }}</span>
         <span style="width:130px;color:var(--gray-400);font-size:11.5px;">{{ r.aangemaakt or '—' }}</span>
         <span style="width:100px;">
