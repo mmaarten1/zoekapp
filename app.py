@@ -2327,185 +2327,45 @@ def get_document_bestand(bestandsnaam):
 
 @app.route("/logistiek")
 def logistiek_pagina():
+    """Navigatie-hub: een kort overzicht van wat elke logistieke pagina doet,
+    met een directe link. Draaide voorheen op het oude shipments.json-systeem,
+    dat sinds Handelsorders/Transport Planning nergens meer gevuld wordt —
+    vervangen door dit overzicht, zodat je in één oogopslag ziet wat waar
+    hoort in plaats van zeven losse zijbalk-items te moeten onthouden."""
     _guard = vereist_afdeling_of_403("logistiek")
     if _guard: return _guard
-    vooringevuld_bedrijf = request.args.get("bedrijf", "")
 
-    alle_shipments_log = laad_shipments()
-    for s in alle_shipments_log:
-        s["flow_type"] = bepaal_shipment_flow_type(s)
-    actieve_shipments_log = [s for s in alle_shipments_log if s.get("status") != "Cancelled"]
-
-    if vooringevuld_bedrijf:
-        _naam_laag = vooringevuld_bedrijf.strip().lower()
-        actieve_shipments_log = [
-            s for s in actieve_shipments_log
-            if s.get("origin_leverancier", "").strip().lower() == _naam_laag
-            or s.get("destination_naam", "").strip().lower() == _naam_laag
-        ]
-
-    filter_flow_type = request.args.get("filter_flow_type", "")
-    filter_status_log = request.args.get("filter_status", "")
-    filter_materiaal_log = request.args.get("filter_materiaal", "")
-    getoonde_shipments_log = actieve_shipments_log
-    if filter_flow_type:
-        getoonde_shipments_log = [s for s in getoonde_shipments_log if s.get("flow_type") == filter_flow_type]
-    if filter_status_log:
-        getoonde_shipments_log = [s for s in getoonde_shipments_log if s.get("status") == filter_status_log]
-    if filter_materiaal_log:
-        getoonde_shipments_log = [s for s in getoonde_shipments_log if s.get("materiaal") == filter_materiaal_log]
-    getoonde_shipments_log = sorted(getoonde_shipments_log, key=lambda s: s.get("datum", ""), reverse=True)
-
-    shipment_materialen_log = sorted({s.get("materiaal", "") for s in actieve_shipments_log if s.get("materiaal")})
-
-    # --- Logistiek-dashboard-KPI's (alleen echte, berekende data — geen chauffeursplanning: geen datamodel daarvoor) ---
-    _vandaag_log = datetime.date.today().isoformat()
-    kpi_ritten_vandaag = [s for s in actieve_shipments_log if s.get("datum","") == _vandaag_log]
-    kpi_actieve_ritten = [s for s in actieve_shipments_log if s.get("status") in ("Loading", "Loaded", "In Transit", "Arrived")]
-    _alle_containers_log = laad_containers()
-    kpi_te_laden_containers = [c for c in _alle_containers_log if c.get("status") == "Leeg"]
-    kpi_recente_wegingen = sorted(
-        [s for s in actieve_shipments_log if s.get("status") in ("Weighed", "Received") and s.get("weegbon_nummer")],
-        key=lambda s: s.get("datum",""), reverse=True
-    )[:5]
-    _shipments_met_kosten = [s for s in actieve_shipments_log if s.get("transportkosten")]
-    kpi_totale_kosten = sum(parse_hoeveelheid_getal(s["transportkosten"]) for s in _shipments_met_kosten)
-    kpi_kosten_aantal = len(_shipments_met_kosten)
+    kaarten = [
+        {"pagina_key": "inkoop_planning", "titel": "Inkoop-planning", "href": "/logistiek/inkoop-planning",
+         "beschrijving": "Definitieve vrachtwagen-inkoopcontracten die nog (deels) ingepland moeten worden, per markt."},
+        {"pagina_key": "verkoop_planning", "titel": "Verkoop-planning", "href": "/logistiek/verkoop-planning",
+         "beschrijving": "Hetzelfde, maar dan voor verkoopcontracten — uitgaand naar de klant."},
+        {"pagina_key": "scheepvaart", "titel": "Scheepvaart", "href": "/logistiek/scheepvaart",
+         "beschrijving": "Wat nog ingepland moet worden voor export per schip — met land, incoterm, afhaallocatie en koppeling aan het verkoopcontract."},
+        {"pagina_key": "logistieke_orders", "titel": "Orders logistiek", "href": "/logistiek/orders",
+         "beschrijving": "Volgt de fysieke aflevering van vrachtwagen-vracht: van aankomst tot weging tot overdracht aan Finance."},
+        {"pagina_key": "transport_planning", "titel": "Transport Planning", "href": "/transport-planning",
+         "beschrijving": "Hier plan je een transport daadwerkelijk in — datums, kenteken of haven/forwarder — nadat je vanuit een planningspagina op 'Plan in' klikte."},
+        {"pagina_key": "transport_overview", "titel": "Transport Overview", "href": "/transport-overview",
+         "beschrijving": "Management-samenvatting over alle transporten: status-KPI's, vertragingen, en een overzicht per land."},
+    ]
+    kaarten = [k for k in kaarten if mag_pagina_zien(k["pagina_key"])]
 
     inhoud = """
-<div class="dg-grid" style="margin-bottom:20px;">
-    <div class="dg-kaart"><div class="dg-icoon">🚚</div><div class="dg-getal">{{ kpi_ritten_vandaag|length }}</div><div class="dg-label">Ritten vandaag</div></div>
-    <div class="dg-kaart"><div class="dg-icoon">📍</div><div class="dg-getal">{{ kpi_actieve_ritten|length }}</div><div class="dg-label">Actief onderweg/laden</div></div>
-    <div class="dg-kaart"><div class="dg-icoon">📦</div><div class="dg-getal">{{ kpi_te_laden_containers|length }}</div><div class="dg-label">Containers te laden</div></div>
-    <div class="dg-kaart"><div class="dg-icoon">⚖️</div><div class="dg-getal">{{ kpi_recente_wegingen|length }}</div><div class="dg-label">Recente wegingen</div></div>
-    <div class="dg-kaart"><div class="dg-icoon">💶</div><div class="dg-getal" style="font-size:1.3rem;">{{ "€{:,.0f}".format(kpi_totale_kosten) }}</div><div class="dg-label">Transportkosten ({{ kpi_kosten_aantal }} ritten)</div></div>
-</div>
-<style>
-.log-tabel-rij { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid var(--gray-100); font-size:13px; }
-.log-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; }
-.log-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; }
-.dg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; }
-.dg-kaart { background:transparent; border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); border-radius:0; padding:16px 4px; }
-.dg-icoon { font-size:1.2rem; margin-bottom:6px; }
-.dg-getal { font-size:1.7rem; font-weight:800; color:var(--brand-700); }
-.dg-label { font-size:0.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.8px; margin-top:4px; font-weight:600; }
-@media (max-width:768px) { .dg-grid { grid-template-columns:repeat(2,1fr); } }
-</style>
 <div class="page-title">Logistiek</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:12px;font-size:0.85rem;">
-    {% if vooringevuld_bedrijf %}Shipments voor <b style="color:var(--gray-700);">{{ vooringevuld_bedrijf }}</b> — <a href="/logistiek" style="color:var(--brand-600);">alles tonen</a>
-    {% else %}Alle actieve shipments (inbound, outbound en direct flow){% endif %}
-</p>
-<a href="/logistiek/containers" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:6px 12px;border-radius:6px;">📦 Containerbeheer →</a>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Overzicht van de logistieke pagina's — klik door naar waar je moet zijn.</p>
 
-<form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
-    {% if vooringevuld_bedrijf %}<input type="hidden" name="bedrijf" value="{{ vooringevuld_bedrijf }}">{% endif %}
-    <select name="filter_flow_type" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle types</option>
-        <option value="inbound" {% if filter_flow_type == "inbound" %}selected{% endif %}>Inbound</option>
-        <option value="outbound" {% if filter_flow_type == "outbound" %}selected{% endif %}>Outbound</option>
-        <option value="direct" {% if filter_flow_type == "direct" %}selected{% endif %}>Direct</option>
-    </select>
-    <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle statussen</option>
-        {% for st in shipment_statussen %}<option value="{{ st }}" {% if filter_status_log == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
-    </select>
-    <select name="filter_materiaal" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle materialen</option>
-        {% for m in shipment_materialen_log %}<option value="{{ m }}" {% if filter_materiaal_log == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
-    </select>
-    <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_shipments_log|length }} van {{ actieve_shipments_log|length }}</span>
-</form>
-
-{% if getoonde_shipments_log %}
-<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
-    <div class="log-tabel-kop">
-        <span style="width:100px;">Datum</span>
-        <span style="flex:1.6;">Route</span>
-        <span style="flex:1;">Materiaal</span>
-        <span style="width:110px;text-align:right;">Ton</span>
-        <span style="width:90px;">Type</span>
-        <span style="width:120px;">Status</span>
-        <span style="width:100px;text-align:right;">Kosten</span>
-        <span style="width:80px;"></span>
-    </div>
-    {% for s in getoonde_shipments_log %}
-    <div class="log-tabel-rij" style="flex-wrap:wrap;">
-        <span style="width:100px;color:var(--gray-500);">{{ s.datum }}</span>
-        <span style="flex:1.6;color:var(--gray-800);font-weight:600;">{{ s.origin_land }}{% if s.origin_leverancier %} ({{ s.origin_leverancier }}){% endif %} → {{ s.destination_land }}{% if s.destination_naam %} ({{ s.destination_naam }}){% endif %}</span>
-        <span style="flex:1;color:var(--gray-600);">{{ s.materiaal }}</span>
-        <span style="width:110px;text-align:right;font-family:var(--font-mono);color:var(--gray-600);">{{ s.gepland_hoeveelheid }}{% if s.werkelijk_hoeveelheid %} / {{ s.werkelijk_hoeveelheid }}{% endif %}</span>
-        <span style="width:90px;">
-            <span class="log-badge" style="background:{{ '#eff6ff' if s.flow_type=='inbound' else ('#fef2f2' if s.flow_type=='outbound' else '#f5f3ff') }};color:{{ '#1d4ed8' if s.flow_type=='inbound' else ('#dc2626' if s.flow_type=='outbound' else '#7c3aed') }};">{{ s.flow_type|upper }}</span>
-        </span>
-        <span style="width:120px;color:var(--gray-600);">{{ s.status }}</span>
-        <span style="width:100px;">
-            <form method="POST" action="/voorraad/shipments" style="margin:0;display:flex;align-items:center;gap:2px;">
-                <input type="hidden" name="actie" value="kosten_bijwerken">
-                <input type="hidden" name="shipment_id" value="{{ s.id }}">
-                <input type="hidden" name="terug_naar" value="logistiek">
-                <span style="font-size:11px;color:var(--gray-400);">€</span>
-                <input type="text" name="transportkosten" value="{{ s.transportkosten|default('',true) }}" onblur="this.form.submit()" placeholder="0" style="width:60px;padding:3px 4px;border:1px solid var(--gray-200);border-radius:4px;font-size:11.5px;text-align:right;font-family:inherit;">
-            </form>
-        </span>
-        <span style="width:80px;">
-            <button type="button" onclick="toggleShipmentDocs('{{ s.id }}')" style="background:none;border:1px solid var(--gray-200);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--gray-500);cursor:pointer;">📎 Docs</button>
-        </span>
-        <div id="docs-{{ s.id }}" style="display:none;width:100%;margin-top:10px;padding:12px;background:var(--gray-50);border-radius:6px;">
-            <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">CMR / Annex / exportdocumenten</div>
-            <div id="docslijst-{{ s.id }}" style="margin-bottom:8px;font-size:12.5px;color:var(--gray-400);">Laden...</div>
-            <input type="file" id="docupload-{{ s.id }}" accept=".pdf,.doc,.docx" style="font-size:12px;">
-            <button type="button" onclick="uploadShipmentDoc('{{ s.id }}')" style="font-size:11.5px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;margin-left:6px;">Uploaden</button>
-        </div>
-    </div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
+    {% for k in kaarten %}
+    <a href="{{ k.href }}" style="display:block;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px 18px;text-decoration:none;color:inherit;">
+        <div style="font-size:14px;font-weight:700;color:var(--gray-800);margin-bottom:6px;">{{ k.titel }} →</div>
+        <div style="font-size:12.5px;color:var(--gray-500);line-height:1.5;">{{ k.beschrijving }}</div>
+    </a>
     {% endfor %}
 </div>
-<script>
-function toggleShipmentDocs(shipmentId) {
-    var paneel = document.getElementById("docs-" + shipmentId);
-    var wordtGeopend = paneel.style.display === "none";
-    paneel.style.display = wordtGeopend ? "block" : "none";
-    if (wordtGeopend) laadShipmentDocs(shipmentId);
-}
-async function laadShipmentDocs(shipmentId) {
-    var lijstDiv = document.getElementById("docslijst-" + shipmentId);
-    try {
-        const res = await fetch("/api/documenten?bedrijf=" + encodeURIComponent(shipmentId));
-        const docs = await res.json();
-        if (!docs.length) { lijstDiv.innerHTML = "Nog geen documenten geüpload."; return; }
-        lijstDiv.innerHTML = docs.map(function(d) {
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">' +
-                '<a href="/documenten_uploads/' + encodeURIComponent(d.bestandsnaam) + '" target="_blank" style="color:var(--brand-600);text-decoration:none;">' + d.originele_naam + '</a>' +
-                '<span style="font-size:11px;color:var(--gray-300);">' + d.timestamp + ' · ' + d.geupload_door + '</span></div>';
-        }).join("");
-    } catch (e) { lijstDiv.innerHTML = "Kon documenten niet laden."; }
-}
-async function uploadShipmentDoc(shipmentId) {
-    var input = document.getElementById("docupload-" + shipmentId);
-    if (!input.files.length) { alert("Kies eerst een bestand."); return; }
-    var form = new FormData();
-    form.append("bedrijf", shipmentId);
-    form.append("document", input.files[0]);
-    const res = await fetch("/api/documenten", {method: "POST", body: form});
-    const data = await res.json();
-    if (data.error) { alert(data.error); return; }
-    input.value = "";
-    laadShipmentDocs(shipmentId);
-}
-</script>
-{% else %}
-<div class="lege-staat">{% if vooringevuld_bedrijf %}Geen shipments gevonden voor {{ vooringevuld_bedrijf }}.{% else %}Geen shipments gevonden voor deze filters.{% endif %}</div>
-{% endif %}
     """
     pagina = render_simple_page("Logistiek", "logistiek", inhoud)
-    return render_template_string(pagina,
-        vooringevuld_bedrijf=vooringevuld_bedrijf,
-        getoonde_shipments_log=getoonde_shipments_log, actieve_shipments_log=actieve_shipments_log,
-        filter_flow_type=filter_flow_type, filter_status_log=filter_status_log, filter_materiaal_log=filter_materiaal_log,
-        shipment_statussen=SHIPMENT_STATUSSEN, shipment_materialen_log=shipment_materialen_log,
-        kpi_ritten_vandaag=kpi_ritten_vandaag, kpi_actieve_ritten=kpi_actieve_ritten,
-        kpi_te_laden_containers=kpi_te_laden_containers, kpi_recente_wegingen=kpi_recente_wegingen,
-        kpi_totale_kosten=kpi_totale_kosten, kpi_kosten_aantal=kpi_kosten_aantal)
+    return render_template_string(pagina, kaarten=kaarten)
 
 @app.route("/logistiek/containers", methods=["GET", "POST"])
 def containerbeheer_pagina():

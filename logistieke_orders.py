@@ -34,16 +34,17 @@ logistieke_orders_bp = Blueprint("logistieke_orders", __name__)
 
 @logistieke_orders_bp.route("/logistiek/inkoop-planning")
 def inkoop_planning_pagina():
-    """Overzicht voor Logistiek: alle DEFINITIEVE inkoopcontracten die nog (deels)
-    ingepland moeten worden, gegroepeerd per bedrijfseenheid (markt), met
-    onderscheid tussen vrachtwagen- en scheepstransport. Zodra een accountmanager
-    een inkooporder definitief maakt, verschijnt die hier direct — dat is precies
-    het doel van deze pagina."""
+    """Overzicht voor Logistiek: alle DEFINITIEVE, VRACHTWAGEN-inkoopcontracten
+    die nog (deels) ingepland moeten worden, gegroepeerd per bedrijfseenheid
+    (markt). Schip-contracten staan hier bewust NIET meer — die horen bij
+    Scheepvaart, dat dezelfde soort queue toont maar dan met de export-
+    specifieke velden (land, incoterm, afhaallocatie, verkoopcontract-
+    koppeling). Zodra een accountmanager een inkooporder definitief maakt,
+    verschijnt die hier direct — dat is precies het doel van deze pagina."""
     _guard = vereist_afdeling_of_403("inkoop_planning")
     if _guard: return _guard
 
     alle_logistieke_orders_ip = laad_logistieke_orders()
-    alle_transport_planning_ip = laad_transport_planning()
 
     def _geleverd_vrachtwagen(contractnummer):
         return round(sum(
@@ -52,31 +53,25 @@ def inkoop_planning_pagina():
             if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
         ), 3)
 
-    def _gepland_schip(contractnummer):
-        return round(sum(
-            parse_hoeveelheid_getal(t.get("hoeveelheid",""))
-            for t in alle_transport_planning_ip
-            if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
-        ), 3)
-
     contracten_open = []
     for h in laad_handelsorders():
         if h.get("order_type") != "inkoop" or h.get("status") != "Definitief":
             continue
+        if (h.get("transportmodus","") or "Vrachtwagen") == "Schip":
+            continue  # Schip-contracten horen bij Scheepvaart, niet hier
         try:
             totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
         except (ValueError, TypeError):
             totaal = 0.0
-        modus = h.get("transportmodus","") or "Vrachtwagen"
-        gepland = _gepland_schip(h["contractnummer"]) if modus == "Schip" else _geleverd_vrachtwagen(h["contractnummer"])
+        gepland = _geleverd_vrachtwagen(h["contractnummer"])
         resterend = round(totaal - gepland, 1)
         if resterend <= 0:
-            continue  # Volledig ingepland/geleverd — hoeft niet meer in dit overzicht
+            continue  # Volledig geleverd — hoeft niet meer in dit overzicht
         contracten_open.append({
             "id": h["id"], "contractnummer": h["contractnummer"], "leverancier": h.get("tegenpartij_naam",""),
             "bedrijfseenheid": h.get("bedrijfseenheid","") or "Niet ingedeeld", "materiaal": h.get("materiaal",""),
-            "kwaliteit": h.get("kwaliteit",""), "transportmodus": modus, "klant": h.get("klant",""),
-            "pod_haven": h.get("pod_haven",""), "totaal": round(totaal,1), "gepland": gepland, "resterend": resterend,
+            "kwaliteit": h.get("kwaliteit",""), "klant": h.get("klant",""),
+            "totaal": round(totaal,1), "gepland": gepland, "resterend": resterend,
         })
 
     per_markt = {}
@@ -87,14 +82,13 @@ def inkoop_planning_pagina():
         markt_overzicht.append({
             "markt": markt, "contracten": sorted(items, key=lambda x: -x["resterend"]),
             "aantal_orders": len(items),
-            "totaal_resterend_vrachtwagen": round(sum(i["resterend"] for i in items if i["transportmodus"]=="Vrachtwagen"),1),
-            "totaal_resterend_schip": round(sum(i["resterend"] for i in items if i["transportmodus"]=="Schip"),1),
+            "totaal_resterend": round(sum(i["resterend"] for i in items),1),
         })
-    markt_overzicht.sort(key=lambda m: -(m["totaal_resterend_vrachtwagen"]+m["totaal_resterend_schip"]))
+    markt_overzicht.sort(key=lambda m: -m["totaal_resterend"])
 
     inhoud = """
 <div class="page-title">Inkoop-planning</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Definitieve inkoopcontracten die nog (deels) ingepland moeten worden — per markt, vrachtwagen en schip apart.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Definitieve vrachtwagen-inkoopcontracten die nog (deels) ingepland moeten worden — per markt. Schip-contracten staan bij <a href="/logistiek/scheepvaart" style="color:var(--brand-600);">Scheepvaart</a>.</p>
 
 <style>
 .ip-marktkop { display:flex; align-items:baseline; gap:14px; padding:12px 4px 8px 4px; border-bottom:2px solid var(--gray-800); margin-top:24px; }
@@ -108,18 +102,13 @@ def inkoop_planning_pagina():
 {% for m in markt_overzicht %}
 <div class="ip-marktkop">
     <span class="ip-marktnaam">{{ m.markt }}</span>
-    <span class="ip-marktsub">{{ m.aantal_orders }} order{{ 's' if m.aantal_orders != 1 else '' }} open{% if m.totaal_resterend_vrachtwagen %} · {{ m.totaal_resterend_vrachtwagen }} MT vrachtwagen{% endif %}{% if m.totaal_resterend_schip %} · {{ m.totaal_resterend_schip }} MT schip{% endif %}</span>
+    <span class="ip-marktsub">{{ m.aantal_orders }} order{{ 's' if m.aantal_orders != 1 else '' }} open · {{ m.totaal_resterend }} MT</span>
 </div>
 {% for c in m.contracten %}
 <div class="ip-rij">
-    <span style="width:100px;">
-        {% if c.transportmodus == "Schip" %}<span class="ip-badge" style="background:#eff6ff;color:#1d4ed8;">Schip</span>
-        {% else %}<span class="ip-badge" style="background:#f0fdf4;color:#16a34a;">Vrachtwagen</span>{% endif %}
-    </span>
     <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ c.leverancier }}</span>
     <span style="flex:1;color:var(--gray-600);">{{ c.materiaal }} — {{ c.kwaliteit }}</span>
     <span style="width:130px;color:var(--gray-500);">{{ c.contractnummer }}</span>
-    {% if c.transportmodus == "Schip" %}<span style="width:110px;color:var(--gray-500);">{{ c.pod_haven or '—' }}</span>{% else %}<span style="width:110px;"></span>{% endif %}
     <span style="width:130px;text-align:right;color:var(--gray-500);">{{ c.gepland }} / {{ c.totaal }} MT</span>
     <span style="width:110px;text-align:right;font-weight:700;color:#dc2626;">{{ c.resterend }} MT open</span>
     <span style="width:90px;text-align:right;">
@@ -129,7 +118,7 @@ def inkoop_planning_pagina():
 {% endfor %}
 {% endfor %}
 {% else %}
-<div class="lege-staat">Geen openstaande inkoopcontracten — alles is ingepland of geleverd.</div>
+<div class="lege-staat">Geen openstaande vrachtwagen-inkoopcontracten — alles is ingepland of geleverd.</div>
 {% endif %}
     """
     pagina = render_simple_page("Inkoop-planning", "inkoop_planning", inhoud)
