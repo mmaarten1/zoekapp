@@ -40,6 +40,7 @@ from core import (
     reset_mislukte_inlogpogingen, haal_of_maak_csrf_token,
     laad_organisatiestructuur, bewaar_organisatiestructuur,
     laad_layout_voorkeuren, bewaar_layout_voorkeuren, ZIJBALK_ITEMS, _sorteer_op_voorkeur,
+    effectieve_layout_voorkeur,
     PAGINA_HOOFD, sidebar_html, render_simple_page, is_huidige_gebruiker_admin, vereist_admin_of_403,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
@@ -3458,15 +3459,16 @@ def layout_instellingen():
 
     if request.method == "POST":
         actie = request.form.get("actie", "")
+        _effectief_voor_post = effectieve_layout_voorkeur(gebruikersnaam)
         zichtbare_keys = [item[0] for item in ZIJBALK_ITEMS if mag_pagina_zien(item[0])]
-        huidige_volgorde = mijn_voorkeur.get("sidebar_volgorde") or zichtbare_keys
+        huidige_volgorde = _effectief_voor_post.get("sidebar_volgorde") or zichtbare_keys
         # Nieuwe/nog-niet-opgeslagen items altijd aan het einde toevoegen, zodat
         # de omhoog/omlaag-knoppen op een volledige, actuele lijst werken.
         for k in zichtbare_keys:
             if k not in huidige_volgorde:
                 huidige_volgorde.append(k)
         huidige_volgorde = [k for k in huidige_volgorde if k in zichtbare_keys]
-        verborgen = set(mijn_voorkeur.get("sidebar_verborgen", []))
+        verborgen = set(_effectief_voor_post.get("sidebar_verborgen", []))
 
         if actie == "omhoog":
             key = request.form.get("key", "")
@@ -3530,10 +3532,11 @@ def layout_instellingen():
         bewaar_layout_voorkeuren(alle_voorkeuren)
         return redirect(url_for("layout_instellingen"))
 
+    _effectief_voor_weergave = effectieve_layout_voorkeur(gebruikersnaam)
     zichtbare_items = [item for item in ZIJBALK_ITEMS if mag_pagina_zien(item[0])]
-    volgorde = mijn_voorkeur.get("sidebar_volgorde", [])
+    volgorde = _effectief_voor_weergave.get("sidebar_volgorde", [])
     zichtbare_items = _sorteer_op_voorkeur(zichtbare_items, volgorde)
-    verborgen_set = set(mijn_voorkeur.get("sidebar_verborgen", []))
+    verborgen_set = set(_effectief_voor_weergave.get("sidebar_verborgen", []))
 
     widget_items = list(DASHBOARD_WIDGET_LABELS.items())
     widget_volgorde_getoond = mijn_voorkeur.get("dashboard_widget_volgorde", [])

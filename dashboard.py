@@ -114,8 +114,10 @@ def _logistiek_dashboard():
 <div class="ld-grid">
     <div class="ld-kaart"><div class="ld-getal">{{ kpi_op_locatie }}</div><div class="ld-label">Nu op locatie (weegbrug)</div></div>
     <div class="ld-kaart"><div class="ld-getal">{{ kpi_wacht_afhandeling }}</div><div class="ld-label">Wacht op afhandeling</div></div>
+    {% if toon_finance_kpis %}
     <div class="ld-kaart" style="{% if kpi_wacht_contractkeuze %}border-color:#fecaca;{% endif %}"><div class="ld-getal" style="{% if kpi_wacht_contractkeuze %}color:#dc2626;{% endif %}">{{ kpi_wacht_contractkeuze }}</div><div class="ld-label">Wacht op contractkeuze</div></div>
     <div class="ld-kaart"><div class="ld-getal">{{ kpi_klaar_finance }}</div><div class="ld-label">Klaar voor Finance</div></div>
+    {% endif %}
     <div class="ld-kaart"><div class="ld-getal">{{ kpi_transport_onderweg }}</div><div class="ld-label">Transporten onderweg</div></div>
     <div class="ld-kaart" style="{% if kpi_transport_vertraagd %}border-color:#fecaca;{% endif %}"><div class="ld-getal" style="{% if kpi_transport_vertraagd %}color:#dc2626;{% endif %}">{{ kpi_transport_vertraagd }}</div><div class="ld-label">Transporten vertraagd</div></div>
     <div class="ld-kaart"><div class="ld-getal">{{ kpi_containers_onderweg }}</div><div class="ld-label">Containers onderweg</div></div>
@@ -150,6 +152,7 @@ def _logistiek_dashboard():
     pagina = render_simple_page("Dashboard", "dashboard", inhoud)
     return render_template_string(pagina, kpi_op_locatie=kpi_op_locatie, kpi_wacht_afhandeling=kpi_wacht_afhandeling,
                                     kpi_wacht_contractkeuze=kpi_wacht_contractkeuze,
+                                    toon_finance_kpis=(effectieve_afdeling() != "weegbrug"),
                                     kpi_klaar_finance=kpi_klaar_finance, kpi_transport_gepland=kpi_transport_gepland,
                                     kpi_transport_onderweg=kpi_transport_onderweg, kpi_transport_vertraagd=kpi_transport_vertraagd,
                                     kpi_containers_onderweg=kpi_containers_onderweg, recente_weegrecords=recente_weegrecords)

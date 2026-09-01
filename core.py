@@ -1687,6 +1687,34 @@ ZIJBALK_ITEMS = [
     ("instellingen", "/instellingen", "IN", "Instellingen"),
 ]
 
+# Per afdeling een curatieve standaard-zijbalkvolgorde, voor gebruikers die nog
+# nooit zelf iets hebben aangepast (geen opgeslagen layout-voorkeur). Zodra
+# iemand wél iets aanpast en opslaat, geldt voortaan die eigen keuze — dit is
+# alleen het startpunt, geen harde beperking.
+AFDELING_STANDAARD_ZIJBALK_VOLGORDE = {
+    "weegbrug": ["weegbrug", "live_operations", "dashboard", "taken", "notities"],
+}
+
+def effectieve_layout_voorkeur(gebruikersnaam):
+    """De layout-voorkeur die daadwerkelijk moet gelden: de eigen, opgeslagen
+    voorkeur van de gebruiker als die er is, anders — zolang die er nog niet
+    is — de curatieve standaard voor hun afdeling. Gebruikt door zowel de
+    zijbalk zelf (sidebar_html) als de instellingenpagina (/instellingen/layout),
+    zodat beide altijd hetzelfde tonen. Controleert specifiek op een opgeslagen
+    sidebar_volgorde (niet alleen of de hele voorkeur-dict leeg is) — anders
+    zou 'standaard herstellen' (dat de volgorde leegmaakt maar wel andere
+    sleutels zoals dashboard-widgets in de dict laat staan) de afdelingsstandaard
+    nooit meer terugbrengen."""
+    _layout_voorkeur = laad_layout_voorkeuren().get(gebruikersnaam, {})
+    if not _layout_voorkeur.get("sidebar_volgorde"):
+        _standaard_volgorde = AFDELING_STANDAARD_ZIJBALK_VOLGORDE.get(effectieve_afdeling())
+        if _standaard_volgorde:
+            return {
+                "sidebar_volgorde": list(_standaard_volgorde),
+                "sidebar_verborgen": [item[0] for item in ZIJBALK_ITEMS if item[0] not in _standaard_volgorde],
+            }
+    return _layout_voorkeur
+
 def sidebar_html(actief):
     """
     LET OP bij een nieuw zijbalk-item: de zoekpagina (zoeken.py, route '/')
@@ -1697,7 +1725,7 @@ def sidebar_html(actief):
     """
     items = ZIJBALK_ITEMS
     links = ""
-    _layout_voorkeur = laad_layout_voorkeuren().get(session.get("gebruikersnaam",""), {})
+    _layout_voorkeur = effectieve_layout_voorkeur(session.get("gebruikersnaam",""))
     _volgorde = _layout_voorkeur.get("sidebar_volgorde", [])
     _verborgen = set(_layout_voorkeur.get("sidebar_verborgen", []))
     _zichtbare_items = [item for item in items if mag_pagina_zien(item[0])]

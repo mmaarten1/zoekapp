@@ -70,7 +70,26 @@ def weegbrug_pagina():
         getoonde = [r for r in getoonde if r.get("status") == filter_status]
     if filter_kenteken:
         getoonde = [r for r in getoonde if filter_kenteken in r.get("kenteken","").lower()]
-    getoonde = sorted(getoonde, key=lambda r: r.get("aangemaakt",""), reverse=True)
+
+    def _weegmoment(r):
+        """De datum van de weging zelf (inweegmoment, ISO-formaat) — voor een
+        opdracht die nog niet is ingewogen valt dit terug op de aanmaakdatum
+        van de opdracht (DD-MM-YYYY HH:MM), zodat ook 'nog te wegen'-opdrachten
+        een zinvolle plek in de sortering krijgen."""
+        if r.get("inweegmoment"):
+            try:
+                return datetime.datetime.fromisoformat(r["inweegmoment"])
+            except (ValueError, TypeError):
+                pass
+        try:
+            return datetime.datetime.strptime(r.get("aangemaakt",""), "%d-%m-%Y %H:%M")
+        except (ValueError, TypeError):
+            return datetime.datetime.min
+
+    for r in getoonde:
+        _moment = _weegmoment(r)
+        r["weegdatum_label"] = _moment.strftime("%d-%m-%Y %H:%M") if _moment != datetime.datetime.min else "—"
+    getoonde = sorted(getoonde, key=_weegmoment, reverse=True)
 
     voertuigen_op_locatie = [r for r in alle_records if r.get("status") == "Ingewogen"]
     opdrachten_klaar_voor_wegen = [r for r in alle_records if r.get("status") == "Opdracht"]
@@ -140,6 +159,7 @@ def weegbrug_pagina():
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="wb-tabel-kop">
         <span style="width:110px;">Weegnummer</span>
+        <span style="width:120px;">Datum weging</span>
         <span style="width:100px;">Kenteken</span>
         <span style="flex:1;">Leverancier</span>
         <span style="flex:1;">Materiaal</span>
@@ -151,6 +171,7 @@ def weegbrug_pagina():
     <div class="wb-tabel-rij" style="cursor:default;">
         <a href="/weegbrug/{{ r.id }}" style="display:contents;color:inherit;text-decoration:none;">
         <span style="width:110px;font-family:var(--font-mono);color:var(--gray-500);">{{ r.weegnummer }}</span>
+        <span style="width:120px;font-family:var(--font-mono);color:var(--gray-500);font-size:11.5px;">{{ r.weegdatum_label }}</span>
         <span style="width:100px;font-weight:700;color:var(--gray-800);">{{ r.kenteken or "—" }}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.leverancier or '—' }}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.materiaal or '—' }}</span>

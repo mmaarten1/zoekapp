@@ -8,11 +8,12 @@ Registratie in app.py met: app.register_blueprint(notities_bp)
 """
 import uuid
 import datetime
-from flask import Blueprint, request, session, jsonify, render_template_string
+from flask import Blueprint, request, session, jsonify, render_template_string, redirect, url_for
 
 from core import (
     get_user_id, laad_notities, bewaar_notities, laad_accountmanagers,
     laad_meldingen, bewaar_meldingen, is_huidige_gebruiker_admin, render_simple_page,
+    ENF_BEDRIJVEN,
 )
 
 notities_bp = Blueprint("notities", __name__)
@@ -96,8 +97,38 @@ def verwijder_notitie():
     return jsonify({"ok": True})
 
 
-@notities_bp.route("/notities-overzicht")
+@notities_bp.route("/notities-overzicht", methods=["GET", "POST"])
 def notities_overzicht():
+    if request.method == "POST":
+        bedrijf = request.form.get("bedrijf", "").strip()
+        tekst = request.form.get("tekst", "").strip()
+        if bedrijf and tekst:
+            alle_notities = laad_notities()
+            alle_notities.setdefault(bedrijf, [])
+            nieuwe_notitie = {
+                "id": str(uuid.uuid4()),
+                "tekst": tekst,
+                "type": "team",
+                "user_id": get_user_id(),
+                "gebruikersnaam": session.get("gebruikersnaam", ""),
+                "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+            }
+            alle_notities[bedrijf].append(nieuwe_notitie)
+            bewaar_notities(alle_notities)
+
+            toegewezen_am = laad_accountmanagers().get(bedrijf, "")
+            if toegewezen_am and toegewezen_am != nieuwe_notitie["gebruikersnaam"]:
+                alle_meldingen = laad_meldingen()
+                alle_meldingen.append({
+                    "id": str(uuid.uuid4()),
+                    "tekst": f"{nieuwe_notitie['gebruikersnaam']} heeft een notitie toegevoegd bij {bedrijf} (jouw bedrijf): \"{tekst[:80]}{'...' if len(tekst) > 80 else ''}\"",
+                    "bedrijf": bedrijf, "van": nieuwe_notitie["gebruikersnaam"],
+                    "voor_gebruiker": toegewezen_am, "voor_team": "",
+                    "gelezen": False, "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+                })
+                bewaar_meldingen(alle_meldingen)
+        return redirect(url_for("notities.notities_overzicht"))
+
     alle = laad_notities()
     rijen = []
     for bedrijf, lijst in alle.items():
@@ -106,8 +137,23 @@ def notities_overzicht():
                 rijen.append({"bedrijf": bedrijf, "tekst": n["tekst"], "timestamp": n["timestamp"]})
     rijen.sort(key=lambda x: x["timestamp"], reverse=True)
 
+    bedrijfsnamen = sorted({b["naam"] for b in ENF_BEDRIJVEN})
+
     inhoud = """
     <div class="page-title">Notities</div>
+
+    <form method="POST" style="max-width:560px;margin-bottom:24px;background:var(--gray-50);border-radius:10px;padding:16px;">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Nieuwe teamnotitie</div>
+        <div style="margin-bottom:10px;">
+            <input type="text" name="bedrijf" list="notitie_bedrijven_lijst" required placeholder="Bedrijf" autocomplete="off" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <datalist id="notitie_bedrijven_lijst">{% for naam in bedrijfsnamen %}<option value="{{ naam }}">{% endfor %}</datalist>
+        </div>
+        <div style="margin-bottom:10px;">
+            <textarea name="tekst" required rows="3" placeholder="Notitie..." style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;"></textarea>
+        </div>
+        <button type="submit" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Notitie toevoegen</button>
+    </form>
+
     {% if rijen %}
     <div class="info-kaart" style="max-width:700px;">
         {% for r in rijen %}
@@ -123,4 +169,4 @@ def notities_overzicht():
     {% endif %}
     """
     pagina = render_simple_page("Notities", "notities", inhoud)
-    return render_template_string(pagina, rijen=rijen)
+    return render_template_string(pagina, rijen=rijen, bedrijfsnamen=bedrijfsnamen)
