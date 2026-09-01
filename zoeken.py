@@ -28,7 +28,7 @@ from core import (
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
     laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien, vereist_afdeling_of_403,
-    leverancier_instelling_voor,
+    leverancier_instelling_voor, sidebar_html,
 )
 
 zoeken_bp = Blueprint("zoeken", __name__)
@@ -826,50 +826,7 @@ HTML = '''
 </head>
 <body>
 
-<button class="mobiel-menu-knop" onclick="toggleMobielMenu()">☰</button>
-<div class="mobiel-overlay" id="mobielOverlay" onclick="toggleMobielMenu()"></div>
-<aside class="sidebar" id="mobielSidebar">
-    <a href="/" class="sidebar-logo"><span class="sidebar-mark">FT</span><em>Next</em></a>
-    {{ weergave_balk|safe }}
-    <nav class="sidebar-nav">
-        {% if mag_pagina_zien('weegbrug') %}<a href="/weegbrug" class="sidebar-link"><span class="icoon">WB</span> Weegbrug</a>{% endif %}
-        {% if mag_pagina_zien('live_operations') %}<a href="/live-operations" class="sidebar-link"><span class="icoon">OP</span> Live Operaties</a>{% endif %}
-        {% if mag_pagina_zien('inkoop_planning') %}<a href="/logistiek/inkoop-planning" class="sidebar-link"><span class="icoon">IP</span> Inkoop-planning</a>{% endif %}
-        {% if mag_pagina_zien('verkoop_planning') %}<a href="/logistiek/verkoop-planning" class="sidebar-link"><span class="icoon">VP</span> Verkoop-planning</a>{% endif %}
-        {% if mag_pagina_zien('afhandeling') %}<a href="/logistiek/afhandeling" class="sidebar-link"><span class="icoon">AF</span> Afhandeling</a>{% endif %}
-        {% if mag_pagina_zien('dashboard') %}<a href="/dashboard" class="sidebar-link"><span class="icoon">DB</span> Dashboard</a>{% endif %}
-        {% if mag_pagina_zien('logistieke_orders') %}<a href="/logistiek/orders" class="sidebar-link"><span class="icoon">LO</span> Orders logistiek</a>{% endif %}
-        {% if mag_pagina_zien('notities') %}<a href="/notities-overzicht" class="sidebar-link"><span class="icoon">NT</span> Notities</a>{% endif %}
-        {% if mag_pagina_zien('taken') %}<a href="/taken" class="sidebar-link"><span class="icoon">TK</span> Takenlijst</a>{% endif %}
-        {% if mag_pagina_zien('inzichten_logistiek') %}<a href="/inzichten/logistiek" class="sidebar-link"><span class="icoon">IL</span> Logistieke Inzichten</a>{% endif %}
-        {% if mag_pagina_zien('zoeken') %}<a href="/" class="sidebar-link active"><span class="icoon">ZK</span> Zoeken</a>{% endif %}
-        {% if mag_pagina_zien('wereldkaart') %}<a href="/wereldkaart" class="sidebar-link"><span class="icoon">WM</span> World Map</a>{% endif %}
-        {% if mag_pagina_zien('inzichten') %}<a href="/inzichten" class="sidebar-link"><span class="icoon">IZ</span> Inzichten</a>{% endif %}
-        {% if mag_pagina_zien('materialen') %}<a href="/materialen" class="sidebar-link"><span class="icoon">MT</span> Materials</a>{% endif %}
-        {% if mag_pagina_zien('klanten') %}<a href="/klanten" class="sidebar-link"><span class="icoon">KL</span> Klanten</a>{% endif %}
-        {% if mag_pagina_zien('leveranciers') %}<a href="/leveranciers" class="sidebar-link"><span class="icoon">LV</span> Leveranciers</a>{% endif %}
-        {% if mag_pagina_zien('certificeringen') %}<a href="/certificeringen" class="sidebar-link"><span class="icoon">CF</span> Certifications</a>{% endif %}
-        {% if mag_pagina_zien('contacten') %}<a href="/contacten" class="sidebar-link"><span class="icoon">CT</span> Contacten</a>{% endif %}
-        {% if mag_pagina_zien('handelsorders') %}<a href="/handelsorders" class="sidebar-link"><span class="icoon">HO</span> Handelsorders</a>{% endif %}
-        {% if mag_pagina_zien('logistiek') %}<a href="/logistiek" class="sidebar-link"><span class="icoon">LG</span> Logistiek</a>{% endif %}
-        {% if mag_pagina_zien('transport_overview') %}<a href="/transport-overview" class="sidebar-link"><span class="icoon">TO</span> Transport Overview</a>{% endif %}
-        {% if mag_pagina_zien('transport_planning') %}<a href="/transport-planning" class="sidebar-link"><span class="icoon">TP</span> Transport Planning</a>{% endif %}
-        {% if mag_pagina_zien('transport_rates') %}<a href="/transport-rates" class="sidebar-link"><span class="icoon">TR</span> Transport Rates</a>{% endif %}
-        {% if mag_pagina_zien('facturen') %}<a href="/facturen" class="sidebar-link"><span class="icoon">FA</span> Facturen</a>{% endif %}
-        {% if mag_pagina_zien('inzichten_financieel') %}<a href="/inzichten/financieel" class="sidebar-link"><span class="icoon">IF</span> Financiële Inzichten</a>{% endif %}
-        {% if mag_pagina_zien('marktprijzen') %}<a href="/marktprijzen" class="sidebar-link"><span class="icoon">MP</span> Marktprijzen</a>{% endif %}
-        {% if mag_pagina_zien('voorraad') %}<a href="/voorraad" class="sidebar-link"><span class="icoon">VR</span> Voorraad</a>{% endif %}
-        {% if mag_pagina_zien('instellingen') %}<a href="/instellingen" class="sidebar-link"><span class="icoon">IN</span> Instellingen</a>{% endif %}
-    </nav>
-    <div class="sidebar-me">
-        <span class="sidebar-avatar">{{ (session.get('gebruikersnaam','??')[:2])|upper }}</span>
-        <div style="min-width:0;">
-            <div class="sidebar-me-naam">{{ session.get('gebruikersnaam','Gast') }}</div>
-            <div class="sidebar-me-rol">{{ session.get('team','') or 'Teamlid' }}</div>
-        </div>
-        <a class="sidebar-me-uit" href="/logout" title="Uitloggen">⏻</a>
-    </div>
-</aside>
+{{ sidebar_html_ingevoegd|safe }}
 <script>
 var CSRF_TOKEN = "{{ csrf_token }}";
 // Vangnet voor formulieren die (nu of later) geen csrf_token-veld hebben —
@@ -903,10 +860,6 @@ window.fetch = function(url, opties) {
     }
     return _origineleFetch.call(this, url, opties);
 };
-function toggleMobielMenu() {
-    document.getElementById("mobielSidebar").classList.toggle("open");
-    document.getElementById("mobielOverlay").classList.toggle("open");
-}
 </script>
 
 <div class="content-wrapper">
@@ -2394,7 +2347,8 @@ def index():
         alle_gebruikersnamen=sorted(laad_users().keys()),
         actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst,
         materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()),
-        mag_pagina_zien=mag_pagina_zien, weergave_balk=_bouw_weergave_balk())
+        mag_pagina_zien=mag_pagina_zien, weergave_balk=_bouw_weergave_balk(),
+        sidebar_html_ingevoegd=sidebar_html('zoeken'))
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
