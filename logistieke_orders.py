@@ -1485,17 +1485,36 @@ def logistieke_inzichten_pagina():
                                     route_overzicht=route_overzicht, kosten_per_ton_gemiddeld=kosten_per_ton_gemiddeld,
                                     vertraagde_inkomend=vertraagde_inkomend)
 
+def _herstel_indien_kg_ipv_ton(order, alle_orders):
+    """Vangnet tegen een (mogelijk historische) fout waarbij werkelijke_hoeveelheid
+    per ongeluk in kg i.p.v. ton is opgeslagen op een logistieke order — een
+    enkele vrachtwagenlading is nooit meer dan ~40 ton, dus een waarde ruim
+    daarboven (grens: 500, met marge) is vrijwel zeker een kg-waarde die nog
+    door 1000 gedeeld moet worden. Corrigeert het record ook DIRECT en blijvend
+    (niet alleen voor deze berekening), zodat het zich overal in het systeem
+    in één keer herstelt, niet telkens opnieuw."""
+    try:
+        waarde = float(order.get("werkelijke_hoeveelheid","") or 0)
+    except (ValueError, TypeError):
+        return order
+    if waarde > 500:
+        order["werkelijke_hoeveelheid"] = str(round(waarde / 1000, 3))
+        bewaar_logistieke_orders(alle_orders)
+    return order
+
 def _contract_geleverd_volume(contract_referentie, alle_orders=None):
     """Som van werkelijke_hoeveelheid van alle logistieke orders die aan dit contract
     gekoppeld zijn EN daadwerkelijk afgerond/gefactureerd zijn (dus echt geleverd,
     niet alleen gepland)."""
     if alle_orders is None:
         alle_orders = laad_logistieke_orders()
-    geleverd = sum(
-        parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
-        for o in alle_orders
+    betrokken = [
+        o for o in alle_orders
         if o.get("contract_referentie") == contract_referentie and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
-    )
+    ]
+    for o in betrokken:
+        _herstel_indien_kg_ipv_ton(o, alle_orders)
+    geleverd = sum(parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid","")) for o in betrokken)
     return round(geleverd, 3)
 
 def _contract_opties_voor_order(order):
