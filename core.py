@@ -135,6 +135,10 @@ PAGINA_AFDELINGEN = {
     "inkoop_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
     "scheepvaart": ["logistiek", "backoffice", "accountmanager", "transport_zeevaart"],
     "verkoop_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
+    # Unie van de drie hierboven — voor het ÉNE zijbalk-item dat naar de
+    # gecombineerde Planning-pagina (inkoop/verkoop/scheepvaart-tabbladen)
+    # linkt; per tabblad geldt binnenin nog gewoon de eigen, specifieke rol.
+    "logistiek_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager", "transport_zeevaart"],
     "afhandeling": ["logistiek", "weegbrug", "backoffice"],
     "live_operations": ["logistiek", "weegbrug", "backoffice"],
     "logistieke_orders_finance": ["finance", "logistiek", "weegbrug"],
@@ -1680,9 +1684,7 @@ PAGINA_HOOFD = """<!DOCTYPE html>
 ZIJBALK_ITEMS = [
     ("weegbrug", "/weegbrug", "WB", "Weegbrug"),
     ("live_operations", "/live-operations", "OP", "Live Operaties"),
-    ("inkoop_planning", "/logistiek/inkoop-planning", "IP", "Inkoop-planning"),
-    ("verkoop_planning", "/logistiek/verkoop-planning", "VP", "Verkoop-planning"),
-    ("scheepvaart", "/logistiek/scheepvaart", "SV", "Scheepvaart"),
+    ("logistiek_planning", "/logistiek/planning", "PL", "Planning"),
     ("afhandeling", "/logistiek/afhandeling", "AF", "Afhandeling"),
     ("dashboard", "/dashboard", "DB", "Dashboard"),
     ("logistieke_orders", "/logistiek/orders", "LO", "Orders logistiek"),

@@ -2336,12 +2336,8 @@ def logistiek_pagina():
     if _guard: return _guard
 
     kaarten = [
-        {"pagina_key": "inkoop_planning", "titel": "Inkoop-planning", "href": "/logistiek/inkoop-planning",
-         "beschrijving": "Definitieve vrachtwagen-inkoopcontracten die nog (deels) ingepland moeten worden, per markt."},
-        {"pagina_key": "verkoop_planning", "titel": "Verkoop-planning", "href": "/logistiek/verkoop-planning",
-         "beschrijving": "Hetzelfde, maar dan voor verkoopcontracten — uitgaand naar de klant."},
-        {"pagina_key": "scheepvaart", "titel": "Scheepvaart", "href": "/logistiek/scheepvaart",
-         "beschrijving": "Wat nog ingepland moet worden voor export per schip — met land, incoterm, afhaallocatie en koppeling aan het verkoopcontract."},
+        {"pagina_key": "logistiek_planning", "titel": "Planning (Inkoop / Verkoop / Scheepvaart)", "href": "/logistiek/planning",
+         "beschrijving": "Wat nog ingepland moet worden — als tabbladen: vrachtwagen-inkoop, verkoop, en export per schip."},
         {"pagina_key": "logistieke_orders", "titel": "Orders logistiek", "href": "/logistiek/orders",
          "beschrijving": "Volgt de fysieke aflevering van vrachtwagen-vracht: van aankomst tot weging tot overdracht aan Finance."},
         {"pagina_key": "transport_planning", "titel": "Transport Planning", "href": "/transport-planning",

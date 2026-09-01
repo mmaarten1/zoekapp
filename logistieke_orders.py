@@ -27,23 +27,14 @@ from core import (
     LOGISTIEKE_ORDER_STATUSSEN, laad_weegbrug, bewaar_weegbrug, WEEGBRUG_STATUS_BADGES,
     ENF_BEDRIJVEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     laad_documenten, laad_orders, laad_shipments, bereken_voorraad_status, parse_hoeveelheid_getal,
-    laad_handelsorders, laad_marktprijzen, laad_transport_planning, land_afkorting,
+    laad_handelsorders, laad_marktprijzen, laad_transport_planning, land_afkorting, mag_pagina_zien,
 )
 
 logistieke_orders_bp = Blueprint("logistieke_orders", __name__)
 
-@logistieke_orders_bp.route("/logistiek/inkoop-planning")
-def inkoop_planning_pagina():
-    """Overzicht voor Logistiek: alle DEFINITIEVE, VRACHTWAGEN-inkoopcontracten
-    die nog (deels) ingepland moeten worden, gegroepeerd per bedrijfseenheid
-    (markt). Schip-contracten staan hier bewust NIET meer — die horen bij
-    Scheepvaart, dat dezelfde soort queue toont maar dan met de export-
-    specifieke velden (land, incoterm, afhaallocatie, verkoopcontract-
-    koppeling). Zodra een accountmanager een inkooporder definitief maakt,
-    verschijnt die hier direct — dat is precies het doel van deze pagina."""
-    _guard = vereist_afdeling_of_403("inkoop_planning")
-    if _guard: return _guard
-
+def _inkoop_planning_inhoud():
+    """Berekening + template-inhoud voor het Inkoop-tabblad van /logistiek/planning.
+    Alleen VRACHTWAGEN-contracten — Schip staat op het Scheepvaart-tabblad."""
     alle_logistieke_orders_ip = laad_logistieke_orders()
 
     def _geleverd_vrachtwagen(contractnummer):
@@ -87,8 +78,7 @@ def inkoop_planning_pagina():
     markt_overzicht.sort(key=lambda m: -m["totaal_resterend"])
 
     inhoud = """
-<div class="page-title">Inkoop-planning</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Definitieve vrachtwagen-inkoopcontracten die nog (deels) ingepland moeten worden — per markt. Schip-contracten staan bij <a href="/logistiek/scheepvaart" style="color:var(--brand-600);">Scheepvaart</a>.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Definitieve vrachtwagen-inkoopcontracten die nog (deels) ingepland moeten worden — per markt.</p>
 
 <style>
 .ip-marktkop { display:flex; align-items:baseline; gap:14px; padding:12px 4px 8px 4px; border-bottom:2px solid var(--gray-800); margin-top:24px; }
@@ -121,23 +111,27 @@ def inkoop_planning_pagina():
 <div class="lege-staat">Geen openstaande vrachtwagen-inkoopcontracten — alles is ingepland of geleverd.</div>
 {% endif %}
     """
-    pagina = render_simple_page("Inkoop-planning", "inkoop_planning", inhoud)
-    return render_template_string(pagina, markt_overzicht=markt_overzicht)
+    return inhoud, {"markt_overzicht": markt_overzicht}
 
 
-@logistieke_orders_bp.route("/logistiek/scheepvaart")
-def scheepvaart_pagina():
-    """Wat er nog ingepland moet worden voor scheepvaart (export): Definitieve
-    inkoopcontracten met transportmodus 'Schip', nog niet (volledig) ingepland
-    op Transport Planning. Bewust breed — één rij per contract met alle
-    relevante gegevens in één oogopslag (land, incoterm, afhaallocatie, prijs,
-    opmerkingen), consistent met hoe dit soort export-overzicht elders al
-    gebruikt wordt. Klik op 'Inplannen' om naar Transport Planning te gaan,
-    daarna op het transport zelf om het te koppelen aan het bijbehorende
-    verkoopcontract (de bestemming van deze inkoop)."""
-    _guard = vereist_afdeling_of_403("scheepvaart")
-    if _guard: return _guard
+@logistieke_orders_bp.route("/logistiek/inkoop-planning")
+def inkoop_planning_pagina():
+    """Verouderde URL, blijft werken als doorverwijzing naar het Inkoop-tabblad
+    van de gecombineerde Planning-pagina (samengevoegd met Verkoop-planning en
+    Scheepvaart, die structureel identiek waren: elk een wachtrij 'wat moet nog
+    ingepland worden', met dezelfde 'Plan in'-actie)."""
+    return redirect(url_for("logistieke_orders.logistiek_planning_pagina", modus="inkoop"))
 
+
+def _scheepvaart_inhoud():
+    """Berekening + template-inhoud voor het Scheepvaart-tabblad van
+    /logistiek/planning. Wat er nog ingepland moet worden voor export per
+    schip: Definitieve inkoopcontracten met transportmodus 'Schip', nog niet
+    (volledig) ingepland op Transport Planning. Bewust breed — één rij per
+    contract met alle relevante gegevens in één oogopslag (land, incoterm,
+    afhaallocatie, prijs, opmerkingen). Klik op 'Inplannen' om naar Transport
+    Planning te gaan, daarna op het transport zelf om het te koppelen aan het
+    bijbehorende verkoopcontract (de bestemming van deze inkoop)."""
     alle_transport_planning_sv = laad_transport_planning()
 
     def _gepland_schip(contractnummer):
@@ -202,10 +196,10 @@ def scheepvaart_pagina():
     land_opties = sorted({r["land"] for r in alle_rijen if r["land"]}, key=land_afkorting)
 
     inhoud = """
-<div class="page-title">Scheepvaart</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Wat nog ingepland moet worden voor export per schip — Definitieve inkoopcontracten, nog niet (volledig) ingepland. Klik op een contract om in te plannen en te koppelen aan het verkoopcontract.</p>
 
 <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    <input type="hidden" name="modus" value="scheepvaart">
     <select name="filter_leverancier" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
         <option value="">Alle leveranciers</option>
         {% for l in leverancier_opties %}<option value="{{ l }}" {% if l == filter_leverancier %}selected{% endif %}>{{ l }}</option>{% endfor %}
@@ -217,7 +211,7 @@ def scheepvaart_pagina():
     <input type="text" name="filter_contract" value="{{ filter_contract }}" placeholder="Zoek op contractnummer" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
     <input type="date" name="filter_datum" value="{{ filter_datum }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
     <button type="submit" style="padding:7px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;background:#fff;cursor:pointer;">Filteren</button>
-    {% if filter_leverancier or filter_contract or filter_land or filter_datum %}<a href="/logistiek/scheepvaart" style="padding:7px 14px;font-size:12.5px;color:var(--gray-400);text-decoration:none;align-self:center;">Wissen</a>{% endif %}
+    {% if filter_leverancier or filter_contract or filter_land or filter_datum %}<a href="/logistiek/planning?modus=scheepvaart" style="padding:7px 14px;font-size:12.5px;color:var(--gray-400);text-decoration:none;align-self:center;">Wissen</a>{% endif %}
 </form>
 
 <style>
@@ -269,22 +263,29 @@ def scheepvaart_pagina():
 </table>
 </div>
     """
-    pagina = render_simple_page("Scheepvaart", "scheepvaart", inhoud)
-    return render_template_string(pagina, rijen=rijen, alle_rijen=alle_rijen, leverancier_opties=leverancier_opties,
-                                    land_opties=land_opties, filter_leverancier=filter_leverancier,
-                                    filter_contract=filter_contract, filter_land=filter_land, filter_datum=filter_datum,
-                                    land_afkorting=land_afkorting)
+    return inhoud, {"rijen": rijen, "alle_rijen": alle_rijen, "leverancier_opties": leverancier_opties,
+                     "land_opties": land_opties, "filter_leverancier": filter_leverancier,
+                     "filter_contract": filter_contract, "filter_land": filter_land, "filter_datum": filter_datum,
+                     "land_afkorting": land_afkorting}
 
-@logistieke_orders_bp.route("/logistiek/verkoop-planning")
-def verkoop_planning_pagina():
-    """Overzicht voor Logistiek: alle DEFINITIEVE verkoopcontracten die nog (deels)
-    naar de klant vervoerd moeten worden — gegroepeerd per bedrijfseenheid (markt).
-    Analoog aan Inkoop-planning, maar dan uitgaand: gekoppeld aan Transport Planning
-    (dat sowieso al 'Peute → fabrieken' als scope heeft, dus dit past er precies op).
-    Zodra een accountmanager een verkooporder definitief maakt, verschijnt die hier."""
-    _guard = vereist_afdeling_of_403("verkoop_planning")
-    if _guard: return _guard
 
+@logistieke_orders_bp.route("/logistiek/scheepvaart")
+def scheepvaart_pagina():
+    """Verouderde URL, blijft werken als doorverwijzing naar het Scheepvaart-
+    tabblad van de gecombineerde Planning-pagina."""
+    return redirect(url_for("logistieke_orders.logistiek_planning_pagina", modus="scheepvaart",
+                              filter_leverancier=request.args.get("filter_leverancier", ""),
+                              filter_contract=request.args.get("filter_contract", ""),
+                              filter_land=request.args.get("filter_land", ""),
+                              filter_datum=request.args.get("filter_datum", "")))
+
+def _verkoop_planning_inhoud():
+    """Berekening + template-inhoud voor het Verkoop-tabblad van
+    /logistiek/planning. Alle DEFINITIEVE verkoopcontracten die nog (deels)
+    naar de klant vervoerd moeten worden — gegroepeerd per bedrijfseenheid
+    (markt), vrachtwagen en schip gemengd (in tegenstelling tot inkoop is er
+    hier geen apart Scheepvaart-tabblad nodig — verkoop-export is klein genoeg
+    om gewoon in dezelfde lijst te tonen, met een badge per rij)."""
     alle_transport_planning_vp = laad_transport_planning()
 
     def _gepland_verkoop(contractnummer):
@@ -325,7 +326,6 @@ def verkoop_planning_pagina():
     markt_overzicht_vp.sort(key=lambda m: -m["totaal_resterend"])
 
     inhoud = """
-<div class="page-title">Verkoop-planning</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Definitieve verkoopcontracten die nog (deels) naar de klant vervoerd moeten worden — per markt.</p>
 
 <style>
@@ -364,8 +364,55 @@ def verkoop_planning_pagina():
 <div class="lege-staat">Geen openstaande verkoopcontracten — alles is ingepland of geleverd.</div>
 {% endif %}
     """
-    pagina = render_simple_page("Verkoop-planning", "verkoop_planning", inhoud)
-    return render_template_string(pagina, markt_overzicht_vp=markt_overzicht_vp)
+    return inhoud, {"markt_overzicht_vp": markt_overzicht_vp}
+
+
+@logistieke_orders_bp.route("/logistiek/verkoop-planning")
+def verkoop_planning_pagina():
+    """Verouderde URL, blijft werken als doorverwijzing naar het Verkoop-
+    tabblad van de gecombineerde Planning-pagina."""
+    return redirect(url_for("logistieke_orders.logistiek_planning_pagina", modus="verkoop"))
+
+
+@logistieke_orders_bp.route("/logistiek/planning")
+def logistiek_planning_pagina():
+    """Gecombineerde planning-wachtrij: Inkoop (vrachtwagen), Verkoop, en
+    Scheepvaart (export) als tabbladen op één pagina — dit waren drie
+    structureel identieke pagina's (elk 'wat moet nog ingepland worden', met
+    dezelfde 'Plan in'-actie), nu samengevoegd om duplicatie in de zijbalk te
+    voorkomen. Elk tabblad heeft zijn eigen toegangsrol; deze pagina toont
+    alleen de tabbladen waar de ingelogde gebruiker recht op heeft."""
+    _tabblad_config = [
+        ("inkoop", "inkoop_planning", "Inkoop", _inkoop_planning_inhoud),
+        ("verkoop", "verkoop_planning", "Verkoop", _verkoop_planning_inhoud),
+        ("scheepvaart", "scheepvaart", "Scheepvaart", _scheepvaart_inhoud),
+    ]
+    _toegestane_tabbladen = [(sleutel, titel, functie) for sleutel, pagina_key, titel, functie in _tabblad_config if mag_pagina_zien(pagina_key)]
+    if not _toegestane_tabbladen:
+        return vereist_afdeling_of_403("inkoop_planning")  # geeft de standaard 403-pagina; geen van de drie is toegestaan
+
+    _toegestane_sleutels = [t[0] for t in _toegestane_tabbladen]
+    modus = request.args.get("modus", "")
+    if modus not in _toegestane_sleutels:
+        modus = _toegestane_sleutels[0]  # niet-toegestane of ontbrekende modus -> eerste toegestane tabblad
+
+    _, _, _actieve_functie = next(t for t in _toegestane_tabbladen if t[0] == modus)
+    _tab_inhoud, _tab_context = _actieve_functie()
+
+    _tabbladen_html = "".join(
+        f'<a href="/logistiek/planning?modus={sleutel}" style="padding:8px 16px;font-size:12.5px;font-weight:700;text-decoration:none;border-bottom:2px solid {"var(--brand-600)" if sleutel == modus else "transparent"};color:{"var(--brand-600)" if sleutel == modus else "var(--gray-400)"};">{titel}</a>'
+        for sleutel, titel, _ in _toegestane_tabbladen
+    )
+
+    inhoud = f"""
+<div class="page-title">Planning</div>
+<div style="display:flex;gap:4px;border-bottom:1px solid var(--gray-200);margin-bottom:16px;">
+    {_tabbladen_html}
+</div>
+{_tab_inhoud}
+    """
+    pagina = render_simple_page("Planning", "logistiek_planning", inhoud)
+    return render_template_string(pagina, **_tab_context)
 
 
 def _weegbrug_status_naar_orderstatus(weegbrug_status):
