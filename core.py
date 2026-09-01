@@ -76,6 +76,26 @@ def bewaar_users(users):
 # latere fase. Dit legt alleen de basis vast.
 # ============================================================
 AFDELINGEN = ["accountmanager", "backoffice", "logistiek", "weegbrug", "finance", "transport_vrachtwagen", "transport_zeevaart"]
+
+# Korte landafkortingen voor WEERGAVE in de UI (bv. Scheepvaart) — dit zijn NIET
+# per se de officiële ISO-codes (UK i.p.v. het ISO-correcte GB), dus niet
+# gebruiken voor externe API's (geocoding, imports) — daarvoor blijft de
+# aparte OSM_LANDEN-mapping in app.py de juiste bron.
+LAND_AFKORTING = {
+    "Netherlands": "NL", "Germany": "DE", "Belgium": "BE", "France": "FR",
+    "United Kingdom": "UK", "Spain": "ES", "Italy": "IT", "Poland": "PL",
+    "Austria": "AT", "Switzerland": "CH", "Portugal": "PT", "Sweden": "SE",
+    "Norway": "NO", "Denmark": "DK", "Finland": "FI", "Ireland": "IE",
+    "Czech Republic": "CZ", "Hungary": "HU", "Greece": "GR", "Romania": "RO",
+    "United States": "US", "Canada": "CA", "Australia": "AU", "Brazil": "BR",
+    "Mexico": "MX", "India": "IN", "China": "CN", "Japan": "JP",
+}
+
+def land_afkorting(volledige_naam):
+    """Korte weergave-afkorting voor een land — valt terug op de volledige
+    naam als die niet in de lijst staat (nooit '—' of leeg voor een bekend land)."""
+    return LAND_AFKORTING.get(volledige_naam, volledige_naam)
+
 AFDELING_LABELS = {"accountmanager": "Accountmanager/Trader", "backoffice": "Backoffice", "logistiek": "Logistiek", "weegbrug": "Weegbrug", "finance": "Finance", "transport_vrachtwagen": "Transport — Vrachtwagen", "transport_zeevaart": "Transport — Zeevaart"}
 ROLLEN = ["directeur", "manager", "medewerker"]
 ROL_LABELS = {"directeur": "Directeur", "manager": "Manager", "medewerker": "Medewerker"}

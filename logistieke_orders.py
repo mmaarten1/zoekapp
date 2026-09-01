@@ -27,7 +27,7 @@ from core import (
     LOGISTIEKE_ORDER_STATUSSEN, laad_weegbrug, bewaar_weegbrug, WEEGBRUG_STATUS_BADGES,
     ENF_BEDRIJVEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     laad_documenten, laad_orders, laad_shipments, bereken_voorraad_status, parse_hoeveelheid_getal,
-    laad_handelsorders, laad_marktprijzen, laad_transport_planning,
+    laad_handelsorders, laad_marktprijzen, laad_transport_planning, land_afkorting,
 )
 
 logistieke_orders_bp = Blueprint("logistieke_orders", __name__)
@@ -160,7 +160,7 @@ def scheepvaart_pagina():
 
     _land_per_leverancier = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
 
-    rijen = []
+    alle_rijen = []
     for h in laad_handelsorders():
         if h.get("order_type") != "inkoop" or h.get("status") != "Definitief":
             continue
@@ -174,68 +174,117 @@ def scheepvaart_pagina():
         resterend = round(totaal - gepland, 1)
         if resterend <= 0:
             continue  # Volledig ingepland — hoeft niet meer in dit overzicht
-        rijen.append({
+        _land_vol = _land_per_leverancier.get(h.get("tegenpartij_naam",""), "")
+        alle_rijen.append({
             "id": h["id"], "contractnummer": h["contractnummer"], "leverancier": h.get("tegenpartij_naam",""),
-            "land": _land_per_leverancier.get(h.get("tegenpartij_naam",""), ""),
+            "land": _land_vol, "land_kort": land_afkorting(_land_vol),
             "incoterm": h.get("incoterm",""), "afhaallocatie": h.get("afhaal_locatienaam",""),
             "materiaal": h.get("materiaal",""), "kwaliteit": h.get("kwaliteit",""),
             "prijs": h.get("prijs",""), "valuta": h.get("valuta",""),
             "opmerkingen": h.get("opmerkingen",""), "aangemaakt": h.get("aangemaakt",""),
             "resterend": resterend, "klant": h.get("klant",""),
         })
+
+    # --- Filters: leverancier, contract, land, datum ---
+    filter_leverancier = request.args.get("filter_leverancier", "")
+    filter_contract = request.args.get("filter_contract", "").strip().lower()
+    filter_land = request.args.get("filter_land", "")
+    filter_datum = request.args.get("filter_datum", "").strip()
+
+    rijen = alle_rijen
+    if filter_leverancier:
+        rijen = [r for r in rijen if r["leverancier"] == filter_leverancier]
+    if filter_contract:
+        rijen = [r for r in rijen if filter_contract in r["contractnummer"].lower()]
+    if filter_land:
+        rijen = [r for r in rijen if r["land"] == filter_land]
+    if filter_datum:
+        # Vergelijk alleen het datumgedeelte: 'aangemaakt' is DD-MM-YYYY HH:MM,
+        # het datumveld levert YYYY-MM-DD.
+        try:
+            _filter_datum_genormaliseerd = datetime.datetime.strptime(filter_datum, "%Y-%m-%d").strftime("%d-%m-%Y")
+            rijen = [r for r in rijen if r["aangemaakt"].startswith(_filter_datum_genormaliseerd)]
+        except ValueError:
+            pass
+
     rijen.sort(key=lambda r: r["aangemaakt"], reverse=True)
+
+    leverancier_opties = sorted({r["leverancier"] for r in alle_rijen if r["leverancier"]})
+    land_opties = sorted({r["land"] for r in alle_rijen if r["land"]}, key=land_afkorting)
 
     inhoud = """
 <div class="page-title">Scheepvaart</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Wat nog ingepland moet worden voor export per schip — Definitieve inkoopcontracten, nog niet (volledig) ingepland. Klik op een contract om in te plannen en te koppelen aan het verkoopcontract.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Wat nog ingepland moet worden voor export per schip — Definitieve inkoopcontracten, nog niet (volledig) ingepland. Klik op een contract om in te plannen en te koppelen aan het verkoopcontract.</p>
+
+<form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    <select name="filter_leverancier" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle leveranciers</option>
+        {% for l in leverancier_opties %}<option value="{{ l }}" {% if l == filter_leverancier %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <select name="filter_land" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle landen</option>
+        {% for lnd in land_opties %}<option value="{{ lnd }}" {% if lnd == filter_land %}selected{% endif %}>{{ land_afkorting(lnd) }} — {{ lnd }}</option>{% endfor %}
+    </select>
+    <input type="text" name="filter_contract" value="{{ filter_contract }}" placeholder="Zoek op contractnummer" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+    <input type="date" name="filter_datum" value="{{ filter_datum }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+    <button type="submit" style="padding:7px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;background:#fff;cursor:pointer;">Filteren</button>
+    {% if filter_leverancier or filter_contract or filter_land or filter_datum %}<a href="/logistiek/scheepvaart" style="padding:7px 14px;font-size:12.5px;color:var(--gray-400);text-decoration:none;align-self:center;">Wissen</a>{% endif %}
+</form>
 
 <style>
-.sv-tabel-kop { display:flex; align-items:center; padding:10px 16px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#7d8792; white-space:nowrap; }
-.sv-tabel-rij { display:flex; align-items:center; padding:11px 16px; border-bottom:1px solid var(--gray-100); font-size:12.5px; text-decoration:none; color:inherit; white-space:nowrap; }
-.sv-tabel-rij:hover { background:var(--gray-50); }
+.sv-tabel th { text-align:left; padding:10px 12px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:#7d8792; white-space:nowrap; }
+.sv-tabel td { padding:9px 12px; border-bottom:1px solid var(--gray-100); font-size:12.5px; vertical-align:top; }
+.sv-tabel tbody tr:hover { background:var(--gray-50); }
 </style>
 
 <div style="overflow-x:auto;">
-    <div class="sv-tabel-kop" style="min-width:1400px;">
-        <span style="width:60px;">Land</span>
-        <span style="width:140px;">Contractnummer</span>
-        <span style="width:190px;">Leverancier</span>
-        <span style="width:80px;">Incoterm</span>
-        <span style="width:150px;">Afhaallocatie</span>
-        <span style="width:110px;text-align:right;">MT (resterend)</span>
-        <span style="width:110px;">Materiaal</span>
-        <span style="width:130px;">Kwaliteit</span>
-        <span style="width:110px;text-align:right;">Prijs</span>
-        <span style="width:160px;">Klant (bestemming)</span>
-        <span style="flex:1;min-width:280px;">Opmerkingen</span>
-        <span style="width:130px;">Aangemaakt</span>
-        <span style="width:100px;"></span>
-    </div>
+<table class="sv-tabel" style="border-collapse:collapse;min-width:1400px;width:100%;">
+    <thead><tr>
+        <th>Land</th>
+        <th>Contractnummer</th>
+        <th style="min-width:180px;">Leverancier</th>
+        <th>Incoterm</th>
+        <th style="min-width:140px;">Afhaallocatie</th>
+        <th style="text-align:right;">MT (resterend)</th>
+        <th>Materiaal</th>
+        <th>Kwaliteit</th>
+        <th style="text-align:right;">Prijs</th>
+        <th style="min-width:150px;">Klant (bestemming)</th>
+        <th style="min-width:260px;">Opmerkingen</th>
+        <th>Aangemaakt</th>
+        <th></th>
+    </tr></thead>
+    <tbody>
     {% for r in rijen %}
-    <div class="sv-tabel-rij" style="min-width:1400px;">
-        <span style="width:60px;color:var(--gray-500);">{{ r.land or '—' }}</span>
-        <span style="width:140px;font-family:var(--font-mono);color:var(--gray-800);font-weight:700;">{{ r.contractnummer }}</span>
-        <span style="width:190px;color:var(--gray-700);white-space:normal;">{{ r.leverancier }}</span>
-        <span style="width:80px;color:var(--gray-500);">{{ r.incoterm or '—' }}</span>
-        <span style="width:150px;color:var(--gray-500);white-space:normal;">{{ r.afhaallocatie or '—' }}</span>
-        <span style="width:110px;text-align:right;font-family:var(--font-mono);color:var(--gray-700);font-weight:600;">{{ r.resterend }}</span>
-        <span style="width:110px;color:var(--gray-500);">{{ r.materiaal or '—' }}</span>
-        <span style="width:130px;color:var(--gray-500);">{{ r.kwaliteit or '—' }}</span>
-        <span style="width:110px;text-align:right;font-family:var(--font-mono);color:var(--gray-500);">{% if r.prijs %}{{ r.prijs }} {{ r.valuta }}{% else %}—{% endif %}</span>
-        <span style="width:160px;color:var(--gray-500);white-space:normal;">{{ r.klant or '—' }}</span>
-        <span style="flex:1;min-width:280px;color:var(--gray-500);white-space:normal;">{{ r.opmerkingen or '—' }}</span>
-        <span style="width:130px;color:var(--gray-400);font-size:11.5px;">{{ r.aangemaakt or '—' }}</span>
-        <span style="width:100px;">
-            <a href="/transport-planning/nieuw?leverancier={{ r.leverancier|urlencode }}&materiaal={{ (r.materiaal ~ ' — ' ~ r.kwaliteit)|urlencode }}&hoeveelheid={{ r.resterend }}&contract_referentie={{ r.contractnummer|urlencode }}&fabriek={{ r.klant|urlencode }}" style="font-size:11.5px;font-weight:700;color:var(--brand-600);text-decoration:none;">Inplannen →</a>
-        </span>
-    </div>
+        <tr>
+            <td style="color:var(--gray-500);white-space:nowrap;">{{ r.land_kort or '—' }}</td>
+            <td style="font-family:var(--font-mono);color:var(--gray-800);font-weight:700;white-space:nowrap;">{{ r.contractnummer }}</td>
+            <td style="color:var(--gray-700);">{{ r.leverancier }}</td>
+            <td style="color:var(--gray-500);white-space:nowrap;">{{ r.incoterm or '—' }}</td>
+            <td style="color:var(--gray-500);">{{ r.afhaallocatie or '—' }}</td>
+            <td style="text-align:right;font-family:var(--font-mono);color:var(--gray-700);font-weight:600;white-space:nowrap;">{{ r.resterend }}</td>
+            <td style="color:var(--gray-500);white-space:nowrap;">{{ r.materiaal or '—' }}</td>
+            <td style="color:var(--gray-500);white-space:nowrap;">{{ r.kwaliteit or '—' }}</td>
+            <td style="text-align:right;font-family:var(--font-mono);color:var(--gray-500);white-space:nowrap;">{% if r.prijs %}{{ r.prijs }} {{ r.valuta }}{% else %}—{% endif %}</td>
+            <td style="color:var(--gray-500);">{{ r.klant or '—' }}</td>
+            <td style="color:var(--gray-500);">{{ r.opmerkingen or '—' }}</td>
+            <td style="color:var(--gray-400);font-size:11.5px;white-space:nowrap;">{{ r.aangemaakt or '—' }}</td>
+            <td style="white-space:nowrap;">
+                <a href="/transport-planning/nieuw?leverancier={{ r.leverancier|urlencode }}&materiaal={{ (r.materiaal ~ ' — ' ~ r.kwaliteit)|urlencode }}&hoeveelheid={{ r.resterend }}&contract_referentie={{ r.contractnummer|urlencode }}&fabriek={{ r.klant|urlencode }}" style="font-size:11.5px;font-weight:700;color:var(--brand-600);text-decoration:none;">Inplannen →</a>
+            </td>
+        </tr>
     {% else %}
-    <div class="sv-tabel-rij" style="justify-content:center;color:var(--gray-300);cursor:default;min-width:1400px;">Niets openstaand — alle scheepvaart-inkoop is volledig ingepland.</div>
+        <tr><td colspan="13" style="padding:24px;text-align:center;color:var(--gray-300);border-bottom:none;">{% if alle_rijen %}Geen resultaten voor deze filters.{% else %}Niets openstaand — alle scheepvaart-inkoop is volledig ingepland.{% endif %}</td></tr>
     {% endfor %}
+    </tbody>
+</table>
 </div>
     """
     pagina = render_simple_page("Scheepvaart", "scheepvaart", inhoud)
-    return render_template_string(pagina, rijen=rijen)
+    return render_template_string(pagina, rijen=rijen, alle_rijen=alle_rijen, leverancier_opties=leverancier_opties,
+                                    land_opties=land_opties, filter_leverancier=filter_leverancier,
+                                    filter_contract=filter_contract, filter_land=filter_land, filter_datum=filter_datum,
+                                    land_afkorting=land_afkorting)
 
 @logistieke_orders_bp.route("/logistiek/verkoop-planning")
 def verkoop_planning_pagina():
