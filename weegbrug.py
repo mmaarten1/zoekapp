@@ -193,7 +193,7 @@ def weegbrug_pagina():
         <span style="flex:1;color:var(--gray-600);">{{ r.leverancier or '—' }}</span>
         <span style="flex:1;color:var(--gray-600);">{{ r.materiaal or '—' }}</span>
         <span style="width:130px;text-align:right;font-family:var(--font-mono);color:var(--gray-600);">
-            {% if r.netto_gewicht %}{{ "{:,.0f}".format(r.netto_gewicht|float).replace(",", ".") }} kg{% else %}—{% endif %}
+            {% if r.netto_gewicht %}{{ "%.3f"|format(r.netto_gewicht|float / 1000) }} t{% else %}—{% endif %}
         </span>
         <span style="width:140px;">
             <span class="wb-statuspunt" style="background:{{ badges[r.status].kleur }};"></span>
