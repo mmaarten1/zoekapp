@@ -1717,6 +1717,8 @@ ZIJBALK_ITEMS = [
 # alleen het startpunt, geen harde beperking.
 AFDELING_STANDAARD_ZIJBALK_VOLGORDE = {
     "weegbrug": ["weegbrug", "live_operations", "dashboard", "taken", "notities"],
+    "transport_zeevaart": ["logistiek_planning", "transport_planning", "transport_overview", "dashboard", "taken", "notities"],
+    "transport_vrachtwagen": ["transport_planning", "transport_overview", "transport_rates", "dashboard", "taken", "notities"],
 }
 
 def effectieve_layout_voorkeur(gebruikersnaam):
