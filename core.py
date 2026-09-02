@@ -1694,7 +1694,6 @@ ZIJBALK_ITEMS = [
     ("zoeken", "/", "ZK", "Zoeken"),
     ("wereldkaart", "/wereldkaart", "WM", "World Map"),
     ("inzichten", "/inzichten", "IZ", "Inzichten"),
-    ("materialen", "/materialen", "MT", "Materials"),
     ("klanten", "/klanten", "KL", "Klanten"),
     ("leveranciers", "/leveranciers", "LV", "Leveranciers"),
     ("certificeringen", "/certificeringen", "CF", "Certifications"),
