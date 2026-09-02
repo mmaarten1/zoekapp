@@ -850,21 +850,52 @@ def bereken_afstand_km(lat1, lon1, lat2, lon2):
     return R * c
 def js_arg(waarde):
     """Eén argument voor een JavaScript-functie-aanroep in een onclick-achtig
-    HTML-attribuut, inclusief de omsluitende quotes — bv. js_arg("King's Lynn")
-    geeft '&#34;King&#39;s Lynn&#34;' terug (safe voor direct gebruik met |safe
-    in de template, want Markup escapet het resultaat al correct voor de
-    HTML-attribuutcontext).
+    HTML-attribuut, inclusief de omsluitende quotes — bv. gebruikt in
+    onclick="openDrawer({{ js_arg(bedrijf.naam) }}, ...)".
 
-    Waarom dit nodig is: een los `{{ waarde|replace("'","\\'") }}` binnen een
-    template-string is foutgevoelig — de exacte hoeveelheid backslashes hangt af
-    van meerdere geneste escape-lagen (Jinja-syntax, Python-brontekst, en de
-    editor die de template bewerkt), en één teveel of te weinig geeft een
-    onzichtbare, pas-bij-een-specifieke-waarde-optredende JavaScript-syntaxfout
-    (bv. bij een bedrijfsnaam of plaatsnaam met een apostrof, zoals "King's
-    Lynn"). json.dumps() doet alle JavaScript-string-escaping in één keer,
+    Geeft een RUWE json.dumps()-string terug (GEEN Markup/|safe) — bewust, want
+    het onclick-attribuut zelf is met dubbele aanhalingstekens omsloten
+    (onclick="..."), en json.dumps() gebruikt ook dubbele quotes als JavaScript-
+    string-scheidingsteken. Zonder Jinja's normale auto-escape zou de eerste "
+    van elke waarde het HTML-attribuut zelf voortijdig afsluiten (de rest van
+    de string valt dan buiten het attribuut en breekt de pagina vanaf dat punt)
+    — dat gebeurde toen dit per ongeluk met Markup() werd geretourneerd. Jinja's
+    auto-escape zet " om naar &#34; en ' naar &#39;; de browser decodeert dat
+    terug naar de letterlijke tekens vóórdat de JavaScript wordt uitgevoerd, dus
+    het resultaat is zowel een geldig HTML-attribuut als geldige JavaScript.
+
+    json.dumps() doet daarnaast alle JavaScript-string-escaping in één keer,
     correct, voor elk mogelijk teken (apostrof, dubbele quote, backslash,
     newline) — geen handmatige escape-keten meer nodig."""
+    return json.dumps("" if waarde is None else str(waarde))
+
+def js_arg_raw(waarde):
+    """Zelfde als js_arg(), maar voor gebruik binnen een KAAL <script>-blok
+    (dus GEEN omsluitend HTML-attribuut zoals onclick="...") — bv. een
+    Leaflet-marker-handler: .on("click", function(){ openDrawer({{ js_arg_raw(b.naam) }}, ...) }).
+
+    Binnen een <script>-tag gebeurt GEEN HTML-entity-decodering door de browser
+    (dat gebeurt alleen in HTML-attributen en gewone HTML-tekst) — dus &#34; zou
+    daar als de LETTERLIJKE tekst "&#34;" in de JavaScript-broncode belanden,
+    wat een syntaxfout geeft (precies dit gebeurde toen js_arg() hier per
+    ongeluk werd gebruikt). Daarom geeft deze variant de ruwe json.dumps()-
+    string terug via Markup (dus zonder dat Jinja 'm nog een keer HTML-escapet)
+    — dat is hier wél correct, want er is geen HTML-attribuut om mee te botsen."""
     return Markup(json.dumps("" if waarde is None else str(waarde)))
+
+def js_str_content(waarde):
+    """Voor gebruik BINNEN een al-geopende, dubbel-aangehaalde JavaScript-string
+    in een kaal <script>-blok — dus GEEN eigen omsluitende quotes, in
+    tegenstelling tot js_arg_raw(). Bv. .bindPopup("<b>{{ js_str_content(b.naam) }}</b>").
+    Escapet backslash/dubbele-quote (voor geldige JS) en < / > naar hun
+    JavaScript-unicode-escape \\u003c / \\u003e (voorkomt dat brondata met een
+    </script>-achtige tekst het omringende <script>-blok voortijdig afsluit) —
+    die decoderen bij het uitvoeren van de JavaScript weer terug naar < en >,
+    dus de HTML die Leaflet als popup-inhoud rendert blijft intact."""
+    s = "" if waarde is None else str(waarde)
+    geëscaped = json.dumps(s)[1:-1]  # json.dumps geeft '"...."'; alleen de inhoud nodig, geen eigen quotes
+    geëscaped = geëscaped.replace("<", "\\u003c").replace(">", "\\u003e")
+    return Markup(geëscaped)
 
 def geocode_adres(adres, stad):
     query = ", ".join([x for x in [adres, stad] if x])

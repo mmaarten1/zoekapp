@@ -28,7 +28,7 @@ from core import (
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
     laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien, vereist_afdeling_of_403,
-    leverancier_instelling_voor, sidebar_html, js_arg,
+    leverancier_instelling_voor, sidebar_html, js_arg, js_arg_raw, js_str_content,
 )
 
 zoeken_bp = Blueprint("zoeken", __name__)
@@ -1184,8 +1184,8 @@ L.marker([{{ b.lat }}, {{ b.lon }}], {icon: L.divIcon({
     html: '<div style="width:16px;height:16px;border-radius:50%;background:' + kaartCategorieKleuren["{{ b.kaart_categorie }}"] + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>',
     className: '', iconSize: [16,16], iconAnchor: [8,8]
 })})
-    .bindPopup("<b>{{ b.naam|replace('"','&quot;') }}</b><br><small>{{ b.regio|default('', true)|replace('"','&quot;') }}, {{ b.land|default('', true)|replace('"','&quot;') }}</small>")
-    .on("click", function(){ openDrawer({{ js_arg(b.naam) }},{{ js_arg(b.regio) }},{{ js_arg(b.land) }},{{ js_arg(b.url) }},{{ js_arg(b.klanttype) }},{{ js_arg(b.materialen) }},{{ js_arg(b.volume) }},{{ b.lat if b.lat is not none else 'null' }},{{ b.lon if b.lon is not none else 'null' }},{{ js_arg(b.adres) }},{{ js_arg(b.telefoon) }},{{ js_arg(b.certificeringen) }},{{ js_arg(b.contactpersoon) }},{{ js_arg(b.kwaliteiten) }},{{ js_arg(b.brontype) }}); })
+    .bindPopup("<b>{{ js_str_content(b.naam) }}</b><br><small>{{ js_str_content(b.regio) }}, {{ js_str_content(b.land) }}</small>")
+    .on("click", function(){ openDrawer({{ js_arg_raw(b.naam) }},{{ js_arg_raw(b.regio) }},{{ js_arg_raw(b.land) }},{{ js_arg_raw(b.url) }},{{ js_arg_raw(b.klanttype) }},{{ js_arg_raw(b.materialen) }},{{ js_arg_raw(b.volume) }},{{ b.lat if b.lat is not none else 'null' }},{{ b.lon if b.lon is not none else 'null' }},{{ js_arg_raw(b.adres) }},{{ js_arg_raw(b.telefoon) }},{{ js_arg_raw(b.certificeringen) }},{{ js_arg_raw(b.contactpersoon) }},{{ js_arg_raw(b.kwaliteiten) }},{{ js_arg_raw(b.brontype) }}); })
     .addTo(clusterGroep);
 {% endfor %}
 kaart.addLayer(clusterGroep);
@@ -2362,7 +2362,8 @@ def index():
         actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst,
         materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()),
         mag_pagina_zien=mag_pagina_zien, weergave_balk=_bouw_weergave_balk(),
-        sidebar_html_ingevoegd=sidebar_html('zoeken'), js_arg=js_arg)
+        sidebar_html_ingevoegd=sidebar_html('zoeken'), js_arg=js_arg,
+        js_arg_raw=js_arg_raw, js_str_content=js_str_content)
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 
