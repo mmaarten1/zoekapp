@@ -1061,35 +1061,41 @@ async function openKoppelModal(id, isWeegbrug) {
         const data = await res.json();
         if (data.error) { inhoud.innerHTML = '<span style="color:#dc2626;">' + data.error + '</span>'; return; }
 
-        sub.innerHTML = data.order.leverancier + " — " + data.order.materiaal + " (" + data.order.kwaliteit + ")";
+        sub.innerHTML = data.order.leverancier + " — " + data.order.materiaal + " (" + data.order.kwaliteit + ")" +
+            (data.order.hoeveelheid ? " — deze weging: <b>" + data.order.hoeveelheid + " t</b>" : "");
 
-        var html = '<label style="font-size:12.5px;color:var(--gray-500);font-weight:600;display:block;margin-bottom:8px;">' +
+        function _regelVoorContract(c) {
+            var na = c.resterend_na_deze_weging;
+            var overTekst = c.gaat_over_contract
+                ? '<div style="color:#dc2626;font-weight:700;margin-top:2px;">⚠ Gaat ' + Math.abs(na) + ' t over het contract heen</div>'
+                : '<div style="color:var(--gray-400);margin-top:2px;">Na deze weging: ' + na + ' t over</div>';
+            return '<label data-gaat-over="' + (c.gaat_over_contract ? "1" : "0") + '" style="font-size:13px;color:var(--gray-700);display:block;margin-bottom:14px;padding:8px 10px;border-radius:6px;line-height:1.6;' + (c.gaat_over_contract ? "background:#fef2f2;" : "") + '">' +
+                '<input type="radio" name="modalContractKeuze" value="' + c.id + '" data-gaat-over="' + (c.gaat_over_contract ? "1" : "0") + '"> ' + c.contractnummer +
+                (c.tegenpartij_naam ? ' — ' + c.tegenpartij_naam : '') + ' — ' + c.materiaal + ' (' + c.kwaliteit + ')' +
+                (c.prijs ? ' à €' + c.prijs + '/MT' : '') +
+                ' — <b>' + c.resterend_ton + ' MT open</b> van ' + c.totaal_ton + ' MT ' +
+                (c.aangemaakt ? '<span style="color:var(--gray-400);">(' + c.aangemaakt + ')</span>' : '') +
+                overTekst + '</label>';
+        }
+
+        var html = '<label style="font-size:13px;color:var(--gray-500);font-weight:600;display:block;margin-bottom:14px;">' +
             '<input type="radio" name="modalContractKeuze" value="spot" checked> Spot-transactie (dagprijs uit marktprijzen)</label>';
 
         if (data.passend.length) {
-            html += '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 6px 0;">Passende contracten (' + data.order.materiaal + ' — ' + data.order.kwaliteit + ') — oudste eerst</div>';
-            data.passend.forEach(function(c) {
-                html += '<label style="font-size:12.5px;color:var(--gray-700);display:block;margin-bottom:8px;line-height:1.5;">' +
-                    '<input type="radio" name="modalContractKeuze" value="' + c.id + '"> ' + c.contractnummer + ' — ' + c.materiaal + ' (' + c.kwaliteit + ')' +
-                    (c.prijs ? ' à €' + c.prijs + '/MT' : '') +
-                    ' — <b>' + c.resterend_ton + ' MT open</b> van ' + c.totaal_ton + ' MT ' +
-                    '<span style="color:var(--gray-400);">(' + c.aangemaakt + ')</span></label>';
-            });
+            html += '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:16px 0 8px 0;">Passende contracten (' + data.order.materiaal + ' — ' + data.order.kwaliteit + ') — oudste eerst</div>';
+            data.passend.forEach(function(c) { html += _regelVoorContract(c); });
         }
         if (data.overig.length) {
-            html += '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 6px 0;">Overige goedgekeurde contracten (ander materiaal/kwaliteit/leverancier)</div>';
-            data.overig.forEach(function(c) {
-                html += '<label style="font-size:12.5px;color:var(--gray-600);display:block;margin-bottom:8px;line-height:1.5;">' +
-                    '<input type="radio" name="modalContractKeuze" value="' + c.id + '"> ' + c.contractnummer + ' — ' + c.tegenpartij_naam + ' (' + c.materiaal + ' — ' + c.kwaliteit + ')' +
-                    ' — <b>' + c.resterend_ton + ' MT open</b> van ' + c.totaal_ton + ' MT</label>';
-            });
+            html += '<details style="margin-top:12px;"><summary style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;cursor:pointer;padding:4px 0;">Overige goedgekeurde contracten (ander materiaal/kwaliteit/leverancier) — ' + data.overig.length + '</summary><div style="margin-top:8px;">';
+            data.overig.forEach(function(c) { html += _regelVoorContract(c); });
+            html += '</div></details>';
         }
         if (!data.passend.length && !data.overig.length) {
             html += '<div style="font-size:12px;color:var(--gray-300);margin-top:8px;">Nog geen goedgekeurde (Definitieve) inkoopcontracten beschikbaar.</div>';
         }
 
-        html += '<div style="margin-top:16px;"><label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Verantwoordelijke afdeling</label>' +
-            '<select id="modalVerantwoordelijkeAfdeling" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;">' +
+        html += '<div style="margin-top:18px;"><label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Verantwoordelijke afdeling</label>' +
+            '<select id="modalVerantwoordelijkeAfdeling" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:5px;">' +
             '<option value="">— geen specifieke afdeling —</option>' +
             '<option value="backoffice">Backoffice</option><option value="logistiek">Logistiek</option><option value="finance">Finance</option>' +
             '</select></div>';
@@ -1105,6 +1111,11 @@ async function bevestigKoppeling() {
     if (!HUIDIGE_ORDER_ID) return;
     var gekozen = document.querySelector('input[name="modalContractKeuze"]:checked');
     if (!gekozen) { alert("Kies eerst een optie."); return; }
+    if (gekozen.getAttribute("data-gaat-over") === "1") {
+        if (!confirm("Met deze weging ga je over het toegestane volume van dit contract heen. Ga je akkoord dat je over het contract heen gaat?")) {
+            return;
+        }
+    }
     var afdeling = document.getElementById("modalVerantwoordelijkeAfdeling").value;
     try {
         const res = await fetch("/api/logistieke-order/" + HUIDIGE_ORDER_ID + "/koppel-contract", {
@@ -1524,6 +1535,7 @@ def _contract_opties_voor_order(order):
     lijsten zijn FIFO gesorteerd (oudste eerst) en elke optie krijgt het al-geleverde en
     resterende tonnage mee, zodat je in één oogopslag ziet hoeveel er nog openstaat."""
     alle_orders_voor_geleverd = laad_logistieke_orders()
+    deze_weging_ton = parse_hoeveelheid_getal(order.get("werkelijke_hoeveelheid",""))
     alle_handelsorders = [
         h for h in laad_handelsorders()
         if h.get("order_type") == "inkoop" and h.get("status") == "Definitief"
@@ -1546,6 +1558,9 @@ def _contract_opties_voor_order(order):
         h["totaal_ton"] = round(totaal, 1)
         h["geleverd_ton"] = geleverd
         h["resterend_ton"] = round(totaal - geleverd, 1)
+        h["resterend_na_deze_weging"] = round(h["resterend_ton"] - deze_weging_ton, 1)
+        h["gaat_over_contract"] = h["resterend_na_deze_weging"] < 0
+        h["over_hoeveelheid"] = round(abs(h["resterend_na_deze_weging"]), 1) if h["gaat_over_contract"] else 0
         return h
 
     verrijkt = [_verrijk(h) for h in alle_handelsorders]
@@ -1740,7 +1755,8 @@ def api_contract_opties(order_id):
     passend, overig = _contract_opties_voor_order(order)
     return jsonify({
         "order": {"ordernummer": order["ordernummer"], "leverancier": order.get("leverancier",""),
-                   "materiaal": order.get("materiaal",""), "kwaliteit": order.get("kwaliteit","")},
+                   "materiaal": order.get("materiaal",""), "kwaliteit": order.get("kwaliteit",""),
+                   "hoeveelheid": order.get("werkelijke_hoeveelheid","")},
         "passend": passend, "overig": overig,
     })
 
@@ -1856,25 +1872,29 @@ def logistieke_order_koppel_contract(order_id):
 <div class="page-title">Contract koppelen — {{ order.ordernummer }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">{{ order.leverancier }} — {{ order.materiaal }} ({{ order.kwaliteit }}). Koppel een goedgekeurd inkoopcontract (prijs komt automatisch mee) of markeer als spot-transactie (dagprijs). Oudste contract staat bovenaan (FIFO).</p>
 
-<form method="POST" style="max-width:560px;">
-    <div style="margin-bottom:16px;">
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;display:block;margin-bottom:6px;">
+<form method="POST" style="max-width:600px;" onsubmit="return bevestigVolleWaarschuwing();">
+    <div style="margin-bottom:18px;">
+        <label style="font-size:12.5px;color:var(--gray-500);font-weight:600;display:block;margin-bottom:14px;">
             <input type="radio" name="contract_keuze" value="spot" checked onchange="document.getElementById('contract_select').disabled=true;"> Spot-transactie (dagprijs uit marktprijzen)
         </label>
         {% if passende_contracten %}
-        <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 4px 0;">Passende contracten ({{ order.materiaal }} — {{ order.kwaliteit }}, {{ order.leverancier }}) — oudste eerst</div>
+        <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:16px 0 8px 0;">Passende contracten ({{ order.materiaal }} — {{ order.kwaliteit }}, {{ order.leverancier }}) — oudste eerst</div>
         {% for c in passende_contracten %}
-        <label style="font-size:12.5px;color:var(--gray-700);display:block;margin-bottom:6px;">
-            <input type="radio" name="contract_keuze" value="{{ c.id }}" onchange="document.getElementById('contract_select').disabled=true;"> {{ c.contractnummer }} — {{ c.materiaal }} ({{ c.kwaliteit }}){% if c.prijs %} à €{{ c.prijs }}/MT{% endif %} — <b>{{ c.resterend_ton }} MT open</b> van {{ c.totaal_ton }} MT <span style="color:var(--gray-400);">({{ c.aangemaakt }})</span>
+        <label style="font-size:13px;color:var(--gray-700);display:block;margin-bottom:14px;padding:8px 10px;border-radius:6px;line-height:1.6;{% if c.gaat_over_contract %}background:#fef2f2;{% endif %}">
+            <input type="radio" name="contract_keuze" value="{{ c.id }}" data-gaat-over="{{ '1' if c.gaat_over_contract else '0' }}" onchange="document.getElementById('contract_select').disabled=true;"> {{ c.contractnummer }} — {{ c.materiaal }} ({{ c.kwaliteit }}){% if c.prijs %} à €{{ c.prijs }}/MT{% endif %} — <b>{{ c.resterend_ton }} MT open</b> van {{ c.totaal_ton }} MT <span style="color:var(--gray-400);">({{ c.aangemaakt }})</span>
+            {% if c.gaat_over_contract %}<div style="color:#dc2626;font-weight:700;margin-top:2px;">⚠ Gaat {{ c.over_hoeveelheid }} t over het contract heen</div>
+            {% else %}<div style="color:var(--gray-400);margin-top:2px;">Na deze weging: {{ c.resterend_na_deze_weging }} t over</div>{% endif %}
         </label>
         {% endfor %}
         {% endif %}
         {% if overige_contracten %}
-        <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 4px 0;">Overige goedgekeurde contracten</div>
-        <select id="contract_select" name="contract_keuze" onchange="document.querySelectorAll('input[name=contract_keuze][type=radio]').forEach(function(r){r.checked=false;});" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-            <option value="">— geen —</option>
-            {% for c in overige_contracten %}<option value="{{ c.id }}">{{ c.contractnummer }} — {{ c.tegenpartij_naam }} ({{ c.materiaal }} — {{ c.kwaliteit }}, {{ c.resterend_ton }} MT open van {{ c.totaal_ton }} MT{% if c.prijs %}, €{{ c.prijs }}/MT{% endif %})</option>{% endfor %}
-        </select>
+        <details style="margin-top:12px;">
+            <summary style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;cursor:pointer;padding:4px 0;">Overige goedgekeurde contracten (ander materiaal/kwaliteit/leverancier) — {{ overige_contracten|length }}</summary>
+            <select id="contract_select" name="contract_keuze" onchange="document.querySelectorAll('input[name=contract_keuze][type=radio]').forEach(function(r){r.checked=false;}); this.setAttribute('data-gaat-over', this.options[this.selectedIndex].getAttribute('data-gaat-over') || '0');" data-gaat-over="0" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:8px;">
+                <option value="">— geen —</option>
+                {% for c in overige_contracten %}<option value="{{ c.id }}" data-gaat-over="{{ '1' if c.gaat_over_contract else '0' }}">{{ c.contractnummer }} — {{ c.tegenpartij_naam }} ({{ c.materiaal }} — {{ c.kwaliteit }}, {{ c.resterend_ton }} MT open van {{ c.totaal_ton }} MT{% if c.prijs %}, €{{ c.prijs }}/MT{% endif %}) — na weging: {{ c.resterend_na_deze_weging }} MT{% if c.gaat_over_contract %} (OVER!){% endif %}</option>{% endfor %}
+            </select>
+        </details>
         {% endif %}
         {% if not passende_contracten and not overige_contracten %}
         <div style="font-size:12px;color:var(--gray-300);margin-top:8px;">Nog geen goedgekeurde (Definitieve) inkoopcontracten beschikbaar.</div>
@@ -1892,6 +1912,23 @@ def logistieke_order_koppel_contract(order_id):
     <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Koppelen</button>
     <a href="/logistiek/orders/{{ order.id }}" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
 </form>
+<script>
+function bevestigVolleWaarschuwing() {
+    var gekozenRadio = document.querySelector('input[name="contract_keuze"]:checked');
+    var gaatOver = false;
+    if (gekozenRadio && gekozenRadio.getAttribute("data-gaat-over") === "1") {
+        gaatOver = true;
+    }
+    var select = document.getElementById("contract_select");
+    if (select && !select.disabled && select.value && select.getAttribute("data-gaat-over") === "1") {
+        gaatOver = true;
+    }
+    if (gaatOver) {
+        return confirm("Met deze weging ga je over het toegestane volume van dit contract heen. Ga je akkoord dat je over het contract heen gaat?");
+    }
+    return true;
+}
+</script>
     """
     pagina = render_simple_page("Contract koppelen", "live_operations", inhoud)
     return render_template_string(pagina, order=order, passende_contracten=passende_contracten, overige_contracten=overige_contracten)
