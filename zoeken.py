@@ -28,7 +28,7 @@ from core import (
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
     laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien, vereist_afdeling_of_403,
-    leverancier_instelling_voor, sidebar_html,
+    leverancier_instelling_voor, sidebar_html, js_arg,
 )
 
 zoeken_bp = Blueprint("zoeken", __name__)
@@ -1052,8 +1052,8 @@ window.fetch = function(url, opties) {
                 data-accountmanager="{{ bedrijf.accountmanager|default('',true)|e }}"
                 data-laatst_contact="{{ bedrijf.laatst_contact|default('',true)|e }}"
                 data-lat="{{ bedrijf.lat or '' }}" data-lon="{{ bedrijf.lon or '' }}"
-                onclick="event.preventDefault(); openDrawer('{{ bedrijf.naam|replace("'","&#39;") }}', '{{ bedrijf.regio }}', '{{ bedrijf.land }}', '{{ bedrijf.url }}', '{{ bedrijf.klanttype }}', '{{ bedrijf.materialen }}', '{{ bedrijf.volume }}', {{ bedrijf.lat }}, {{ bedrijf.lon }}, '{{ bedrijf.adres|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.telefoon|default("", true) }}', '{{ bedrijf.certificeringen|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.contactpersoon|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.kwaliteiten|default("", true)|replace("'","&#39;") }}', '{{ bedrijf.brontype|default("", true)|replace("'","&#39;") }}')">
-                <span style="width:26px;"><span class="star-btn {% if bedrijf.naam in opgeslagen_namen %}opgeslagen{% endif %}" onclick="event.stopPropagation(); toggleOpslaan(event, '{{ bedrijf.naam|replace("'","\\'") }}', this)">{% if bedrijf.naam in opgeslagen_namen %}★{% else %}☆{% endif %}</span></span>
+                onclick="event.preventDefault(); openDrawer({{ js_arg(bedrijf.naam) }}, {{ js_arg(bedrijf.regio) }}, {{ js_arg(bedrijf.land) }}, {{ js_arg(bedrijf.url) }}, {{ js_arg(bedrijf.klanttype) }}, {{ js_arg(bedrijf.materialen) }}, {{ js_arg(bedrijf.volume) }}, {{ bedrijf.lat if bedrijf.lat is not none else 'null' }}, {{ bedrijf.lon if bedrijf.lon is not none else 'null' }}, {{ js_arg(bedrijf.adres) }}, {{ js_arg(bedrijf.telefoon) }}, {{ js_arg(bedrijf.certificeringen) }}, {{ js_arg(bedrijf.contactpersoon) }}, {{ js_arg(bedrijf.kwaliteiten) }}, {{ js_arg(bedrijf.brontype) }})">
+                <span style="width:26px;"><span class="star-btn {% if bedrijf.naam in opgeslagen_namen %}opgeslagen{% endif %}" onclick="event.stopPropagation(); toggleOpslaan(event, {{ js_arg(bedrijf.naam) }}, this)">{% if bedrijf.naam in opgeslagen_namen %}★{% else %}☆{% endif %}</span></span>
                 <span style="flex:1.5;font-weight:600;color:var(--gray-800);">{{ bedrijf.naam }}{% if bedrijf.adres or bedrijf.telefoon %} <span class="verificatie-badge" style="font-size:0.6rem;">✓</span>{% endif %}<br><span style="font-weight:400;font-size:11px;color:var(--gray-400);">{{ bedrijf.regio }}, {{ bedrijf.land }}</span></span>
                 <span style="flex:1;" class="zacht">{{ bedrijf.brontype|default('—',true) }}</span>
                 <span style="flex:1.2;" class="zacht">{{ bedrijf.materialen|default('—',true) }}</span>
@@ -1184,8 +1184,8 @@ L.marker([{{ b.lat }}, {{ b.lon }}], {icon: L.divIcon({
     html: '<div style="width:16px;height:16px;border-radius:50%;background:' + kaartCategorieKleuren["{{ b.kaart_categorie }}"] + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>',
     className: '', iconSize: [16,16], iconAnchor: [8,8]
 })})
-    .bindPopup("<b>{{ b.naam|replace('"','') }}</b><br><small>{{ b.regio }}, {{ b.land }}</small>")
-    .on("click", function(){ openDrawer("{{ b.naam|replace("'","&#39;") }}","{{ b.regio }}","{{ b.land }}","{{ b.url }}","{{ b.klanttype }}","{{ b.materialen }}","{{ b.volume }}",{{ b.lat }},{{ b.lon }},"{{ b.adres|default('', true)|replace("'","&#39;") }}","{{ b.telefoon|default('', true) }}","{{ b.certificeringen|default('', true)|replace("'","&#39;") }}","{{ b.contactpersoon|default('', true)|replace("'","&#39;") }}","{{ b.kwaliteiten|default('', true)|replace("'","&#39;") }}","{{ b.brontype|default('', true)|replace("'","&#39;") }}"); })
+    .bindPopup("<b>{{ b.naam|replace('"','&quot;') }}</b><br><small>{{ b.regio|default('', true)|replace('"','&quot;') }}, {{ b.land|default('', true)|replace('"','&quot;') }}</small>")
+    .on("click", function(){ openDrawer({{ js_arg(b.naam) }},{{ js_arg(b.regio) }},{{ js_arg(b.land) }},{{ js_arg(b.url) }},{{ js_arg(b.klanttype) }},{{ js_arg(b.materialen) }},{{ js_arg(b.volume) }},{{ b.lat if b.lat is not none else 'null' }},{{ b.lon if b.lon is not none else 'null' }},{{ js_arg(b.adres) }},{{ js_arg(b.telefoon) }},{{ js_arg(b.certificeringen) }},{{ js_arg(b.contactpersoon) }},{{ js_arg(b.kwaliteiten) }},{{ js_arg(b.brontype) }}); })
     .addTo(clusterGroep);
 {% endfor %}
 kaart.addLayer(clusterGroep);
@@ -2348,7 +2348,7 @@ def index():
         actieve_filter_count=actieve_filter_count, actieve_filters_lijst=actieve_filters_lijst,
         materiaal_categorieen=sorted(laad_materiaal_taxonomie().keys()),
         mag_pagina_zien=mag_pagina_zien, weergave_balk=_bouw_weergave_balk(),
-        sidebar_html_ingevoegd=sidebar_html('zoeken'))
+        sidebar_html_ingevoegd=sidebar_html('zoeken'), js_arg=js_arg)
 
 OPGESLAGEN_FILE = datapad("opgeslagen.json")
 

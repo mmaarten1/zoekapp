@@ -20,6 +20,7 @@ import os
 import json
 import secrets
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
+from markupsafe import Markup
 from werkzeug.security import check_password_hash, generate_password_hash
 import requests
 import re
@@ -847,6 +848,24 @@ def bereken_afstand_km(lat1, lon1, lat2, lon2):
     a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
     return R * c
+def js_arg(waarde):
+    """Eén argument voor een JavaScript-functie-aanroep in een onclick-achtig
+    HTML-attribuut, inclusief de omsluitende quotes — bv. js_arg("King's Lynn")
+    geeft '&#34;King&#39;s Lynn&#34;' terug (safe voor direct gebruik met |safe
+    in de template, want Markup escapet het resultaat al correct voor de
+    HTML-attribuutcontext).
+
+    Waarom dit nodig is: een los `{{ waarde|replace("'","\\'") }}` binnen een
+    template-string is foutgevoelig — de exacte hoeveelheid backslashes hangt af
+    van meerdere geneste escape-lagen (Jinja-syntax, Python-brontekst, en de
+    editor die de template bewerkt), en één teveel of te weinig geeft een
+    onzichtbare, pas-bij-een-specifieke-waarde-optredende JavaScript-syntaxfout
+    (bv. bij een bedrijfsnaam of plaatsnaam met een apostrof, zoals "King's
+    Lynn"). json.dumps() doet alle JavaScript-string-escaping in één keer,
+    correct, voor elk mogelijk teken (apostrof, dubbele quote, backslash,
+    newline) — geen handmatige escape-keten meer nodig."""
+    return Markup(json.dumps("" if waarde is None else str(waarde)))
+
 def geocode_adres(adres, stad):
     query = ", ".join([x for x in [adres, stad] if x])
     if not query:
