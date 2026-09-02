@@ -1052,7 +1052,7 @@ window.fetch = function(url, opties) {
                 data-accountmanager="{{ bedrijf.accountmanager|default('',true)|e }}"
                 data-laatst_contact="{{ bedrijf.laatst_contact|default('',true)|e }}"
                 data-lat="{{ bedrijf.lat or '' }}" data-lon="{{ bedrijf.lon or '' }}"
-                onclick="event.preventDefault(); openDrawer({{ js_arg(bedrijf.naam) }}, {{ js_arg(bedrijf.regio) }}, {{ js_arg(bedrijf.land) }}, {{ js_arg(bedrijf.url) }}, {{ js_arg(bedrijf.klanttype) }}, {{ js_arg(bedrijf.materialen) }}, {{ js_arg(bedrijf.volume) }}, {{ bedrijf.lat if bedrijf.lat is not none else 'null' }}, {{ bedrijf.lon if bedrijf.lon is not none else 'null' }}, {{ js_arg(bedrijf.adres) }}, {{ js_arg(bedrijf.telefoon) }}, {{ js_arg(bedrijf.certificeringen) }}, {{ js_arg(bedrijf.contactpersoon) }}, {{ js_arg(bedrijf.kwaliteiten) }}, {{ js_arg(bedrijf.brontype) }})">
+                onclick="event.preventDefault(); if (wasTekstSelectieSlepen(event)) return; openDrawer({{ js_arg(bedrijf.naam) }}, {{ js_arg(bedrijf.regio) }}, {{ js_arg(bedrijf.land) }}, {{ js_arg(bedrijf.url) }}, {{ js_arg(bedrijf.klanttype) }}, {{ js_arg(bedrijf.materialen) }}, {{ js_arg(bedrijf.volume) }}, {{ bedrijf.lat if bedrijf.lat is not none else 'null' }}, {{ bedrijf.lon if bedrijf.lon is not none else 'null' }}, {{ js_arg(bedrijf.adres) }}, {{ js_arg(bedrijf.telefoon) }}, {{ js_arg(bedrijf.certificeringen) }}, {{ js_arg(bedrijf.contactpersoon) }}, {{ js_arg(bedrijf.kwaliteiten) }}, {{ js_arg(bedrijf.brontype) }})">
                 <span style="width:26px;"><span class="star-btn {% if bedrijf.naam in opgeslagen_namen %}opgeslagen{% endif %}" onclick="event.stopPropagation(); toggleOpslaan(event, {{ js_arg(bedrijf.naam) }}, this)">{% if bedrijf.naam in opgeslagen_namen %}★{% else %}☆{% endif %}</span></span>
                 <span style="flex:1.5;font-weight:600;color:var(--gray-800);">{{ bedrijf.naam }}{% if bedrijf.adres or bedrijf.telefoon %} <span class="verificatie-badge" style="font-size:0.6rem;">✓</span>{% endif %}<br><span style="font-weight:400;font-size:11px;color:var(--gray-400);">{{ bedrijf.regio }}, {{ bedrijf.land }}</span></span>
                 <span style="flex:1;" class="zacht">{{ bedrijf.brontype|default('—',true) }}</span>
@@ -1355,6 +1355,20 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
     return tabbalk + paneelInfo + paneelLogistiek + paneelCommercieel;
 }
 
+var _dataRowMuisStart = null;
+document.addEventListener("mousedown", function(e) {
+    var rij = e.target.closest && e.target.closest(".data-row");
+    _dataRowMuisStart = rij ? {x: e.clientX, y: e.clientY} : null;
+});
+function wasTekstSelectieSlepen(e) {
+    // Onderscheidt 'tekst selecteren om te kopiëren' (muis beweegt merkbaar tussen
+    // indrukken en loslaten) van een gewone klik (muis blijft nagenoeg stil) —
+    // zonder dit zou elke klik, ook een sleepbeweging voor selectie, de rij
+    // direct laten openen, wat kopiëren onmogelijk maakt.
+    if (!_dataRowMuisStart) return false;
+    var afstand = Math.hypot(e.clientX - _dataRowMuisStart.x, e.clientY - _dataRowMuisStart.y);
+    return afstand > 4;
+}
 function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon, adres, telefoon, certificeringen, contactpersoon, kwaliteiten, brontype) {
     window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon, adres: adres || "", telefoon: telefoon || "", certificeringen: certificeringen || "", contactpersoon: contactpersoon || "", kwaliteiten: kwaliteiten || "", brontype: brontype || ""};
     {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
