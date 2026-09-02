@@ -8,12 +8,16 @@ Registratie in app.py met: app.register_blueprint(contacten_bp)
 """
 import uuid
 import datetime
-from flask import Blueprint, request, session, redirect, url_for, render_template_string
+import io
+from flask import Blueprint, request, session, redirect, url_for, render_template_string, send_file
+import openpyxl
+from openpyxl.styles import Font, PatternFill
+import pandas as pd
 
 from core import (
-    laad_contactpersonen, bewaar_contactpersonen, laad_accountmanagers,
+    laad_contactpersonen, bewaar_contactpersonen, laad_accountmanagers, bewaar_accountmanagers,
     is_huidige_gebruiker_admin, ENF_BEDRIJVEN, render_simple_page, vereist_afdeling_of_403,
-    bewaar_bedrijven, PAPIERFABRIEKEN, laad_status, bewaar_status,
+    bewaar_bedrijven, PAPIERFABRIEKEN, laad_status, bewaar_status, laad_users, geocode_adres,
 )
 
 contacten_bp = Blueprint("contacten", __name__)
@@ -185,6 +189,228 @@ def contacten():
     return render_template_string(pagina, contacten_lijst=contacten_lijst, zoekterm=zoekterm, gekozen_am=gekozen_am,
                                     alle_accountmanagers=alle_accountmanagers, bedrijfnamen_lijst=sorted(_bedrijven_land_lookup.keys())[:500])
 
+@contacten_bp.route("/contacten/import-sjabloon")
+def contacten_import_sjabloon():
+    """Downloadbaar .xlsx-sjabloon voor het bulk-importeren van bedrijven —
+    bedoeld voor een migratie vanuit een ander systeem (bv. Zoho): daar
+    exporteren, hier de kolommen invullen, en uploaden bij 'Bedrijven
+    importeren'."""
+    _guard = vereist_afdeling_of_403("contacten")
+    if _guard: return _guard
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Bedrijven"
+
+    kolommen = ["Bedrijfsnaam", "Status (Klant/Leverancier)", "Land", "Stad/Regio", "Materialen",
+                "Contactpersoon naam", "Contactpersoon functie", "Contactpersoon e-mail",
+                "Contactpersoon telefoon", "Accountmanager (gebruikersnaam)"]
+    for kolom_idx, titel in enumerate(kolommen, start=1):
+        cel = ws.cell(row=1, column=kolom_idx, value=titel)
+        cel.font = Font(name="Arial", bold=True, color="FFFFFF")
+        cel.fill = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")
+        ws.column_dimensions[cel.column_letter].width = 24
+
+    voorbeeldrij = ["Voorbeeld Papier BV", "Leverancier", "Netherlands", "Rotterdam", "Karton, OCC",
+                     "Jan Jansen", "Inkoper", "jan@voorbeeld.nl", "+31 6 12345678", ""]
+    for kolom_idx, waarde in enumerate(voorbeeldrij, start=1):
+        cel = ws.cell(row=2, column=kolom_idx, value=waarde)
+        cel.font = Font(name="Arial", italic=True, color="9CA3AF")
+
+    ws.cell(row=4, column=1, value="Toelichting:").font = Font(name="Arial", bold=True)
+    toelichting = [
+        "- Alleen 'Bedrijfsnaam' is verplicht — de rest mag leeg blijven.",
+        "- Status: precies 'Klant' of 'Leverancier' (leeg = geen van beide, alleen vastgelegd als bedrijf).",
+        "- Bedrijven die al bestaan (op naam) worden bij import overgeslagen, niet overschreven.",
+        "- Contactpersoon-kolommen zijn optioneel; vul je een naam in, dan wordt die contactpersoon ook aangemaakt.",
+        "- Accountmanager moet een bestaande gebruikersnaam in het systeem zijn, anders wordt die kolom genegeerd.",
+        "- Verwijder de voorbeeldrij (rij 2) voordat je uploadt, of laat 'm staan — die wordt bij import automatisch herkend en overgeslagen.",
+    ]
+    for i, regel in enumerate(toelichting, start=5):
+        ws.cell(row=i, column=1, value=regel).font = Font(name="Arial", color="6B7280", italic=True)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name="bedrijven_import_sjabloon.xlsx",
+                       mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+def _valideer_import_rij(rij, bestaande_namen_laag, geziene_namen_in_bestand):
+    """Eén rij uit het geüploade bestand controleren. Geeft (status, melding, schone_data)
+    terug — status is 'ok', 'bestaat_al', 'dubbel_in_bestand', 'voorbeeldrij' of 'geen_naam'."""
+    naam = str(rij.get("Bedrijfsnaam", "") or "").strip()
+    if not naam or naam.lower() == "nan":
+        return "geen_naam", "Geen bedrijfsnaam ingevuld", None
+    if naam == "Voorbeeld Papier BV":
+        return "voorbeeldrij", "Voorbeeldrij uit het sjabloon", None
+    if naam.lower() in bestaande_namen_laag:
+        return "bestaat_al", f"'{naam}' bestaat al — overgeslagen (niet overschreven)", None
+    if naam.lower() in geziene_namen_in_bestand:
+        return "dubbel_in_bestand", f"'{naam}' komt dubbel voor in het bestand — alleen de eerste rij wordt gebruikt", None
+
+    def _schoon(veld):
+        w = rij.get(veld, "")
+        w = "" if w is None else str(w).strip()
+        return "" if w.lower() == "nan" else w
+
+    status_ruw = _schoon("Status (Klant/Leverancier)").lower()
+    status = "klant" if status_ruw == "klant" else ("leverancier" if status_ruw == "leverancier" else "")
+
+    accountmanager = _schoon("Accountmanager (gebruikersnaam)")
+    alle_gebruikers = laad_users()
+    if accountmanager and accountmanager not in alle_gebruikers:
+        accountmanager = ""  # onbekende gebruikersnaam wordt genegeerd, geen harde fout
+
+    schone_data = {
+        "naam": naam, "status": status, "land": _schoon("Land"), "regio": _schoon("Stad/Regio"),
+        "materialen": _schoon("Materialen"), "accountmanager": accountmanager,
+        "contact_naam": _schoon("Contactpersoon naam"), "contact_functie": _schoon("Contactpersoon functie"),
+        "contact_email": _schoon("Contactpersoon e-mail"), "contact_telefoon": _schoon("Contactpersoon telefoon"),
+    }
+    return "ok", "Wordt geïmporteerd", schone_data
+
+@contacten_bp.route("/contacten/importeren", methods=["GET", "POST"])
+def contacten_importeren():
+    """Bedrijven in bulk importeren via een geüpload .xlsx-bestand — voor een
+    migratie vanuit een ander systeem (bv. Zoho). Toont eerst een preview met
+    per rij wat er gebeurt, voordat er daadwerkelijk iets wordt opgeslagen."""
+    _guard = vereist_afdeling_of_403("contacten")
+    if _guard: return _guard
+
+    fout = None
+    preview_rijen = None
+    aantal_ok = 0
+
+    if request.method == "POST":
+        bestand = request.files.get("bestand")
+        if not bestand or not bestand.filename:
+            fout = "Kies eerst een .xlsx-bestand."
+        elif not bestand.filename.lower().endswith((".xlsx", ".xls")):
+            fout = "Alleen .xlsx- of .xls-bestanden worden ondersteund."
+        else:
+            try:
+                df = pd.read_excel(bestand, dtype=str)
+            except Exception:
+                fout = "Kon het bestand niet lezen — is het een geldig Excel-bestand?"
+            else:
+                bestaande_namen_laag = {b["naam"].strip().lower() for b in ENF_BEDRIJVEN}
+                geziene_namen_in_bestand = set()
+                preview_rijen = []
+                for _, rij in df.iterrows():
+                    status, melding, schone_data = _valideer_import_rij(rij, bestaande_namen_laag, geziene_namen_in_bestand)
+                    if status == "ok":
+                        aantal_ok += 1
+                        geziene_namen_in_bestand.add(schone_data["naam"].lower())
+                    preview_rijen.append({"status": status, "melding": melding, "data": schone_data,
+                                            "naam_ruw": str(rij.get("Bedrijfsnaam","") or "")})
+                if not preview_rijen:
+                    fout = "Het bestand bevat geen rijen."
+
+    inhoud = """
+<div class="page-title">Bedrijven importeren</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Bulk-importeren vanuit een Excel-bestand — handig bij een migratie vanuit een ander systeem (bv. Zoho): daar exporteren, hier de kolommen invullen en uploaden.</p>
+
+{% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">{{ fout }}</div>{% endif %}
+
+{% if not preview_rijen %}
+<div style="max-width:520px;background:var(--gray-50);border-radius:10px;padding:18px;margin-bottom:20px;">
+    <a href="/contacten/import-sjabloon" style="font-size:13px;font-weight:700;color:var(--brand-600);text-decoration:none;">⬇ Download het Excel-sjabloon</a>
+    <p style="font-size:12px;color:var(--gray-500);margin:8px 0 0 0;">Vul de kolommen in (alleen bedrijfsnaam is verplicht) en upload het bestand hieronder.</p>
+</div>
+<form method="POST" enctype="multipart/form-data" style="max-width:520px;">
+    <input type="file" name="bestand" accept=".xlsx,.xls" required style="margin-bottom:12px;">
+    <br>
+    <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Bestand controleren</button>
+</form>
+{% else %}
+<div style="margin-bottom:16px;font-size:13px;color:var(--gray-700);">
+    <b>{{ aantal_ok }}</b> van de {{ preview_rijen|length }} rijen worden geïmporteerd.
+    {% if aantal_ok < preview_rijen|length %}De rest wordt overgeslagen (zie reden per rij hieronder).{% endif %}
+</div>
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:20px;max-width:900px;">
+    {% for r in preview_rijen %}
+    <div style="display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="width:22px;">{% if r.status == "ok" %}✅{% else %}⚠️{% endif %}</span>
+        <span style="flex:1;font-weight:600;color:var(--gray-800);">{{ r.naam_ruw or "(leeg)" }}</span>
+        <span style="flex:1.5;color:{% if r.status == 'ok' %}var(--gray-400){% else %}#dc2626{% endif %};">{{ r.melding }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% if aantal_ok > 0 %}
+<form method="POST" action="/contacten/importeren/bevestigen">
+    <input type="hidden" name="import_data" value='{{ te_importeren|tojson }}'>
+    <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Importeer {{ aantal_ok }} bedrijven</button>
+    <a href="/contacten/importeren" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+</form>
+{% else %}
+<a href="/contacten/importeren" style="font-size:12.5px;color:var(--gray-400);text-decoration:none;">← Opnieuw proberen</a>
+{% endif %}
+{% endif %}
+    """
+    te_importeren = [r["data"] for r in preview_rijen if r["status"] == "ok"] if preview_rijen else []
+    pagina = render_simple_page("Bedrijven importeren", "contacten", inhoud)
+    return render_template_string(pagina, fout=fout, preview_rijen=preview_rijen, aantal_ok=aantal_ok, te_importeren=te_importeren)
+
+@contacten_bp.route("/contacten/importeren/bevestigen", methods=["POST"])
+def contacten_importeren_bevestigen():
+    """Voert de daadwerkelijke import uit — pas nadat de preview is bevestigd."""
+    _guard = vereist_afdeling_of_403("contacten")
+    if _guard: return _guard
+
+    import json as _json
+    try:
+        te_importeren = _json.loads(request.form.get("import_data", "[]"))
+    except (ValueError, TypeError):
+        te_importeren = []
+
+    bestaande_namen_laag = {b["naam"].strip().lower() for b in ENF_BEDRIJVEN}
+    status_alle = laad_status()
+    accountmanagers_alle = laad_accountmanagers()
+    personen = laad_contactpersonen()
+
+    aantal_geimporteerd = 0
+    for item in te_importeren:
+        naam = (item.get("naam") or "").strip()
+        if not naam or naam.lower() in bestaande_namen_laag:
+            continue  # dubbele veiligheidscheck — nooit een bestaand bedrijf overschrijven
+        bestaande_namen_laag.add(naam.lower())
+
+        locatie = geocode_adres(item.get("land",""), item.get("regio",""))
+        ENF_BEDRIJVEN.append({
+            "naam": naam, "url": "", "regio": item.get("regio",""), "land": item.get("land",""),
+            "klanttype": "", "materialen": item.get("materialen",""), "volume": "",
+            "lat": locatie["lat"] if locatie else None, "lon": locatie["lon"] if locatie else None,
+        })
+
+        if item.get("status") in ("klant", "leverancier"):
+            status_alle[naam] = item["status"]
+        if item.get("accountmanager"):
+            accountmanagers_alle[naam] = item["accountmanager"]
+        if item.get("contact_naam"):
+            personen.append({
+                "id": str(uuid.uuid4()), "naam": item["contact_naam"], "bedrijf": naam,
+                "rol": item.get("contact_functie",""), "email": item.get("contact_email",""),
+                "telefoon": item.get("contact_telefoon",""), "laatst": datetime.date.today().isoformat(),
+                "gebruiker": session.get("gebruikersnaam",""), "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+            })
+        aantal_geimporteerd += 1
+
+    bewaar_bedrijven()
+    bewaar_status(status_alle)
+    bewaar_accountmanagers(accountmanagers_alle)
+    bewaar_contactpersonen(personen)
+
+    inhoud = f"""
+<div class="page-title">Import voltooid</div>
+<div style="max-width:480px;background:#f0fdf4;border-radius:10px;padding:20px;">
+    <div style="font-size:15px;font-weight:700;color:#16a34a;margin-bottom:6px;">✅ {aantal_geimporteerd} bedrijven geïmporteerd</div>
+    <div style="font-size:12.5px;color:var(--gray-500);">Ze staan nu in het systeem en zijn direct doorzoekbaar.</div>
+</div>
+<a href="/contacten/importeren" style="display:inline-block;margin-top:16px;font-size:12.5px;color:var(--brand-600);text-decoration:none;">Nog een bestand importeren</a>
+    """
+    pagina = render_simple_page("Import voltooid", "contacten", inhoud)
+    return render_template_string(pagina)
+
 @contacten_bp.route("/contacten/nieuw")
 def contacten_nieuw_keuze():
     """Startpunt van het aanmaken van een contactpersoon: eerst kiezen tussen een
@@ -210,6 +436,10 @@ def contacten_nieuw_keuze():
         <div style="font-size:12.5px;color:var(--gray-500);">Een extra contactpersoon toevoegen bij een bedrijf dat al bestaat, of een bestaande vervangen.</div>
     </a>
 </div>
+<a href="/contacten/importeren" style="display:block;max-width:600px;margin-top:16px;padding:20px;border:1px solid var(--gray-200);border-radius:10px;text-decoration:none;color:inherit;">
+    <div style="font-weight:700;color:var(--gray-800);font-size:14px;margin-bottom:6px;">📥 Bedrijven importeren via Excel</div>
+    <div style="font-size:12.5px;color:var(--gray-500);">Meerdere bedrijven tegelijk toevoegen — handig bij een migratie vanuit een ander systeem (bv. Zoho).</div>
+</a>
     """
     pagina = render_simple_page("Contact toevoegen", "contacten", inhoud)
     return render_template_string(pagina)
