@@ -768,10 +768,11 @@ def scrapmonster_importeer_land(land_naam, max_paginas=50):
             bestaande.add(sleutel)
             nieuw_deze_pagina += 1
 
+            _geo = geocode_adres(straat, stad) if (straat and stad) else None
             ENF_BEDRIJVEN.append({
                 "naam": naam, "land": land_naam, "regio": stad,
                 "materialen": "Metal", "klanttype": "", "volume": "", "url": "",
-                "lat": None, "lon": None,
+                "lat": _geo["lat"] if _geo else None, "lon": _geo["lon"] if _geo else None,
                 "adres": straat, "telefoon": telefoon,
                 "bedrijf_id": TENANT_ID, "brontype": "Schroothandel",
             })
@@ -901,10 +902,11 @@ def _gov_uk_bulk_worker(gebruikersnaam, max_nieuw=3000):
                 if any(w in naam_laag for w in ("metal", "scrap")):
                     gegokt_materiaal = "Metal"
 
+                _geo = geocode_adres(adres, stad) if (adres and stad) else None
                 nieuwe_bedrijven_tmp.append({
                     "naam": naam, "land": "United Kingdom", "regio": stad,
                     "materialen": gegokt_materiaal, "klanttype": "", "volume": "", "url": "",
-                    "lat": None, "lon": None,
+                    "lat": _geo["lat"] if _geo else None, "lon": _geo["lon"] if _geo else None,
                     "adres": adres, "telefoon": "",
                     "bedrijf_id": TENANT_ID, "brontype": "Afvalbeheer",
                 })

@@ -459,11 +459,14 @@ def contacten_nieuw_bedrijf():
         elif any(b["naam"].strip().lower() == bedrijfsnaam.lower() for b in ENF_BEDRIJVEN):
             fout = f"'{bedrijfsnaam}' bestaat al als bedrijf — kies bij 'Bestaand bedrijf' om daar een contactpersoon aan toe te voegen."
         else:
+            _land_nieuw = request.form.get("land", "").strip()
+            _regio_nieuw = request.form.get("regio", "").strip()
+            _geo = geocode_adres(_regio_nieuw, _land_nieuw) if (_regio_nieuw or _land_nieuw) else None
             nieuw_bedrijf = {
-                "naam": bedrijfsnaam, "url": "", "regio": request.form.get("regio", "").strip(),
-                "land": request.form.get("land", "").strip(), "klanttype": "",
+                "naam": bedrijfsnaam, "url": "", "regio": _regio_nieuw,
+                "land": _land_nieuw, "klanttype": "",
                 "materialen": request.form.get("materialen", "").strip(), "volume": "",
-                "lat": None, "lon": None,
+                "lat": _geo["lat"] if _geo else None, "lon": _geo["lon"] if _geo else None,
             }
             ENF_BEDRIJVEN.append(nieuw_bedrijf)
             bewaar_bedrijven()
