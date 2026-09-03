@@ -1180,13 +1180,15 @@ L.control.layers({"Kaart": straatKaart, "Satelliet": satellietKaart}).addTo(kaar
 var clusterGroep = L.markerClusterGroup();
 var kaartCategorieKleuren = {"recyclingcentrum": "#0d5c62", "inzamelaar": "#3f9295", "papierfabriek": "#d97706", "overig": "#94a3b8"};
 {% for b in bedrijven %}
+{% if b.lat is not none and b.lon is not none %}
 L.marker([{{ b.lat }}, {{ b.lon }}], {icon: L.divIcon({
     html: '<div style="width:16px;height:16px;border-radius:50%;background:' + kaartCategorieKleuren["{{ b.kaart_categorie }}"] + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>',
     className: '', iconSize: [16,16], iconAnchor: [8,8]
 })})
     .bindPopup("<b>{{ js_str_content(b.naam) }}</b><br><small>{{ js_str_content(b.regio) }}, {{ js_str_content(b.land) }}</small>")
-    .on("click", function(){ openDrawer({{ js_arg_raw(b.naam) }},{{ js_arg_raw(b.regio) }},{{ js_arg_raw(b.land) }},{{ js_arg_raw(b.url) }},{{ js_arg_raw(b.klanttype) }},{{ js_arg_raw(b.materialen) }},{{ js_arg_raw(b.volume) }},{{ b.lat if b.lat is not none else 'null' }},{{ b.lon if b.lon is not none else 'null' }},{{ js_arg_raw(b.adres) }},{{ js_arg_raw(b.telefoon) }},{{ js_arg_raw(b.certificeringen) }},{{ js_arg_raw(b.contactpersoon) }},{{ js_arg_raw(b.kwaliteiten) }},{{ js_arg_raw(b.brontype) }}); })
+    .on("click", function(){ openDrawer({{ js_arg_raw(b.naam) }},{{ js_arg_raw(b.regio) }},{{ js_arg_raw(b.land) }},{{ js_arg_raw(b.url) }},{{ js_arg_raw(b.klanttype) }},{{ js_arg_raw(b.materialen) }},{{ js_arg_raw(b.volume) }},{{ b.lat }},{{ b.lon }},{{ js_arg_raw(b.adres) }},{{ js_arg_raw(b.telefoon) }},{{ js_arg_raw(b.certificeringen) }},{{ js_arg_raw(b.contactpersoon) }},{{ js_arg_raw(b.kwaliteiten) }},{{ js_arg_raw(b.brontype) }}); })
     .addTo(clusterGroep);
+{% endif %}
 {% endfor %}
 kaart.addLayer(clusterGroep);
 var fabriekIcon = L.divIcon({
@@ -1208,7 +1210,7 @@ function syncKaartMetTabel() {
     var teller = 0;
     kaartTabelRijen.forEach(function (rij) {
         var lat = parseFloat(rij.dataset.lat), lon = parseFloat(rij.dataset.lon);
-        if (isNaN(lat) || isNaN(lon)) { rij.style.display = "none"; return; }
+        if (isNaN(lat) || isNaN(lon)) { rij.style.display = ""; teller++; return; }
         var zichtbaar = bounds.contains([lat, lon]);
         rij.style.display = zichtbaar ? "" : "none";
         if (zichtbaar) teller++;
@@ -1371,7 +1373,7 @@ function wasTekstSelectieSlepen(e) {
 }
 function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, lon, adres, telefoon, certificeringen, contactpersoon, kwaliteiten, brontype) {
     window.currentDrawerData = {naam: naam, land: land, regio: regio, klanttype: klanttype, materialen: materialen, volume: volume, lat: lat, lon: lon, adres: adres || "", telefoon: telefoon || "", certificeringen: certificeringen || "", contactpersoon: contactpersoon || "", kwaliteiten: kwaliteiten || "", brontype: brontype || ""};
-    {% if bedrijven %}kaart.flyTo([lat,lon], 12);{% endif %}
+    {% if bedrijven %}if (lat != null && lon != null) { kaart.flyTo([lat,lon], 12); }{% endif %}
     document.getElementById("drawerName").textContent = naam;
     document.getElementById("drawerLoc").innerHTML = "📍 " + regio + ", " + land + ' · <a href="/bedrijf/' + encodeURIComponent(naam) + '" style="color:var(--brand-600);font-weight:600;text-decoration:none;">Volledig profiel →</a>';
     document.getElementById("drawerBody").innerHTML = bouwDrawerBody(klanttype, materialen, volume, `<div style="color:var(--gray-400);font-size:var(--text-sm);">⏳ Loading details...</div>`, "");
