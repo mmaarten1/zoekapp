@@ -1388,6 +1388,67 @@ OPSCHOON_HTML = '''
 </html>
 '''
 
+GEOCODE_AANVULLEN_HTML = '''
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Ontbrekende coördinaten aanvullen</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; padding: 40px; }
+        .box { background: white; padding: 30px; border-radius: 12px; max-width: 480px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { font-size: 18px; margin-bottom: 8px; }
+        p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+        button { width: 100%; padding: 10px; background: #0d5c62; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top:8px; }
+        .bericht { padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+        .succes { background: #f0fdf4; color: #16a34a; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Ontbrekende coördinaten aanvullen</h1>
+        <p>Bedrijven die al in het systeem staan zonder locatie (bv. via een oudere import) worden nu wel automatisch gegeocodeerd bij aanmaken — maar bestaande bedrijven zonder coördinaten profiteren daar niet met terugwerkende kracht van. Deze actie zoekt bedrijven met een land/stad maar zonder coördinaten, en vult die aan. Verwerkt maximaal {{ limiet }} per keer (i.v.m. de externe geocoding-dienst) — druk gerust nogmaals als er meer over zijn.</p>
+        {% if bericht %}<div class="bericht succes">{{ bericht }}</div>{% endif %}
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit">Nu aanvullen</button>
+        </form>
+    </div>
+</body>
+</html>
+'''
+
+@app.route("/geocode-aanvullen", methods=["GET", "POST"])
+def geocode_aanvullen():
+    """Vult coördinaten aan voor bedrijven die al in het systeem staan zonder
+    lat/lon, maar wel een land en/of regio hebben (bv. via een oudere import
+    van vóórdat nieuwe bedrijven automatisch gegeocodeerd werden). Verwerkt
+    een beperkt aantal per keer om de request niet te lang te laten duren."""
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
+
+    LIMIET = 50
+    bericht = None
+    if request.method == "POST":
+        kandidaten = [b for b in ENF_BEDRIJVEN if (b.get("lat") is None or b.get("lon") is None) and (b.get("land") or b.get("regio"))]
+        te_verwerken = kandidaten[:LIMIET]
+        aantal_gelukt = 0
+        for b in te_verwerken:
+            geo = geocode_adres(b.get("regio",""), b.get("land",""))
+            if geo:
+                b["lat"] = geo["lat"]
+                b["lon"] = geo["lon"]
+                aantal_gelukt += 1
+        if te_verwerken:
+            bewaar_bedrijven()
+        resterend = len(kandidaten) - len(te_verwerken)
+        bericht = f"Klaar! {aantal_gelukt} van de {len(te_verwerken)} verwerkte bedrijven succesvol gegeocodeerd."
+        if resterend > 0:
+            bericht += f" Nog {resterend} over — druk nogmaals op de knop om verder te gaan."
+
+    return render_template_string(GEOCODE_AANVULLEN_HTML, bericht=bericht, limiet=LIMIET)
+
+
 def normaliseer_naam(naam):
     naam = str(naam or "").strip().lower()
     naam = re.sub(r"[.,]", "", naam)
@@ -3670,6 +3731,7 @@ def instellingen():
         <a href="/importeer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Excel-import</a>
         <a href="/importeer-osm" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ OpenStreetMap-import</a>
         <a href="/opschonen-dubbelen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Dubbele bedrijven opschonen</a>
+        <a href="/geocode-aanvullen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Ontbrekende coördinaten aanvullen</a>
         <a href="/herlabel-brontype" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Bedrijfstypes aanvullen</a>
         <a href="/importeer-scrapmonster" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ ScrapMonster-import (schroothandels)</a>
         <a href="/importeer-gov-uk" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK overheidsregister-import</a>
