@@ -119,37 +119,43 @@ def marktprijzen_pagina():
 </div>
 
 <div class="mp-kaart" style="max-width:520px;margin-bottom:20px;">
-    <div class="dg-kaart-titel">Prijspunt toevoegen</div>
-    <form method="POST" class="form-voorraad">
-        <input type="hidden" name="actie" value="toevoegen">
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <select name="materiaal" required>
-                <option value="">Materiaal kiezen...</option>
-                {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
-                <optgroup label="{{ categorie }}">
-                    <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
-                    {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}">{{ kw }}</option>{% endfor %}
-                </optgroup>
-                {% endfor %}
-            </select>
-            <input type="text" name="prijs_per_ton" placeholder="Prijs per ton (€)" required>
-        </div>
-        <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <select name="bron">
-                <option value="handmatig">Handmatig ingevoerd</option>
-                <option value="marktbericht">Marktbericht</option>
-                <option value="leverancier_offerte">Leverancier offerte</option>
-                <option value="klant_offerte">Klant offerte</option>
-            </select>
-            <input type="date" name="datum" value="{{ vandaag }}">
-        </div>
-        <input type="text" name="bedrijf" placeholder="Bedrijf (optioneel)" list="bedrijvenLijstMarktprijzen">
-        <datalist id="bedrijvenLijstMarktprijzen">
-            {% for naam in alle_bedrijfsnamen_mp %}<option value="{{ naam }}">{% endfor %}
-        </datalist>
-        <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
-        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Prijspunt toevoegen</button>
-    </form>
+    <div id="prijspuntKnopRij">
+        <button type="button" onclick="document.getElementById('prijspuntKnopRij').style.display='none'; document.getElementById('prijspuntFormulier').style.display='block';" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">+ Prijspunt toevoegen</button>
+    </div>
+    <div id="prijspuntFormulier" style="display:none;">
+        <div class="dg-kaart-titel">Prijspunt toevoegen</div>
+        <form method="POST" class="form-voorraad">
+            <input type="hidden" name="actie" value="toevoegen">
+            <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <select name="materiaal" required>
+                    <option value="">Materiaal kiezen...</option>
+                    {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
+                    <optgroup label="{{ categorie }}">
+                        <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
+                        {% for kw in kwaliteiten_lijst %}<option value="{{ kw }}">{{ kw }}</option>{% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+                <input type="text" name="prijs_per_ton" placeholder="Prijs per ton (€)" required>
+            </div>
+            <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <select name="bron">
+                    <option value="handmatig">Handmatig ingevoerd</option>
+                    <option value="marktbericht">Marktbericht</option>
+                    <option value="leverancier_offerte">Leverancier offerte</option>
+                    <option value="klant_offerte">Klant offerte</option>
+                </select>
+                <input type="date" name="datum" value="{{ vandaag }}">
+            </div>
+            <input type="text" name="bedrijf" placeholder="Bedrijf (optioneel)" list="bedrijvenLijstMarktprijzen">
+            <datalist id="bedrijvenLijstMarktprijzen">
+                {% for naam in alle_bedrijfsnamen_mp %}<option value="{{ naam }}">{% endfor %}
+            </datalist>
+            <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
+            <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Prijspunt toevoegen</button>
+            <button type="button" onclick="document.getElementById('prijspuntFormulier').style.display='none'; document.getElementById('prijspuntKnopRij').style.display='block';" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:12.5px;width:100%;text-align:center;margin-top:6px;padding:4px;">Annuleren</button>
+        </form>
+    </div>
 </div>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
