@@ -13,7 +13,7 @@ from flask import Blueprint, request, session, render_template_string, redirect,
 
 from core import (
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_accountmanagers,
-    laad_users, render_simple_page, vereist_afdeling_of_403, is_huidige_gebruiker_admin,
+    laad_users, render_simple_page, vereist_afdeling_of_403,
     laad_leverancier_instellingen, bewaar_leverancier_instellingen, leverancier_instelling_voor,
     laad_betalingstermijnen, geocode_adres, laad_handelsorders, laad_logistieke_orders,
     parse_hoeveelheid_getal,
@@ -160,7 +160,7 @@ def leveranciers_pagina():
 </div>
 
 {% if leveranciers_lijst %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="results-list" id="leveranciersLijst">
         <div class="data-thead">
             <span style="flex:1.4;" data-sort="naam">Leverancier</span>
@@ -254,14 +254,12 @@ def klanten_pagina():
     status_alle_klant = laad_status()
     accountmanagers_alle_klant = laad_accountmanagers()
     huidige_gebruiker_klant = session.get("gebruikersnaam", "")
-    _is_bevoorrecht_klant = is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur"
 
-    # Alleen de fabrieken die aan de ingelogde accountmanager zijn toegewezen — geen
-    # bedrijfsbrede lijst meer. Admin/directeur zien (net als overal elders) wel alles.
-    if _is_bevoorrecht_klant:
-        klanten_lijst = list(PAPIERFABRIEKEN)
-    else:
-        klanten_lijst = [f for f in PAPIERFABRIEKEN if accountmanagers_alle_klant.get(f["naam"]) == huidige_gebruiker_klant]
+    # Alleen de fabrieken die aan de ingelogde gebruiker zijn toegewezen — geen
+    # bedrijfsbrede lijst meer. Geldt bewust voor IEDEREEN, ook admin/directeur
+    # (anders dan elders in de app) — op deze specifieke pagina moet zelfs een
+    # admin alleen de eigen klanten zien.
+    klanten_lijst = [f for f in PAPIERFABRIEKEN if accountmanagers_alle_klant.get(f["naam"]) == huidige_gebruiker_klant]
     _eigen_klanten_basis = list(klanten_lijst)  # vóór zoek-/land-/status-filters, voor de tellingen hieronder
     if zoekterm_fab:
         klanten_lijst = [f for f in klanten_lijst if zoekterm_fab in f.get("naam","").lower() or zoekterm_fab in f.get("stad","").lower()]
@@ -351,7 +349,7 @@ def klanten_pagina():
 </div>
 
 {% if klanten_lijst %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="results-list" id="klantenLijst">
         <div class="data-thead">
             <span style="flex:1.6;" data-sort="naam">Klant</span>
