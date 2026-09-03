@@ -135,11 +135,12 @@ PAGINA_AFDELINGEN = {
     "logistieke_orders": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
     "inkoop_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
     "scheepvaart": ["logistiek", "backoffice", "accountmanager", "transport_zeevaart"],
+    "vrachtwagen_planning": ["logistiek", "backoffice", "accountmanager", "transport_vrachtwagen"],
     "verkoop_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager"],
     # Unie van de drie hierboven — voor het ÉNE zijbalk-item dat naar de
     # gecombineerde Planning-pagina (inkoop/verkoop/scheepvaart-tabbladen)
     # linkt; per tabblad geldt binnenin nog gewoon de eigen, specifieke rol.
-    "logistiek_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager", "transport_zeevaart"],
+    "logistiek_planning": ["logistiek", "weegbrug", "backoffice", "accountmanager", "transport_zeevaart", "transport_vrachtwagen"],
     "afhandeling": ["logistiek", "weegbrug", "backoffice"],
     "live_operations": ["logistiek", "weegbrug", "backoffice"],
     "logistieke_orders_finance": ["finance", "logistiek", "weegbrug"],
@@ -1767,7 +1768,7 @@ ZIJBALK_ITEMS = [
 AFDELING_STANDAARD_ZIJBALK_VOLGORDE = {
     "weegbrug": ["weegbrug", "live_operations", "dashboard", "taken", "notities"],
     "transport_zeevaart": ["logistiek_planning", "transport_planning", "transport_overview", "dashboard", "taken", "notities"],
-    "transport_vrachtwagen": ["transport_planning", "transport_overview", "transport_rates", "dashboard", "taken", "notities"],
+    "transport_vrachtwagen": ["logistiek_planning", "transport_planning", "transport_overview", "transport_rates", "dashboard", "taken", "notities"],
 }
 
 def effectieve_layout_voorkeur(gebruikersnaam):

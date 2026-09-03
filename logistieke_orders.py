@@ -25,45 +25,73 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_logistieke_orders, bewaar_logistieke_orders, genereer_logistiek_ordernummer,
     LOGISTIEKE_ORDER_STATUSSEN, laad_weegbrug, bewaar_weegbrug, WEEGBRUG_STATUS_BADGES,
-    ENF_BEDRIJVEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
+    ENF_BEDRIJVEN, PAPIERFABRIEKEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     laad_documenten, laad_orders, laad_shipments, bereken_voorraad_status, parse_hoeveelheid_getal,
     laad_handelsorders, laad_marktprijzen, laad_transport_planning, land_afkorting, mag_pagina_zien,
 )
 
 logistieke_orders_bp = Blueprint("logistieke_orders", __name__)
 
-def _inkoop_planning_inhoud():
-    """Berekening + template-inhoud voor het Inkoop-tabblad van /logistiek/planning.
-    Alleen VRACHTWAGEN-contracten — Schip staat op het Scheepvaart-tabblad."""
-    alle_logistieke_orders_ip = laad_logistieke_orders()
+def _bereken_open_contracten(order_type, modus_filter=None):
+    """Alle DEFINITIEVE contracten van een bepaalde richting (inkoop/verkoop),
+    optioneel gefilterd op transportmodus, die nog (deels) ingepland/geleverd
+    moeten worden. Per contract wordt het juiste 'geleverd/gepland'-volume
+    gebruikt: inkoop+vrachtwagen loopt via de Weegbrug/Live Operations-keten
+    (logistieke_orders.json, want dat is een echte, fysieke weging bij Peute
+    zelf) — alle andere combinaties (inkoop+schip, verkoop+vrachtwagen,
+    verkoop+schip) lopen via Transport Planning (transport_planning.json,
+    want dat is gepland transport, geen weging bij Peute)."""
+    alle_logistieke_orders = laad_logistieke_orders()
+    alle_transport_planning = laad_transport_planning()
 
-    def _geleverd_vrachtwagen(contractnummer):
+    def _geleverd_inkoop_vrachtwagen(contractnummer):
         return round(sum(
             parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
-            for o in alle_logistieke_orders_ip
+            for o in alle_logistieke_orders
             if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
         ), 3)
 
-    contracten_open = []
+    def _gepland_transport_planning(contractnummer):
+        return round(sum(
+            parse_hoeveelheid_getal(t.get("hoeveelheid",""))
+            for t in alle_transport_planning
+            if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
+        ), 3)
+
+    contracten = []
     for h in laad_handelsorders():
-        if h.get("order_type") != "inkoop" or h.get("status") != "Definitief":
+        if h.get("order_type") != order_type or h.get("status") != "Definitief":
             continue
-        if (h.get("transportmodus","") or "Vrachtwagen") == "Schip":
-            continue  # Schip-contracten horen bij Scheepvaart, niet hier
+        modus = h.get("transportmodus","") or "Vrachtwagen"
+        if modus_filter and modus != modus_filter:
+            continue
         try:
             totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
         except (ValueError, TypeError):
             totaal = 0.0
-        gepland = _geleverd_vrachtwagen(h["contractnummer"])
+        if order_type == "inkoop" and modus == "Vrachtwagen":
+            gepland = _geleverd_inkoop_vrachtwagen(h["contractnummer"])
+        else:
+            gepland = _gepland_transport_planning(h["contractnummer"])
         resterend = round(totaal - gepland, 1)
         if resterend <= 0:
-            continue  # Volledig geleverd — hoeft niet meer in dit overzicht
-        contracten_open.append({
-            "id": h["id"], "contractnummer": h["contractnummer"], "leverancier": h.get("tegenpartij_naam",""),
+            continue  # Volledig ingepland/geleverd — hoeft niet meer in dit overzicht
+        contracten.append({
+            "id": h["id"], "contractnummer": h["contractnummer"], "tegenpartij": h.get("tegenpartij_naam",""),
             "bedrijfseenheid": h.get("bedrijfseenheid","") or "Niet ingedeeld", "materiaal": h.get("materiaal",""),
-            "kwaliteit": h.get("kwaliteit",""), "klant": h.get("klant",""),
+            "kwaliteit": h.get("kwaliteit",""), "transportmodus": modus, "order_type": order_type,
+            "pod_haven": h.get("pod_haven",""), "klant": h.get("klant",""),
             "totaal": round(totaal,1), "gepland": gepland, "resterend": resterend,
         })
+    return contracten
+
+def _inkoop_planning_inhoud():
+    """Berekening + template-inhoud voor het Inkoop-tabblad van /logistiek/planning.
+    Alle DEFINITIEVE inkoopcontracten die nog (deels) ingepland/geleverd moeten
+    worden — vrachtwagen en schip gemengd, met een badge per rij. Zie ook de
+    aparte Scheepvaart- en Vrachtwagen-tabbladen, die dezelfde contracten
+    tonen maar dan gefilterd op transportmodus (over beide richtingen heen)."""
+    contracten_open = _bereken_open_contracten("inkoop")
 
     per_markt = {}
     for c in contracten_open:
@@ -78,7 +106,7 @@ def _inkoop_planning_inhoud():
     markt_overzicht.sort(key=lambda m: -m["totaal_resterend"])
 
     inhoud = """
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Definitieve vrachtwagen-inkoopcontracten die nog (deels) ingepland moeten worden — per markt.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Definitieve inkoopcontracten die nog (deels) ingepland of geleverd moeten worden — per markt, vrachtwagen en schip gemengd.</p>
 
 <style>
 .ip-marktkop { display:flex; align-items:baseline; gap:14px; padding:12px 4px 8px 4px; border-bottom:2px solid var(--gray-800); margin-top:24px; }
@@ -96,19 +124,23 @@ def _inkoop_planning_inhoud():
 </div>
 {% for c in m.contracten %}
 <div class="ip-rij">
-    <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ c.leverancier }}</span>
+    <span style="width:100px;">
+        {% if c.transportmodus == "Schip" %}<span class="ip-badge" style="background:#eff6ff;color:#1d4ed8;">Schip</span>
+        {% else %}<span class="ip-badge" style="background:#f0fdf4;color:#16a34a;">Vrachtwagen</span>{% endif %}
+    </span>
+    <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ c.tegenpartij }}</span>
     <span style="flex:1;color:var(--gray-600);">{{ c.materiaal }} — {{ c.kwaliteit }}</span>
     <span style="width:130px;color:var(--gray-500);">{{ c.contractnummer }}</span>
     <span style="width:130px;text-align:right;color:var(--gray-500);">{{ c.gepland }} / {{ c.totaal }} MT</span>
     <span style="width:110px;text-align:right;font-weight:700;color:#dc2626;">{{ c.resterend }} MT open</span>
     <span style="width:90px;text-align:right;">
-        <a href="/transport-planning/nieuw?leverancier={{ c.leverancier|urlencode }}&materiaal={{ (c.materiaal ~ ' — ' ~ c.kwaliteit)|urlencode }}&hoeveelheid={{ c.resterend }}&contract_referentie={{ c.contractnummer|urlencode }}&fabriek={{ c.klant|urlencode }}" style="font-size:11px;font-weight:700;color:var(--brand-600);text-decoration:none;">Plan in →</a>
+        <a href="/transport-planning/nieuw?leverancier={{ c.tegenpartij|urlencode }}&materiaal={{ (c.materiaal ~ ' — ' ~ c.kwaliteit)|urlencode }}&hoeveelheid={{ c.resterend }}&contract_referentie={{ c.contractnummer|urlencode }}&fabriek={{ c.klant|urlencode }}" style="font-size:11px;font-weight:700;color:var(--brand-600);text-decoration:none;">Plan in →</a>
     </span>
 </div>
 {% endfor %}
 {% endfor %}
 {% else %}
-<div class="lege-staat">Geen openstaande vrachtwagen-inkoopcontracten — alles is ingepland of geleverd.</div>
+<div class="lege-staat">Geen openstaande inkoopcontracten — alles is ingepland of geleverd.</div>
 {% endif %}
     """
     return inhoud, {"markt_overzicht": markt_overzicht}
@@ -125,50 +157,43 @@ def inkoop_planning_pagina():
 
 def _scheepvaart_inhoud():
     """Berekening + template-inhoud voor het Scheepvaart-tabblad van
-    /logistiek/planning. Wat er nog ingepland moet worden voor export per
-    schip: Definitieve inkoopcontracten met transportmodus 'Schip', nog niet
-    (volledig) ingepland op Transport Planning. Bewust breed — één rij per
-    contract met alle relevante gegevens in één oogopslag (land, incoterm,
-    afhaallocatie, prijs, opmerkingen). Klik op 'Inplannen' om naar Transport
-    Planning te gaan, daarna op het transport zelf om het te koppelen aan het
-    bijbehorende verkoopcontract (de bestemming van deze inkoop)."""
-    alle_transport_planning_sv = laad_transport_planning()
+    /logistiek/planning. Alle DEFINITIEVE contracten met transportmodus
+    'Schip' die nog niet (volledig) ingepland zijn — inkoop én verkoop
+    samen (dit tabblad is een modus-gerichte weergave: 'alles wat over zee
+    gaat', ongeacht de handelsrichting; zie Inkoop/Verkoop voor de
+    richting-gerichte weergave van dezelfde onderliggende contracten).
+    Bewust breed — één rij per contract met alle relevante gegevens in één
+    oogopslag (land, incoterm, afhaallocatie, prijs, opmerkingen). Klik op
+    'Inplannen' om naar Transport Planning te gaan."""
+    contracten_inkoop = _bereken_open_contracten("inkoop", modus_filter="Schip")
+    contracten_verkoop = _bereken_open_contracten("verkoop", modus_filter="Schip")
 
-    def _gepland_schip(contractnummer):
-        return round(sum(
-            parse_hoeveelheid_getal(t.get("hoeveelheid",""))
-            for t in alle_transport_planning_sv
-            if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
-        ), 3)
-
-    _land_per_leverancier = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
+    _land_per_bedrijf = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
+    _land_per_fabriek = {f["naam"]: f.get("land","") for f in PAPIERFABRIEKEN}
 
     alle_rijen = []
-    for h in laad_handelsorders():
-        if h.get("order_type") != "inkoop" or h.get("status") != "Definitief":
-            continue
-        if (h.get("transportmodus","") or "Vrachtwagen") != "Schip":
-            continue
-        try:
-            totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
-        except (ValueError, TypeError):
-            totaal = 0.0
-        gepland = _gepland_schip(h["contractnummer"])
-        resterend = round(totaal - gepland, 1)
-        if resterend <= 0:
-            continue  # Volledig ingepland — hoeft niet meer in dit overzicht
-        _land_vol = _land_per_leverancier.get(h.get("tegenpartij_naam",""), "")
-        alle_rijen.append({
-            "id": h["id"], "contractnummer": h["contractnummer"], "leverancier": h.get("tegenpartij_naam",""),
-            "land": _land_vol, "land_kort": land_afkorting(_land_vol),
-            "incoterm": h.get("incoterm",""), "afhaallocatie": h.get("afhaal_locatienaam",""),
-            "materiaal": h.get("materiaal",""), "kwaliteit": h.get("kwaliteit",""),
-            "prijs": h.get("prijs",""), "valuta": h.get("valuta",""),
-            "opmerkingen": h.get("opmerkingen",""), "aangemaakt": h.get("aangemaakt",""),
-            "resterend": resterend, "klant": h.get("klant",""),
-        })
+    for c in contracten_inkoop:
+        _land_vol = _land_per_bedrijf.get(c["tegenpartij"], "")
+        alle_rijen.append({**c, "richting": "inkoop", "land": _land_vol, "land_kort": land_afkorting(_land_vol),
+                             "leverancier_param": c["tegenpartij"], "fabriek_param": c["klant"]})
+    for c in contracten_verkoop:
+        _land_vol = _land_per_fabriek.get(c["tegenpartij"], "")
+        alle_rijen.append({**c, "richting": "verkoop", "land": _land_vol, "land_kort": land_afkorting(_land_vol),
+                             "leverancier_param": "", "fabriek_param": c["tegenpartij"]})
 
-    # --- Filters: leverancier, contract, land, datum ---
+    # incoterm/afhaallocatie/prijs/opmerkingen/aangemaakt komen uit het onderliggende
+    # handelsorder, niet uit _bereken_open_contracten() — die zoeken we hier bij.
+    _handelsorders_bij_id = {h["id"]: h for h in laad_handelsorders()}
+    for r in alle_rijen:
+        _h = _handelsorders_bij_id.get(r["id"], {})
+        r["incoterm"] = _h.get("incoterm","")
+        r["afhaallocatie"] = _h.get("afhaal_locatienaam","")
+        r["prijs"] = _h.get("prijs","")
+        r["valuta"] = _h.get("valuta","")
+        r["opmerkingen"] = _h.get("opmerkingen","")
+        r["aangemaakt"] = _h.get("aangemaakt","")
+
+    # --- Filters: tegenpartij, contract, land, datum ---
     filter_leverancier = request.args.get("filter_leverancier", "")
     filter_contract = request.args.get("filter_contract", "").strip().lower()
     filter_land = request.args.get("filter_land", "")
@@ -176,14 +201,12 @@ def _scheepvaart_inhoud():
 
     rijen = alle_rijen
     if filter_leverancier:
-        rijen = [r for r in rijen if r["leverancier"] == filter_leverancier]
+        rijen = [r for r in rijen if r["tegenpartij"] == filter_leverancier]
     if filter_contract:
         rijen = [r for r in rijen if filter_contract in r["contractnummer"].lower()]
     if filter_land:
         rijen = [r for r in rijen if r["land"] == filter_land]
     if filter_datum:
-        # Vergelijk alleen het datumgedeelte: 'aangemaakt' is DD-MM-YYYY HH:MM,
-        # het datumveld levert YYYY-MM-DD.
         try:
             _filter_datum_genormaliseerd = datetime.datetime.strptime(filter_datum, "%Y-%m-%d").strftime("%d-%m-%Y")
             rijen = [r for r in rijen if r["aangemaakt"].startswith(_filter_datum_genormaliseerd)]
@@ -192,16 +215,16 @@ def _scheepvaart_inhoud():
 
     rijen.sort(key=lambda r: r["aangemaakt"], reverse=True)
 
-    leverancier_opties = sorted({r["leverancier"] for r in alle_rijen if r["leverancier"]})
+    leverancier_opties = sorted({r["tegenpartij"] for r in alle_rijen if r["tegenpartij"]})
     land_opties = sorted({r["land"] for r in alle_rijen if r["land"]}, key=land_afkorting)
 
     inhoud = """
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Wat nog ingepland moet worden voor export per schip — Definitieve inkoopcontracten, nog niet (volledig) ingepland. Klik op een contract om in te plannen en te koppelen aan het verkoopcontract.</p>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Wat nog ingepland moet worden voor scheepvaart — inkoop (import) en verkoop (export) samen, alle Definitieve contracten met transportmodus Schip. Klik op een contract om in te plannen.</p>
 
 <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
     <input type="hidden" name="modus" value="scheepvaart">
     <select name="filter_leverancier" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle leveranciers</option>
+        <option value="">Alle tegenpartijen</option>
         {% for l in leverancier_opties %}<option value="{{ l }}" {% if l == filter_leverancier %}selected{% endif %}>{{ l }}</option>{% endfor %}
     </select>
     <select name="filter_land" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
@@ -218,21 +241,22 @@ def _scheepvaart_inhoud():
 .sv-tabel th { text-align:left; padding:10px 12px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:#7d8792; white-space:nowrap; }
 .sv-tabel td { padding:9px 12px; border-bottom:1px solid var(--gray-100); font-size:12.5px; vertical-align:top; }
 .sv-tabel tbody tr:hover { background:var(--gray-50); }
+.sv-richting-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; white-space:nowrap; }
 </style>
 
 <div style="overflow-x:auto;">
-<table class="sv-tabel" style="border-collapse:collapse;min-width:1400px;width:100%;">
+<table class="sv-tabel" style="border-collapse:collapse;min-width:1500px;width:100%;">
     <thead><tr>
+        <th></th>
         <th>Land</th>
         <th>Contractnummer</th>
-        <th style="min-width:180px;">Leverancier</th>
+        <th style="min-width:180px;">Tegenpartij</th>
         <th>Incoterm</th>
         <th style="min-width:140px;">Afhaallocatie</th>
         <th style="text-align:right;">MT (resterend)</th>
         <th>Materiaal</th>
         <th>Kwaliteit</th>
         <th style="text-align:right;">Prijs</th>
-        <th style="min-width:150px;">Klant (bestemming)</th>
         <th style="min-width:260px;">Opmerkingen</th>
         <th>Aangemaakt</th>
         <th></th>
@@ -240,24 +264,27 @@ def _scheepvaart_inhoud():
     <tbody>
     {% for r in rijen %}
         <tr>
+            <td style="white-space:nowrap;">
+                {% if r.richting == "inkoop" %}<span class="sv-richting-badge" style="background:#f0fdf4;color:#16a34a;">Inkoop</span>
+                {% else %}<span class="sv-richting-badge" style="background:#fef3c7;color:#b45309;">Verkoop</span>{% endif %}
+            </td>
             <td style="color:var(--gray-500);white-space:nowrap;">{{ r.land_kort or '—' }}</td>
             <td style="font-family:var(--font-mono);color:var(--gray-800);font-weight:700;white-space:nowrap;">{{ r.contractnummer }}</td>
-            <td style="color:var(--gray-700);">{{ r.leverancier }}</td>
+            <td style="color:var(--gray-700);">{{ r.tegenpartij }}</td>
             <td style="color:var(--gray-500);white-space:nowrap;">{{ r.incoterm or '—' }}</td>
             <td style="color:var(--gray-500);">{{ r.afhaallocatie or '—' }}</td>
             <td style="text-align:right;font-family:var(--font-mono);color:var(--gray-700);font-weight:600;white-space:nowrap;">{{ r.resterend }}</td>
             <td style="color:var(--gray-500);white-space:nowrap;">{{ r.materiaal or '—' }}</td>
             <td style="color:var(--gray-500);white-space:nowrap;">{{ r.kwaliteit or '—' }}</td>
             <td style="text-align:right;font-family:var(--font-mono);color:var(--gray-500);white-space:nowrap;">{% if r.prijs %}{{ r.prijs }} {{ r.valuta }}{% else %}—{% endif %}</td>
-            <td style="color:var(--gray-500);">{{ r.klant or '—' }}</td>
             <td style="color:var(--gray-500);">{{ r.opmerkingen or '—' }}</td>
             <td style="color:var(--gray-400);font-size:11.5px;white-space:nowrap;">{{ r.aangemaakt or '—' }}</td>
             <td style="white-space:nowrap;">
-                <a href="/transport-planning/nieuw?leverancier={{ r.leverancier|urlencode }}&materiaal={{ (r.materiaal ~ ' — ' ~ r.kwaliteit)|urlencode }}&hoeveelheid={{ r.resterend }}&contract_referentie={{ r.contractnummer|urlencode }}&fabriek={{ r.klant|urlencode }}" style="font-size:11.5px;font-weight:700;color:var(--brand-600);text-decoration:none;">Inplannen →</a>
+                <a href="/transport-planning/nieuw?leverancier={{ r.leverancier_param|urlencode }}&materiaal={{ (r.materiaal ~ ' — ' ~ r.kwaliteit)|urlencode }}&hoeveelheid={{ r.resterend }}&contract_referentie={{ r.contractnummer|urlencode }}&fabriek={{ r.fabriek_param|urlencode }}" style="font-size:11.5px;font-weight:700;color:var(--brand-600);text-decoration:none;">Inplannen →</a>
             </td>
         </tr>
     {% else %}
-        <tr><td colspan="13" style="padding:24px;text-align:center;color:var(--gray-300);border-bottom:none;">{% if alle_rijen %}Geen resultaten voor deze filters.{% else %}Niets openstaand — alle scheepvaart-inkoop is volledig ingepland.{% endif %}</td></tr>
+        <tr><td colspan="13" style="padding:24px;text-align:center;color:var(--gray-300);border-bottom:none;">{% if alle_rijen %}Geen resultaten voor deze filters.{% else %}Niets openstaand — alle scheepvaart is volledig ingepland.{% endif %}</td></tr>
     {% endfor %}
     </tbody>
 </table>
@@ -279,40 +306,146 @@ def scheepvaart_pagina():
                               filter_land=request.args.get("filter_land", ""),
                               filter_datum=request.args.get("filter_datum", "")))
 
+def _vrachtwagen_inhoud():
+    """Berekening + template-inhoud voor het Vrachtwagen-tabblad van
+    /logistiek/planning. Alle DEFINITIEVE contracten met transportmodus
+    'Vrachtwagen' die nog niet (volledig) ingepland/geleverd zijn — inkoop
+    én verkoop samen (modus-gerichte weergave, analoog aan Scheepvaart maar
+    dan voor vrachtwagen-transport)."""
+    contracten_inkoop = _bereken_open_contracten("inkoop", modus_filter="Vrachtwagen")
+    contracten_verkoop = _bereken_open_contracten("verkoop", modus_filter="Vrachtwagen")
+
+    _land_per_bedrijf = {b["naam"]: b.get("land","") for b in ENF_BEDRIJVEN}
+    _land_per_fabriek = {f["naam"]: f.get("land","") for f in PAPIERFABRIEKEN}
+
+    alle_rijen = []
+    for c in contracten_inkoop:
+        _land_vol = _land_per_bedrijf.get(c["tegenpartij"], "")
+        alle_rijen.append({**c, "richting": "inkoop", "land": _land_vol, "land_kort": land_afkorting(_land_vol),
+                             "leverancier_param": c["tegenpartij"], "fabriek_param": c["klant"]})
+    for c in contracten_verkoop:
+        _land_vol = _land_per_fabriek.get(c["tegenpartij"], "")
+        alle_rijen.append({**c, "richting": "verkoop", "land": _land_vol, "land_kort": land_afkorting(_land_vol),
+                             "leverancier_param": "", "fabriek_param": c["tegenpartij"]})
+
+    _handelsorders_bij_id = {h["id"]: h for h in laad_handelsorders()}
+    for r in alle_rijen:
+        _h = _handelsorders_bij_id.get(r["id"], {})
+        r["incoterm"] = _h.get("incoterm","")
+        r["afhaallocatie"] = _h.get("afhaal_locatienaam","")
+        r["prijs"] = _h.get("prijs","")
+        r["valuta"] = _h.get("valuta","")
+        r["opmerkingen"] = _h.get("opmerkingen","")
+        r["aangemaakt"] = _h.get("aangemaakt","")
+
+    filter_leverancier = request.args.get("filter_leverancier", "")
+    filter_contract = request.args.get("filter_contract", "").strip().lower()
+    filter_land = request.args.get("filter_land", "")
+    filter_datum = request.args.get("filter_datum", "").strip()
+
+    rijen = alle_rijen
+    if filter_leverancier:
+        rijen = [r for r in rijen if r["tegenpartij"] == filter_leverancier]
+    if filter_contract:
+        rijen = [r for r in rijen if filter_contract in r["contractnummer"].lower()]
+    if filter_land:
+        rijen = [r for r in rijen if r["land"] == filter_land]
+    if filter_datum:
+        try:
+            _filter_datum_genormaliseerd = datetime.datetime.strptime(filter_datum, "%Y-%m-%d").strftime("%d-%m-%Y")
+            rijen = [r for r in rijen if r["aangemaakt"].startswith(_filter_datum_genormaliseerd)]
+        except ValueError:
+            pass
+
+    rijen.sort(key=lambda r: r["aangemaakt"], reverse=True)
+
+    leverancier_opties = sorted({r["tegenpartij"] for r in alle_rijen if r["tegenpartij"]})
+    land_opties = sorted({r["land"] for r in alle_rijen if r["land"]}, key=land_afkorting)
+
+    inhoud = """
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Wat nog ingepland of geleverd moet worden per vrachtwagen — inkoop en verkoop samen, alle Definitieve contracten met transportmodus Vrachtwagen. Klik op een contract om in te plannen.</p>
+
+<form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    <input type="hidden" name="modus" value="vrachtwagen">
+    <select name="filter_leverancier" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle tegenpartijen</option>
+        {% for l in leverancier_opties %}<option value="{{ l }}" {% if l == filter_leverancier %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <select name="filter_land" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
+        <option value="">Alle landen</option>
+        {% for lnd in land_opties %}<option value="{{ lnd }}" {% if lnd == filter_land %}selected{% endif %}>{{ land_afkorting(lnd) }} — {{ lnd }}</option>{% endfor %}
+    </select>
+    <input type="text" name="filter_contract" value="{{ filter_contract }}" placeholder="Zoek op contractnummer" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+    <input type="date" name="filter_datum" value="{{ filter_datum }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
+    <button type="submit" style="padding:7px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;background:#fff;cursor:pointer;">Filteren</button>
+    {% if filter_leverancier or filter_contract or filter_land or filter_datum %}<a href="/logistiek/planning?modus=vrachtwagen" style="padding:7px 14px;font-size:12.5px;color:var(--gray-400);text-decoration:none;align-self:center;">Wissen</a>{% endif %}
+</form>
+
+<style>
+.sv-tabel th { text-align:left; padding:10px 12px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:#7d8792; white-space:nowrap; }
+.sv-tabel td { padding:9px 12px; border-bottom:1px solid var(--gray-100); font-size:12.5px; vertical-align:top; }
+.sv-tabel tbody tr:hover { background:var(--gray-50); }
+.sv-richting-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; white-space:nowrap; }
+</style>
+
+<div style="overflow-x:auto;">
+<table class="sv-tabel" style="border-collapse:collapse;min-width:1500px;width:100%;">
+    <thead><tr>
+        <th></th>
+        <th>Land</th>
+        <th>Contractnummer</th>
+        <th style="min-width:180px;">Tegenpartij</th>
+        <th>Incoterm</th>
+        <th style="min-width:140px;">Afhaallocatie</th>
+        <th style="text-align:right;">MT (resterend)</th>
+        <th>Materiaal</th>
+        <th>Kwaliteit</th>
+        <th style="text-align:right;">Prijs</th>
+        <th style="min-width:260px;">Opmerkingen</th>
+        <th>Aangemaakt</th>
+        <th></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rijen %}
+        <tr>
+            <td style="white-space:nowrap;">
+                {% if r.richting == "inkoop" %}<span class="sv-richting-badge" style="background:#f0fdf4;color:#16a34a;">Inkoop</span>
+                {% else %}<span class="sv-richting-badge" style="background:#fef3c7;color:#b45309;">Verkoop</span>{% endif %}
+            </td>
+            <td style="color:var(--gray-500);white-space:nowrap;">{{ r.land_kort or '—' }}</td>
+            <td style="font-family:var(--font-mono);color:var(--gray-800);font-weight:700;white-space:nowrap;">{{ r.contractnummer }}</td>
+            <td style="color:var(--gray-700);">{{ r.tegenpartij }}</td>
+            <td style="color:var(--gray-500);white-space:nowrap;">{{ r.incoterm or '—' }}</td>
+            <td style="color:var(--gray-500);">{{ r.afhaallocatie or '—' }}</td>
+            <td style="text-align:right;font-family:var(--font-mono);color:var(--gray-700);font-weight:600;white-space:nowrap;">{{ r.resterend }}</td>
+            <td style="color:var(--gray-500);white-space:nowrap;">{{ r.materiaal or '—' }}</td>
+            <td style="color:var(--gray-500);white-space:nowrap;">{{ r.kwaliteit or '—' }}</td>
+            <td style="text-align:right;font-family:var(--font-mono);color:var(--gray-500);white-space:nowrap;">{% if r.prijs %}{{ r.prijs }} {{ r.valuta }}{% else %}—{% endif %}</td>
+            <td style="color:var(--gray-500);">{{ r.opmerkingen or '—' }}</td>
+            <td style="color:var(--gray-400);font-size:11.5px;white-space:nowrap;">{{ r.aangemaakt or '—' }}</td>
+            <td style="white-space:nowrap;">
+                <a href="/transport-planning/nieuw?leverancier={{ r.leverancier_param|urlencode }}&materiaal={{ (r.materiaal ~ ' — ' ~ r.kwaliteit)|urlencode }}&hoeveelheid={{ r.resterend }}&contract_referentie={{ r.contractnummer|urlencode }}&fabriek={{ r.fabriek_param|urlencode }}" style="font-size:11.5px;font-weight:700;color:var(--brand-600);text-decoration:none;">Inplannen →</a>
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="13" style="padding:24px;text-align:center;color:var(--gray-300);border-bottom:none;">{% if alle_rijen %}Geen resultaten voor deze filters.{% else %}Niets openstaand — alle vrachtwagen-contracten zijn volledig ingepland of geleverd.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+    """
+    return inhoud, {"rijen": rijen, "alle_rijen": alle_rijen, "leverancier_opties": leverancier_opties,
+                     "land_opties": land_opties, "filter_leverancier": filter_leverancier,
+                     "filter_contract": filter_contract, "filter_land": filter_land, "filter_datum": filter_datum,
+                     "land_afkorting": land_afkorting}
+
+
 def _verkoop_planning_inhoud():
     """Berekening + template-inhoud voor het Verkoop-tabblad van
     /logistiek/planning. Alle DEFINITIEVE verkoopcontracten die nog (deels)
     naar de klant vervoerd moeten worden — gegroepeerd per bedrijfseenheid
-    (markt), vrachtwagen en schip gemengd (in tegenstelling tot inkoop is er
-    hier geen apart Scheepvaart-tabblad nodig — verkoop-export is klein genoeg
-    om gewoon in dezelfde lijst te tonen, met een badge per rij)."""
-    alle_transport_planning_vp = laad_transport_planning()
-
-    def _gepland_verkoop(contractnummer):
-        return round(sum(
-            parse_hoeveelheid_getal(t.get("hoeveelheid",""))
-            for t in alle_transport_planning_vp
-            if t.get("contract_referentie") == contractnummer and t.get("status") != "Geannuleerd"
-        ), 3)
-
-    contracten_open_vp = []
-    for h in laad_handelsorders():
-        if h.get("order_type") != "verkoop" or h.get("status") != "Definitief":
-            continue
-        try:
-            totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
-        except (ValueError, TypeError):
-            totaal = 0.0
-        gepland = _gepland_verkoop(h["contractnummer"])
-        resterend = round(totaal - gepland, 1)
-        if resterend <= 0:
-            continue
-        contracten_open_vp.append({
-            "id": h["id"], "contractnummer": h["contractnummer"], "klant": h.get("tegenpartij_naam",""),
-            "bedrijfseenheid": h.get("bedrijfseenheid","") or "Niet ingedeeld", "materiaal": h.get("materiaal",""),
-            "kwaliteit": h.get("kwaliteit",""), "transportmodus": h.get("transportmodus","") or "Vrachtwagen",
-            "pod_haven": h.get("pod_haven",""), "totaal": round(totaal,1), "gepland": gepland, "resterend": resterend,
-        })
+    (markt), vrachtwagen en schip gemengd, met een badge per rij."""
+    contracten_open_vp = _bereken_open_contracten("verkoop")
 
     per_markt_vp = {}
     for c in contracten_open_vp:
@@ -348,14 +481,14 @@ def _verkoop_planning_inhoud():
         {% if c.transportmodus == "Schip" %}<span class="vp-badge" style="background:#eff6ff;color:#1d4ed8;">Schip</span>
         {% else %}<span class="vp-badge" style="background:#f0fdf4;color:#16a34a;">Vrachtwagen</span>{% endif %}
     </span>
-    <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ c.klant }}</span>
+    <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ c.tegenpartij }}</span>
     <span style="flex:1;color:var(--gray-600);">{{ c.materiaal }} — {{ c.kwaliteit }}</span>
     <span style="width:130px;color:var(--gray-500);">{{ c.contractnummer }}</span>
     {% if c.transportmodus == "Schip" %}<span style="width:110px;color:var(--gray-500);">{{ c.pod_haven or '—' }}</span>{% else %}<span style="width:110px;"></span>{% endif %}
     <span style="width:130px;text-align:right;color:var(--gray-500);">{{ c.gepland }} / {{ c.totaal }} MT</span>
     <span style="width:110px;text-align:right;font-weight:700;color:#dc2626;">{{ c.resterend }} MT open</span>
     <span style="width:90px;text-align:right;">
-        <a href="/transport-planning/nieuw?fabriek={{ c.klant|urlencode }}&materiaal={{ (c.materiaal ~ ' — ' ~ c.kwaliteit)|urlencode }}&hoeveelheid={{ c.resterend }}&contract_referentie={{ c.contractnummer|urlencode }}" style="font-size:11px;font-weight:700;color:var(--brand-600);text-decoration:none;">Plan in →</a>
+        <a href="/transport-planning/nieuw?fabriek={{ c.tegenpartij|urlencode }}&materiaal={{ (c.materiaal ~ ' — ' ~ c.kwaliteit)|urlencode }}&hoeveelheid={{ c.resterend }}&contract_referentie={{ c.contractnummer|urlencode }}" style="font-size:11px;font-weight:700;color:var(--brand-600);text-decoration:none;">Plan in →</a>
     </span>
 </div>
 {% endfor %}
@@ -376,16 +509,16 @@ def verkoop_planning_pagina():
 
 @logistieke_orders_bp.route("/logistiek/planning")
 def logistiek_planning_pagina():
-    """Gecombineerde planning-wachtrij: Inkoop (vrachtwagen), Verkoop, en
-    Scheepvaart (export) als tabbladen op één pagina — dit waren drie
-    structureel identieke pagina's (elk 'wat moet nog ingepland worden', met
-    dezelfde 'Plan in'-actie), nu samengevoegd om duplicatie in de zijbalk te
-    voorkomen. Elk tabblad heeft zijn eigen toegangsrol; deze pagina toont
-    alleen de tabbladen waar de ingelogde gebruiker recht op heeft."""
+    """Gecombineerde planning-wachtrij: Inkoop, Verkoop (per handelsrichting),
+    en Scheepvaart, Vrachtwagen (per transportmodus, beide richtingen samen)
+    als tabbladen op één pagina. Elk tabblad heeft zijn eigen toegangsrol;
+    deze pagina toont alleen de tabbladen waar de ingelogde gebruiker recht
+    op heeft."""
     _tabblad_config = [
         ("inkoop", "inkoop_planning", "Inkoop", _inkoop_planning_inhoud),
         ("verkoop", "verkoop_planning", "Verkoop", _verkoop_planning_inhoud),
         ("scheepvaart", "scheepvaart", "Scheepvaart", _scheepvaart_inhoud),
+        ("vrachtwagen", "vrachtwagen_planning", "Vrachtwagen", _vrachtwagen_inhoud),
     ]
     _toegestane_tabbladen = [(sleutel, titel, functie) for sleutel, pagina_key, titel, functie in _tabblad_config if mag_pagina_zien(pagina_key)]
     if not _toegestane_tabbladen:
