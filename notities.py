@@ -142,17 +142,23 @@ def notities_overzicht():
     inhoud = """
     <div class="page-title">Notities</div>
 
-    <form method="POST" style="max-width:560px;margin-bottom:24px;background:var(--gray-50);border-radius:10px;padding:16px;">
+    <div id="notitieKnopRij" style="margin-bottom:24px;">
+        <button type="button" onclick="document.getElementById('notitieKnopRij').style.display='none'; document.getElementById('notitieFormulier').style.display='block';" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">+ Notitie toevoegen</button>
+    </div>
+    <div id="notitieFormulier" style="display:none;max-width:560px;margin-bottom:24px;background:var(--gray-50);border-radius:10px;padding:16px;">
         <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Nieuwe teamnotitie</div>
-        <div style="margin-bottom:10px;">
-            <input type="text" name="bedrijf" list="notitie_bedrijven_lijst" required placeholder="Bedrijf" autocomplete="off" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-            <datalist id="notitie_bedrijven_lijst">{% for naam in bedrijfsnamen %}<option value="{{ naam }}">{% endfor %}</datalist>
-        </div>
-        <div style="margin-bottom:10px;">
-            <textarea name="tekst" required rows="3" placeholder="Notitie..." style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;"></textarea>
-        </div>
-        <button type="submit" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Notitie toevoegen</button>
-    </form>
+        <form method="POST">
+            <div style="margin-bottom:10px;">
+                <input type="text" name="bedrijf" list="notitie_bedrijven_lijst" required placeholder="Bedrijf" autocomplete="off" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+                <datalist id="notitie_bedrijven_lijst">{% for naam in bedrijfsnamen %}<option value="{{ naam }}">{% endfor %}</datalist>
+            </div>
+            <div style="margin-bottom:10px;">
+                <textarea name="tekst" required rows="3" placeholder="Notitie..." style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;"></textarea>
+            </div>
+            <button type="submit" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Notitie toevoegen</button>
+            <button type="button" onclick="document.getElementById('notitieFormulier').style.display='none'; document.getElementById('notitieKnopRij').style.display='block';" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:12.5px;margin-left:8px;">Annuleren</button>
+        </form>
+    </div>
 
     {% if rijen %}
     <div class="info-kaart" style="max-width:700px;">
