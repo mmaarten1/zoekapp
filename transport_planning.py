@@ -445,13 +445,9 @@ function voegTruckrijToe(materiaalWaarde, hoeveelheidWaarde) {
     if (!totaal || totaal <= 0) { voegTruckrijToe(); return; }
     var aantalTrucks = Math.max(1, Math.ceil(totaal / TRUCK_CAPACITEIT));
     document.getElementById("truck_suggestie").innerHTML =
-        totaal + " t totaal ÷ " + TRUCK_CAPACITEIT + " t per truck ≈ <b>" + aantalTrucks + " truck" + (aantalTrucks != 1 ? "s" : "") + "</b> — hieronder alvast ingevuld, pas gerust aan of voeg meer toe.";
-    var resterend = totaal;
-    for (var i = 0; i < aantalTrucks; i++) {
-        var ladingDezeRij = Math.min(TRUCK_CAPACITEIT, Math.round(resterend * 10) / 10);
-        voegTruckrijToe({{ vi_materiaal|tojson }}, ladingDezeRij);
-        resterend -= ladingDezeRij;
-    }
+        totaal + " t totaal ÷ " + TRUCK_CAPACITEIT + " t per truck ≈ <b>" + aantalTrucks + " truck" + (aantalTrucks != 1 ? "s" : "") + "</b> — druk op '+ Truck toevoegen' voor elke volgende.";
+    var eersteLading = Math.min(TRUCK_CAPACITEIT, Math.round(totaal * 10) / 10);
+    voegTruckrijToe({{ vi_materiaal|tojson }}, eersteLading);
 })();
 {% else %}
 voegTruckrijToe();
