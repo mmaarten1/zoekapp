@@ -48,7 +48,7 @@ from core import (
     mag_pagina_zien, vereist_afdeling_of_403, PAGINA_AFDELINGEN,
     laad_containers, bewaar_containers, CONTAINER_TYPES, CONTAINER_STATUSSEN,
     laad_logistieke_orders, bewaar_logistieke_orders, laad_weegbrug, laad_documenten,
-    laad_handelsorders, laad_transport_planning,
+    laad_handelsorders, laad_transport_planning, bewaar_transport_planning,
     laad_bedrijfslogo_instelling, bewaar_bedrijfslogo_instelling, LOGO_MAP, LOGO_POSITIES,
 )
 
@@ -2909,6 +2909,205 @@ def _overzicht_factuur_inhoud():
         btw_deadline_dagen=btw_deadline_dagen)
 
 
+def _transport_planning_te_factureren(modus_filter=None, richting_filter=None):
+    """Transport-planning-records die klaar zijn om te factureren: het
+    transport is daadwerkelijk gebeurd (Geleverd/Afgerond), er is een contract
+    gekoppeld, en het is nog niet eerder gefactureerd (apart 'gefactureerd'-
+    veld — losstaand van de logistieke status, want dat is een ander soort
+    voortgang). Optioneel filteren op transportmodus en/of richting
+    (inkoop/verkoop, afgeleid van het gekoppelde handelsorder)."""
+    alle_transport = laad_transport_planning()
+    alle_handelsorders = {h["contractnummer"]: h for h in laad_handelsorders()}
+
+    resultaat = []
+    for t in alle_transport:
+        if not t.get("contract_referentie") or t.get("gefactureerd"):
+            continue
+        if t.get("status") not in ("Geleverd", "Afgerond"):
+            continue
+        if modus_filter and t.get("transportmodus","") != modus_filter:
+            continue
+        contract = alle_handelsorders.get(t["contract_referentie"])
+        richting = contract.get("order_type","") if contract else ""
+        if richting_filter and richting != richting_filter:
+            continue
+        t = dict(t)
+        t["_richting"] = richting
+        t["_tegenpartij"] = t.get("leverancier","") if richting == "inkoop" else t.get("fabriek","")
+        t["_prijs_per_ton"] = float(contract["prijs"]) if contract and contract.get("prijs") else None
+        t["_valuta"] = contract.get("valuta", "EUR") if contract else "EUR"
+        t["_ton"] = parse_ton_intern(t.get("hoeveelheid",""))
+        t["_bedrag"] = round(t["_ton"] * t["_prijs_per_ton"], 2) if t["_prijs_per_ton"] is not None else None
+        resultaat.append(t)
+    return resultaat
+
+def _groepeer_per_tegenpartij(items, tegenpartij_veld="_tegenpartij", datum_veld="aangemaakt"):
+    """Groepeert een lijst van te-factureren items (van transport_planning of
+    logistieke_orders) per tegenpartij, met totalen — gedeelde weergavelogica
+    voor Export/Inkoop/Peute."""
+    per_partij = {}
+    for item in items:
+        per_partij.setdefault(item.get(tegenpartij_veld,"Onbekend") or "Onbekend", []).append(item)
+    for lijst in per_partij.values():
+        lijst.sort(key=lambda i: i.get(datum_veld,""), reverse=True)
+    return sorted(
+        [{"tegenpartij": partij, "rijen": lijst, "aantal": len(lijst),
+          "totaal_ton": round(sum(i["_ton"] for i in lijst), 3),
+          "totaal_bedrag": round(sum(i["_bedrag"] for i in lijst if i["_bedrag"] is not None), 2)}
+         for partij, lijst in per_partij.items()],
+        key=lambda g: g["tegenpartij"]
+    )
+
+def _export_factuur_inhoud():
+    """Export-tabblad: alles wat per schip gaat — inkoop (import) én verkoop
+    (export) samen, net als het Scheepvaart-tabblad bij Planning. Afgeleverde
+    transporten met een gekoppeld contract, nog niet gefactureerd."""
+    items = _transport_planning_te_factureren(modus_filter="Schip")
+    groepen = _groepeer_per_tegenpartij(items)
+
+    inhoud = """
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Afgeleverde scheepvaart-transporten met een gekoppeld contract, nog niet gefactureerd — inkoop (import) en verkoop (export) samen, per tegenpartij.</p>
+
+<style>
+.ef-groep { border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:20px; }
+.ef-groepkop { padding:12px 14px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); display:flex; align-items:center; gap:12px; font-size:12.5px; }
+.ef-rij { padding:9px 14px; border-bottom:1px solid var(--gray-100); font-size:12.5px; display:flex; align-items:center; gap:12px; }
+.ef-rij:last-child { border-bottom:none; }
+.ef-richting-badge { font-size:9.5px; font-weight:700; padding:2px 7px; border-radius:4px; }
+</style>
+
+{% if groepen %}
+{% for g in groepen %}
+<form method="POST" action="/facturen/transport/genereer">
+<input type="hidden" name="bron_modus" value="export">
+<div class="ef-groep">
+    <div class="ef-groepkop">
+        <b style="flex:1;color:var(--gray-800);">{{ g.tegenpartij }}</b>
+        <span style="color:var(--gray-400);">{{ g.aantal }} transport{{ 'en' if g.aantal != 1 else '' }} · {{ g.totaal_ton }} t open</span>
+        <button type="submit" style="font-size:12px;font-weight:700;padding:6px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;">Factuur aanmaken van geselecteerde →</button>
+    </div>
+    {% for t in g.rijen %}
+    <div class="ef-rij">
+        <input type="checkbox" name="transport_ids" value="{{ t.id }}" checked style="margin:0;">
+        <span style="width:70px;">
+            {% if t._richting == "inkoop" %}<span class="ef-richting-badge" style="background:#f0fdf4;color:#16a34a;">Inkoop</span>
+            {% else %}<span class="ef-richting-badge" style="background:#fef3c7;color:#b45309;">Verkoop</span>{% endif %}
+        </span>
+        <span style="width:90px;color:var(--gray-500);">{{ t.aangemaakt[:10] if t.aangemaakt else '—' }}</span>
+        <span style="width:130px;font-family:var(--font-mono);color:var(--gray-500);">{{ t.referentienummer or '—' }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ t.materiaal }} — {{ t.kwaliteit }}</span>
+        <span style="width:130px;color:var(--gray-500);">{{ t.contract_referentie }}</span>
+        <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--gray-700);">{{ t._ton }} t</span>
+        {% if t._prijs_per_ton is not none %}
+        <span style="width:90px;text-align:right;color:var(--gray-500);">{{ t._prijs_per_ton }}/t</span>
+        <span style="width:100px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--gray-800);">{{ "%.2f"|format(t._bedrag) }} {{ t._valuta }}</span>
+        {% else %}
+        <span style="width:190px;text-align:right;color:#dc2626;font-size:11px;">Geen prijs op het contract</span>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+</form>
+{% endfor %}
+{% else %}
+<div class="lege-staat">Niets te factureren — alle afgeleverde scheepvaart is al gefactureerd.</div>
+{% endif %}
+    """
+    return inhoud, {"groepen": groepen}
+
+
+@app.route("/facturen/transport/genereer", methods=["POST"])
+def facturen_transport_genereer():
+    """Maakt één factuur aan van geselecteerde transport_planning-records
+    (Export- en Inkoop-per-schip-tabblad delen deze route) — zelfde patroon
+    als /facturen/peute/genereer, maar met transport_planning als bron i.p.v.
+    logistieke_orders (weegbrug). Alle geselecteerde records moeten dezelfde
+    tegenpartij hebben (leverancier bij inkoop, fabriek bij verkoop)."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    transport_ids = request.form.getlist("transport_ids")
+    bron_modus = request.form.get("bron_modus", "export")
+    if not transport_ids:
+        return redirect(url_for("facturen_pagina", modus=bron_modus))
+
+    alle_transport = laad_transport_planning()
+    alle_handelsorders = {h["contractnummer"]: h for h in laad_handelsorders()}
+    geselecteerd = [t for t in alle_transport if t["id"] in transport_ids]
+    if not geselecteerd:
+        return redirect(url_for("facturen_pagina", modus=bron_modus))
+
+    def _tegenpartij_van(t):
+        contract = alle_handelsorders.get(t.get("contract_referentie",""))
+        richting = contract.get("order_type","") if contract else ""
+        return (t.get("leverancier","") if richting == "inkoop" else t.get("fabriek","")), richting
+
+    eerste_tegenpartij, _ = _tegenpartij_van(geselecteerd[0])
+    geselecteerd = [t for t in geselecteerd if _tegenpartij_van(t)[0] == eerste_tegenpartij]  # veiligheid: alleen dezelfde tegenpartij
+
+    regels = []
+    totaal_bedrag = 0.0
+    richting_van_factuur = ""
+    for t in geselecteerd:
+        contract = alle_handelsorders.get(t.get("contract_referentie",""))
+        _, richting = _tegenpartij_van(t)
+        richting_van_factuur = richting or richting_van_factuur
+        prijs_per_ton = float(contract["prijs"]) if contract and contract.get("prijs") else 0.0
+        valuta = contract.get("valuta", "EUR") if contract else "EUR"
+        ton = parse_ton_intern(t.get("hoeveelheid",""))
+        bedrag = round(ton * prijs_per_ton, 2)
+        totaal_bedrag += bedrag
+        regels.append({
+            "transport_id": t["id"], "referentienummer": t.get("referentienummer",""),
+            "datum": t.get("aangemaakt","")[:10] if t.get("aangemaakt") else "",
+            "materiaal": t.get("materiaal",""), "kwaliteit": t.get("kwaliteit",""),
+            "ton": ton, "prijs_per_ton": prijs_per_ton, "valuta": valuta, "bedrag": bedrag,
+            "contractnummer": t.get("contract_referentie",""),
+        })
+
+    contractnummers = {r["contractnummer"] for r in regels}
+    nu = datetime.datetime.now()
+    prefix = "EXPORT" if bron_modus == "export" else "INKOOP-SCHIP"
+
+    termijn_dagen = 30
+    _termijn_ingesteld = leverancier_instelling_voor(eerste_tegenpartij).get("standaard_betalingstermijn","")
+    if _termijn_ingesteld:
+        try:
+            termijn_dagen = int(_termijn_ingesteld)
+        except (ValueError, TypeError):
+            pass
+    vervaldatum = (nu.date() + datetime.timedelta(days=termijn_dagen)).isoformat()
+
+    alle_facturen = laad_facturen()
+    factuur_type = "verkoop" if richting_van_factuur == "verkoop" else "inkoop"
+    nieuwe_factuur = {
+        "id": str(uuid.uuid4()),
+        "bedrijf": eerste_tegenpartij,
+        "type": factuur_type,
+        "referentie": f"{prefix}-{nu.strftime('%Y%m%d')}-{len([f for f in alle_facturen if f.get('type')==factuur_type and f.get('aangemaakt','').startswith(nu.strftime('%d-%m-%Y'))]) + 1:03d}",
+        "omschrijving": f"{len(regels)} transport{'en' if len(regels) != 1 else ''} — {', '.join(sorted(contractnummers))}",
+        "regels": regels,
+        "bedrag": str(round(totaal_bedrag, 2)),
+        "btw_percentage": "",
+        "factuurdatum": nu.date().isoformat(),
+        "vervaldatum": vervaldatum,
+        "betaalddatum": "",
+        "contract_referentie": next(iter(contractnummers)) if len(contractnummers) == 1 else "",
+        "gebruiker": session.get("gebruikersnaam", ""),
+        "aangemaakt": nu.strftime("%d-%m-%Y %H:%M"),
+    }
+    alle_facturen.append(nieuwe_factuur)
+    bewaar_facturen(alle_facturen)
+
+    gefactureerde_ids = {r["transport_id"] for r in regels}
+    for t in alle_transport:
+        if t["id"] in gefactureerde_ids:
+            t["gefactureerd"] = True
+    bewaar_transport_planning(alle_transport)
+
+    return redirect(url_for("facturen_pagina", modus="overzicht", bedrijf=eerste_tegenpartij))
+
+
 def _eenvoudig_factuur_tabblad_inhoud(type_naam, type_label, uitleg):
     """Eenvoudige, gefilterde weergave van facturen met een bepaald 'type'-veld
     (inkoop/verkoop/export) — toont wat er al is, met een link naar het
@@ -2956,6 +3155,204 @@ def _eenvoudig_factuur_tabblad_inhoud(type_naam, type_label, uitleg):
 {% endif %}
     """
     return inhoud, dict(alle_facturen=alle_facturen, totaal=totaal)
+
+
+def _inkoop_factuur_inhoud():
+    """Inkoop-tabblad: ALLE inkoop-facturatie, vrachtwagen (via de Weegbrug —
+    hetzelfde als het Peute-tabblad) én schip samen, per leverancier. Een
+    vrachtwagen-inkooplevering staat dus zowel hier als op Peute (net als bij
+    Planning: richting-tabblad en modus-tabblad zijn twee lenzen op dezelfde
+    onderliggende data). Checkbox-waarden krijgen een 'lo:'/'tp:'-prefix om
+    bij het genereren te weten uit welke bron (logistieke_orders / transport_
+    planning) een item komt, want die hebben elk hun eigen velden en hun eigen
+    manier om 'al gefactureerd' te markeren."""
+    alle_orders = laad_logistieke_orders()
+    alle_handelsorders = {h["contractnummer"]: h for h in laad_handelsorders()}
+
+    vrachtwagen_items = [
+        o for o in alle_orders
+        if o.get("contract_referentie") and o.get("status") not in ("Gefactureerd", "Afgerond")
+    ]
+    for o in vrachtwagen_items:
+        contract = alle_handelsorders.get(o["contract_referentie"])
+        o["_bron"] = "lo"
+        o["_referentie"] = o.get("ordernummer","")
+        o["_modus"] = "Vrachtwagen"
+        o["_tegenpartij"] = o.get("leverancier","")
+        o["_prijs_per_ton"] = float(contract["prijs"]) if contract and contract.get("prijs") else None
+        o["_valuta"] = contract.get("valuta", "EUR") if contract else "EUR"
+        o["_ton"] = parse_ton_intern(o.get("werkelijke_hoeveelheid", ""))
+        o["_bedrag"] = round(o["_ton"] * o["_prijs_per_ton"], 2) if o["_prijs_per_ton"] is not None else None
+        o["aangemaakt"] = o.get("datum","")
+
+    transport_planning_items = _transport_planning_te_factureren(richting_filter="inkoop")
+    for t in transport_planning_items:
+        t["_bron"] = "tp"
+        t["_referentie"] = t.get("referentienummer","")
+        t["_modus"] = t.get("transportmodus", "Schip")
+
+    alle_items = vrachtwagen_items + transport_planning_items
+    groepen = _groepeer_per_tegenpartij(alle_items)
+
+    inhoud = """
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Alle inkoop-facturatie — vrachtwagen (Weegbrug) én schip samen, per leverancier. Nog niet gefactureerd.</p>
+
+<style>
+.if-groep { border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:20px; }
+.if-groepkop { padding:12px 14px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); display:flex; align-items:center; gap:12px; font-size:12.5px; }
+.if-rij { padding:9px 14px; border-bottom:1px solid var(--gray-100); font-size:12.5px; display:flex; align-items:center; gap:12px; }
+.if-rij:last-child { border-bottom:none; }
+.if-modus-badge { font-size:9.5px; font-weight:700; padding:2px 7px; border-radius:4px; }
+</style>
+
+{% if groepen %}
+{% for g in groepen %}
+<form method="POST" action="/facturen/inkoop/genereer">
+<div class="if-groep">
+    <div class="if-groepkop">
+        <b style="flex:1;color:var(--gray-800);">{{ g.tegenpartij }}</b>
+        <span style="color:var(--gray-400);">{{ g.aantal }} lading{{ 'en' if g.aantal != 1 else '' }} · {{ g.totaal_ton }} t open</span>
+        <button type="submit" style="font-size:12px;font-weight:700;padding:6px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;">Factuur aanmaken van geselecteerde →</button>
+    </div>
+    {% for i in g.rijen %}
+    <div class="if-rij">
+        <input type="checkbox" name="item_ids" value="{{ i._bron }}:{{ i.id }}" checked style="margin:0;">
+        <span style="width:100px;">
+            {% if i._modus == "Schip" %}<span class="if-modus-badge" style="background:#eff6ff;color:#1d4ed8;">Schip</span>
+            {% else %}<span class="if-modus-badge" style="background:#f0fdf4;color:#16a34a;">Vrachtwagen</span>{% endif %}
+        </span>
+        <span style="width:90px;color:var(--gray-500);">{{ i.aangemaakt[:10] if i.aangemaakt else '—' }}</span>
+        <span style="width:130px;font-family:var(--font-mono);color:var(--gray-500);">{{ i._referentie or '—' }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ i.materiaal }} — {{ i.kwaliteit }}</span>
+        <span style="width:130px;color:var(--gray-500);">{{ i.contract_referentie }}</span>
+        <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--gray-700);">{{ i._ton }} t</span>
+        {% if i._prijs_per_ton is not none %}
+        <span style="width:90px;text-align:right;color:var(--gray-500);">{{ i._prijs_per_ton }}/t</span>
+        <span style="width:100px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--gray-800);">{{ "%.2f"|format(i._bedrag) }} {{ i._valuta }}</span>
+        {% else %}
+        <span style="width:190px;text-align:right;color:#dc2626;font-size:11px;">Geen prijs op het contract</span>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+</form>
+{% endfor %}
+{% else %}
+<div class="lege-staat">Niets te factureren — alle inkoop is al gefactureerd.</div>
+{% endif %}
+    """
+    return inhoud, {"groepen": groepen}
+
+
+@app.route("/facturen/inkoop/genereer", methods=["POST"])
+def facturen_inkoop_genereer():
+    """Maakt één inkoopfactuur aan van geselecteerde items — die kunnen van
+    twee bronnen komen (vrachtwagen via logistieke_orders, schip via
+    transport_planning), te onderscheiden aan de 'lo:'/'tp:'-prefix op elke
+    checkbox-waarde. Beide brontypes hebben hun eigen velden en hun eigen
+    manier om als 'gefactureerd' te markeren, dus die logica wordt hier
+    per item apart afgehandeld voordat de gezamenlijke factuur wordt gebouwd."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    item_ids = request.form.getlist("item_ids")
+    if not item_ids:
+        return redirect(url_for("facturen_pagina", modus="inkoop"))
+
+    lo_ids = {i.split(":",1)[1] for i in item_ids if i.startswith("lo:")}
+    tp_ids = {i.split(":",1)[1] for i in item_ids if i.startswith("tp:")}
+
+    alle_orders = laad_logistieke_orders()
+    alle_transport = laad_transport_planning()
+    alle_handelsorders = {h["contractnummer"]: h for h in laad_handelsorders()}
+
+    geselecteerde_orders = [o for o in alle_orders if o["id"] in lo_ids]
+    geselecteerde_transport = [t for t in alle_transport if t["id"] in tp_ids]
+
+    # Leverancier van het allereerste geselecteerde item bepaalt de factuur — veiligheid:
+    # alleen items van diezelfde leverancier worden meegenomen, ongeacht bron.
+    alle_geselecteerd = [("lo", o) for o in geselecteerde_orders] + [("tp", t) for t in geselecteerde_transport]
+    if not alle_geselecteerd:
+        return redirect(url_for("facturen_pagina", modus="inkoop"))
+    eerste_leverancier = alle_geselecteerd[0][1].get("leverancier","")
+
+    regels = []
+    totaal_bedrag = 0.0
+    lo_gefactureerd_ids = set()
+    tp_gefactureerd_ids = set()
+
+    for bron, item in alle_geselecteerd:
+        if item.get("leverancier","") != eerste_leverancier:
+            continue
+        contract = alle_handelsorders.get(item.get("contract_referentie",""))
+        prijs_per_ton = float(contract["prijs"]) if contract and contract.get("prijs") else 0.0
+        valuta = contract.get("valuta", "EUR") if contract else "EUR"
+        if bron == "lo":
+            ton = parse_ton_intern(item.get("werkelijke_hoeveelheid",""))
+            referentie = item.get("ordernummer","")
+            datum = item.get("datum","")
+            lo_gefactureerd_ids.add(item["id"])
+        else:
+            ton = parse_ton_intern(item.get("hoeveelheid",""))
+            referentie = item.get("referentienummer","")
+            datum = item.get("aangemaakt","")[:10] if item.get("aangemaakt") else ""
+            tp_gefactureerd_ids.add(item["id"])
+        bedrag = round(ton * prijs_per_ton, 2)
+        totaal_bedrag += bedrag
+        regels.append({
+            "bron": bron, "item_id": item["id"], "referentienummer": referentie, "datum": datum,
+            "materiaal": item.get("materiaal",""), "kwaliteit": item.get("kwaliteit",""),
+            "ton": ton, "prijs_per_ton": prijs_per_ton, "valuta": valuta, "bedrag": bedrag,
+            "contractnummer": item.get("contract_referentie",""),
+        })
+
+    if not regels:
+        return redirect(url_for("facturen_pagina", modus="inkoop"))
+
+    contractnummers = {r["contractnummer"] for r in regels}
+    nu = datetime.datetime.now()
+
+    termijn_dagen = 30
+    _termijn_ingesteld = leverancier_instelling_voor(eerste_leverancier).get("standaard_betalingstermijn","")
+    if _termijn_ingesteld:
+        try:
+            termijn_dagen = int(_termijn_ingesteld)
+        except (ValueError, TypeError):
+            pass
+    vervaldatum = (nu.date() + datetime.timedelta(days=termijn_dagen)).isoformat()
+
+    alle_facturen = laad_facturen()
+    nieuwe_factuur = {
+        "id": str(uuid.uuid4()),
+        "bedrijf": eerste_leverancier,
+        "type": "inkoop",
+        "referentie": f"INKOOP-{nu.strftime('%Y%m%d')}-{len([f for f in alle_facturen if f.get('type')=='inkoop' and f.get('aangemaakt','').startswith(nu.strftime('%d-%m-%Y'))]) + 1:03d}",
+        "omschrijving": f"{len(regels)} lading{'en' if len(regels) != 1 else ''} — {', '.join(sorted(contractnummers))}",
+        "regels": regels,
+        "bedrag": str(round(totaal_bedrag, 2)),
+        "btw_percentage": "",
+        "factuurdatum": nu.date().isoformat(),
+        "vervaldatum": vervaldatum,
+        "betaalddatum": "",
+        "contract_referentie": next(iter(contractnummers)) if len(contractnummers) == 1 else "",
+        "gebruiker": session.get("gebruikersnaam", ""),
+        "aangemaakt": nu.strftime("%d-%m-%Y %H:%M"),
+    }
+    alle_facturen.append(nieuwe_factuur)
+    bewaar_facturen(alle_facturen)
+
+    if lo_gefactureerd_ids:
+        for o in alle_orders:
+            if o["id"] in lo_gefactureerd_ids:
+                o["status"] = "Gefactureerd"
+        bewaar_logistieke_orders(alle_orders)
+    if tp_gefactureerd_ids:
+        for t in alle_transport:
+            if t["id"] in tp_gefactureerd_ids:
+                t["gefactureerd"] = True
+        bewaar_transport_planning(alle_transport)
+
+    return redirect(url_for("facturen_pagina", modus="overzicht", bedrijf=eerste_leverancier))
 
 
 def _peute_factuur_inhoud():
@@ -3136,11 +3533,11 @@ def facturen_pagina():
     if modus == "overzicht":
         _tab_inhoud, _tab_context = _overzicht_factuur_inhoud()
     elif modus == "inkoop":
-        _tab_inhoud, _tab_context = _eenvoudig_factuur_tabblad_inhoud("inkoop", "inkoop", "Alle inkoopfacturen (van leveranciers aan Peute).")
+        _tab_inhoud, _tab_context = _inkoop_factuur_inhoud()
     elif modus == "verkoop":
         _tab_inhoud, _tab_context = _eenvoudig_factuur_tabblad_inhoud("verkoop", "verkoop", "Alle verkoopfacturen (van Peute aan klanten) — alle uitgaande facturen.")
     elif modus == "export":
-        _tab_inhoud, _tab_context = _eenvoudig_factuur_tabblad_inhoud("export", "export", "Alles wat per schip/container geëxporteerd wordt.")
+        _tab_inhoud, _tab_context = _export_factuur_inhoud()
     else:
         _tab_inhoud, _tab_context = _peute_factuur_inhoud()
 
