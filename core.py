@@ -444,6 +444,47 @@ def sync_contactpersoon_naar_contacten(bedrijf_naam, naam, rol="", email="", tel
 
 FACTUREN_FILE = datapad("facturen.json")
 
+EIGEN_BEDRIJFSGEGEVENS_FILE = datapad("eigen_bedrijfsgegevens.json")
+
+def haal_factuurgegevens_bedrijf(naam):
+    """Adres/KvK/BTW-gegevens van een leverancier of klant, voor gebruik op een
+    factuur — zoekt eerst in ENF_BEDRIJVEN (leveranciers/algemene bedrijven),
+    dan in PAPIERFABRIEKEN (klanten). Geeft altijd een dict met dezelfde sleutels
+    terug, ook als het bedrijf niet gevonden wordt (dan allemaal lege strings) —
+    zodat de aanroeper nooit een KeyError krijgt en de factuur gewoon met lege
+    velden getoond kan worden."""
+    leeg = {"naam": naam, "adres": "", "postcode": "", "stad": "", "land": "", "kvk_nummer": "", "vat_nummer": ""}
+    bron = next((b for b in ENF_BEDRIJVEN if b.get("naam") == naam), None)
+    if bron is None:
+        bron = next((b for b in PAPIERFABRIEKEN if b.get("naam") == naam), None)
+    if bron is None:
+        return leeg
+    return {
+        "naam": naam, "adres": bron.get("adres", ""), "postcode": bron.get("postcode", ""),
+        "stad": bron.get("stad") or bron.get("regio", ""), "land": bron.get("land", ""),
+        "kvk_nummer": bron.get("kvk_nummer", ""), "vat_nummer": bron.get("vat_nummer", ""),
+    }
+
+def laad_eigen_bedrijfsgegevens():
+    """Peute's eigen bedrijfsgegevens (afzender op elke factuur) — bedrijfsnaam,
+    adres, KvK, BTW-id, IBAN, BIC, EORI. Eén keer ingevuld via Instellingen,
+    daarna hergebruikt bij elke gegenereerde factuur."""
+    standaard = {
+        "naam": "", "adres": "", "postcode": "", "stad": "", "land": "Nederland",
+        "kvk_nummer": "", "btw_nummer": "", "iban": "", "bic": "", "eori_nummer": "",
+    }
+    try:
+        with open(EIGEN_BEDRIJFSGEGEVENS_FILE, "r", encoding="utf-8") as f:
+            opgeslagen = json.load(f)
+            standaard.update(opgeslagen)
+            return standaard
+    except:
+        return standaard
+
+def bewaar_eigen_bedrijfsgegevens(data):
+    with open(EIGEN_BEDRIJFSGEGEVENS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
 def laad_facturen():
     try:
         with open(FACTUREN_FILE, "r", encoding="utf-8") as f:
@@ -454,6 +495,76 @@ def laad_facturen():
 def bewaar_facturen(data):
     with open(FACTUREN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+EU_LANDEN = {
+    "Nederland", "Netherlands", "België", "Belgium", "Duitsland", "Germany", "Frankrijk", "France",
+    "Italië", "Italy", "Spanje", "Spain", "Portugal", "Oostenrijk", "Austria", "Polen", "Poland",
+    "Zweden", "Sweden", "Denemarken", "Denmark", "Finland", "Ierland", "Ireland", "Luxemburg",
+    "Luxembourg", "Griekenland", "Greece", "Tsjechië", "Czechia", "Czech Republic", "Slowakije",
+    "Slovakia", "Hongarije", "Hungary", "Roemenië", "Romania", "Bulgarije", "Bulgaria", "Kroatië",
+    "Croatia", "Slovenië", "Slovenia", "Estland", "Estonia", "Letland", "Latvia", "Litouwen",
+    "Lithuania", "Malta", "Cyprus",
+}
+
+def bepaal_btw_regime(land_verkoper, land_klant, btw_nummer_klant):
+    """Bepaalt welk BTW-regime van toepassing is op een factuur, op basis van
+    het land van de verkoper (Peute — altijd Nederland) en de klant, plus of de
+    klant een BTW-nummer heeft. Vereenvoudigde maar correcte toepassing van de
+    hoofdregel: binnenlands NL = normale BTW; EU B2B met geldig BTW-nummer =
+    BTW verlegd (reverse charge, 0%); buiten de EU = exportvrijstelling (0%).
+    Geeft (btw_verlegd: bool, uitleg: str) terug."""
+    land_klant_normaal = (land_klant or "").strip()
+    if not land_klant_normaal or land_klant_normaal in ("Nederland", "Netherlands", "NL"):
+        return False, ""
+    if land_klant_normaal in EU_LANDEN:
+        if btw_nummer_klant:
+            return True, "BTW verlegd (Intracommunautaire levering, art. 138 Btw-richtlijn) — BTW is verschuldigd door de afnemer."
+        return False, ""  # EU zonder geldig BTW-nummer -> gewoon NL-BTW, geen verlegging
+    return True, "0% BTW — levering buiten de EU (export), vrijgesteld op grond van art. 146 Btw-richtlijn."
+
+def bereken_factuur_bedragen(factuur):
+    """Rekent een factuur's opgeslagen 'bedrag' (altijd EXCL. BTW, zowel bij
+    handmatige als automatisch gegenereerde facturen — de regel-bedragen zijn
+    contractprijs × hoeveelheid, wat bij B2B-handel exclusief BTW is) om naar
+    de volledige uitsplitsing die op een factuur moet staan: subtotaal excl.
+    BTW, BTW-bedrag, totaal incl. BTW — met 'BTW verlegd' als dat van
+    toepassing is (dan is het BTW-bedrag 0, ongeacht het ingevulde percentage)."""
+    try:
+        subtotaal = float(str(factuur.get("bedrag","0")).replace(",", "."))
+    except (ValueError, TypeError):
+        subtotaal = 0.0
+
+    klant_land = (factuur.get("klant_gegevens") or {}).get("land", "")
+    klant_btw_nummer = (factuur.get("klant_gegevens") or {}).get("vat_nummer", "")
+    btw_verlegd, btw_verlegd_uitleg = bepaal_btw_regime("Nederland", klant_land, klant_btw_nummer)
+
+    if btw_verlegd:
+        btw_percentage = 0.0
+        btw_bedrag = 0.0
+    else:
+        try:
+            btw_percentage = float(factuur.get("btw_percentage") or 0)
+        except (ValueError, TypeError):
+            btw_percentage = 0.0
+        btw_bedrag = round(subtotaal * btw_percentage / 100, 2)
+
+    return {
+        "subtotaal": round(subtotaal, 2), "btw_percentage": btw_percentage, "btw_bedrag": btw_bedrag,
+        "totaal": round(subtotaal + btw_bedrag, 2), "btw_verlegd": btw_verlegd, "btw_verlegd_uitleg": btw_verlegd_uitleg,
+    }
+
+def genereer_factuurnummer(bestaande_facturen):
+    """FACT-YYYY-NNNN — één doorlopende, jaarlijkse reeks over ALLE facturen
+    heen (handmatig én automatisch gegenereerd), zoals wettelijk vereist voor
+    een geldig, opeenvolgend factuurnummer. Anders dan de per-type prefixen
+    (PEUTE-/INKOOP-/VERKOOP-/EXPORT-) die als interne referentie/omschrijving
+    blijven bestaan — dit factuurnummer is het enige dat op de PDF als
+    'Factuurnummer' telt."""
+    jaar = datetime.date.today().year
+    prefix = f"FACT-{jaar}-"
+    nummers = [int(f["factuurnummer"].replace(prefix, "")) for f in bestaande_facturen if f.get("factuurnummer","").startswith(prefix) and f["factuurnummer"].replace(prefix,"").isdigit()]
+    volgnummer = (max(nummers) + 1) if nummers else 1
+    return f"{prefix}{volgnummer:04d}"
 
 def bepaal_factuur_status(factuur):
     """Status wordt afgeleid: Betaald als betaalddatum is gezet, anders Open of Te laat t.o.v. vervaldatum."""

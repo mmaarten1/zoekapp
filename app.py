@@ -19,6 +19,8 @@ from core import (
     laad_shipments, bewaar_shipments, laad_cert_vervaldatums, bewaar_cert_vervaldatums,
     _cert_sleutel, laad_contactpersonen, bewaar_contactpersonen, sync_contactpersoon_naar_contacten,
     laad_facturen, bewaar_facturen, bepaal_factuur_status, laad_documenten,
+    laad_eigen_bedrijfsgegevens, bewaar_eigen_bedrijfsgegevens, haal_factuurgegevens_bedrijf,
+    genereer_factuurnummer, bereken_factuur_bedragen,
     bewaar_documenten, laad_uitnodigingen, bewaar_uitnodigingen, laad_marktprijzen,
     bewaar_marktprijzen, laad_contracten, bewaar_contracten, laad_voorraad,
     bewaar_voorraad, laad_orders, bewaar_orders, laad_meldingen,
@@ -2657,6 +2659,19 @@ def containerbeheer_pagina():
                                     fabriek_namen_cont=fabriek_namen_cont, landen_herkomst=landen_herkomst,
                                     filter_land_cont=filter_land_cont, per_land=per_land)
 
+def _leverdatum_uit_regels(regels):
+    """Bepaalt de leverings-/prestatiedatum voor op de factuur uit de datums
+    van de losse regels — één datum als alles op dezelfde dag was, anders een
+    'van t/m'-periode. Verplicht op een NL-factuur zodra dit afwijkt van de
+    factuurdatum (wat bij een verzameling van meerdere ladingen bijna altijd
+    het geval is)."""
+    datums = sorted({r["datum"] for r in regels if r.get("datum")})
+    if not datums:
+        return ""
+    if len(datums) == 1:
+        return datums[0]
+    return f"{datums[0]} t/m {datums[-1]}"
+
 def _overzicht_factuur_inhoud():
     """Het algemene facturenoverzicht: KPI's, BTW-alerts, handmatig een factuur
     toevoegen, en de volledige lijst van alle facturen (ongeacht type/herkomst).
@@ -3038,14 +3053,17 @@ def facturen_transport_genereer():
     factuur_type = "verkoop" if richting_van_factuur == "verkoop" else "inkoop"
     nieuwe_factuur = {
         "id": str(uuid.uuid4()),
+        "factuurnummer": genereer_factuurnummer(alle_facturen),
         "bedrijf": eerste_tegenpartij,
+        "klant_gegevens": haal_factuurgegevens_bedrijf(eerste_tegenpartij),
         "type": factuur_type,
         "referentie": f"{prefix}-{nu.strftime('%Y%m%d')}-{len([f for f in alle_facturen if f.get('type')==factuur_type and f.get('aangemaakt','').startswith(nu.strftime('%d-%m-%Y'))]) + 1:03d}",
         "omschrijving": f"{len(regels)} transport{'en' if len(regels) != 1 else ''} — {', '.join(sorted(contractnummers))}",
         "regels": regels,
         "bedrag": str(round(totaal_bedrag, 2)),
-        "btw_percentage": "",
+        "btw_percentage": "21",  # standaard NL-BTW; wordt genegeerd als BTW verlegd van toepassing is
         "factuurdatum": nu.date().isoformat(),
+        "leverdatum": _leverdatum_uit_regels(regels),
         "vervaldatum": vervaldatum,
         "betaalddatum": "",
         "contract_referentie": next(iter(contractnummers)) if len(contractnummers) == 1 else "",
@@ -3181,14 +3199,17 @@ def facturen_verkoop_genereer():
     alle_facturen = laad_facturen()
     nieuwe_factuur = {
         "id": str(uuid.uuid4()),
+        "factuurnummer": genereer_factuurnummer(alle_facturen),
         "bedrijf": eerste_klant,
+        "klant_gegevens": haal_factuurgegevens_bedrijf(eerste_klant),
         "type": "verkoop",
         "referentie": f"VERKOOP-{nu.strftime('%Y%m%d')}-{len([f for f in alle_facturen if f.get('type')=='verkoop' and f.get('aangemaakt','').startswith(nu.strftime('%d-%m-%Y'))]) + 1:03d}",
         "omschrijving": f"{len(regels)} transport{'en' if len(regels) != 1 else ''} — {', '.join(sorted(contractnummers))}",
         "regels": regels,
         "bedrag": str(round(totaal_bedrag, 2)),
-        "btw_percentage": "",
+        "btw_percentage": "21",  # standaard NL-BTW; wordt genegeerd als BTW verlegd van toepassing is
         "factuurdatum": nu.date().isoformat(),
+        "leverdatum": _leverdatum_uit_regels(regels),
         "vervaldatum": vervaldatum,
         "betaalddatum": "",
         "contract_referentie": next(iter(contractnummers)) if len(contractnummers) == 1 else "",
@@ -3423,14 +3444,17 @@ def facturen_inkoop_genereer():
     alle_facturen = laad_facturen()
     nieuwe_factuur = {
         "id": str(uuid.uuid4()),
+        "factuurnummer": genereer_factuurnummer(alle_facturen),
         "bedrijf": eerste_leverancier,
+        "klant_gegevens": haal_factuurgegevens_bedrijf(eerste_leverancier),
         "type": "inkoop",
         "referentie": f"INKOOP-{nu.strftime('%Y%m%d')}-{len([f for f in alle_facturen if f.get('type')=='inkoop' and f.get('aangemaakt','').startswith(nu.strftime('%d-%m-%Y'))]) + 1:03d}",
         "omschrijving": f"{len(regels)} lading{'en' if len(regels) != 1 else ''} — {', '.join(sorted(contractnummers))}",
         "regels": regels,
         "bedrag": str(round(totaal_bedrag, 2)),
-        "btw_percentage": "",
+        "btw_percentage": "21",  # standaard NL-BTW; wordt genegeerd als BTW verlegd van toepassing is
         "factuurdatum": nu.date().isoformat(),
+        "leverdatum": _leverdatum_uit_regels(regels),
         "vervaldatum": vervaldatum,
         "betaalddatum": "",
         "contract_referentie": next(iter(contractnummers)) if len(contractnummers) == 1 else "",
@@ -3588,14 +3612,17 @@ def facturen_peute_genereer():
     alle_facturen = laad_facturen()
     nieuwe_factuur = {
         "id": str(uuid.uuid4()),
+        "factuurnummer": genereer_factuurnummer(alle_facturen),
         "bedrijf": leverancier,
+        "klant_gegevens": haal_factuurgegevens_bedrijf(leverancier),
         "type": "peute",
         "referentie": f"PEUTE-{nu.strftime('%Y%m%d')}-{len([f for f in alle_facturen if f.get('type')=='peute' and f.get('aangemaakt','').startswith(nu.strftime('%d-%m-%Y'))]) + 1:03d}",
         "omschrijving": f"{len(regels)} lading{'en' if len(regels) != 1 else ''} — {', '.join(sorted(contractnummers))}",
         "regels": regels,
         "bedrag": str(round(totaal_bedrag, 2)),
-        "btw_percentage": "",
+        "btw_percentage": "21",  # standaard NL-BTW; wordt genegeerd als BTW verlegd van toepassing is
         "factuurdatum": nu.date().isoformat(),
+        "leverdatum": _leverdatum_uit_regels(regels),
         "vervaldatum": vervaldatum,
         "betaalddatum": "",
         "contract_referentie": next(iter(contractnummers)) if len(contractnummers) == 1 else "",
@@ -3624,24 +3651,29 @@ def facturen_nieuw():
     if _guard: return _guard
 
     if request.method == "POST":
+        bedrijf_naam = request.form.get("bedrijf", "").strip()
+        alle_facturen_voor_nummer = laad_facturen()
         nieuwe_factuur = {
             "id": str(uuid.uuid4()),
-            "bedrijf": request.form.get("bedrijf", "").strip(),
+            "factuurnummer": genereer_factuurnummer(alle_facturen_voor_nummer),
+            "bedrijf": bedrijf_naam,
+            "klant_gegevens": haal_factuurgegevens_bedrijf(bedrijf_naam),
             "referentie": request.form.get("referentie", "").strip(),
             "omschrijving": request.form.get("omschrijving", "").strip(),
             "bedrag": request.form.get("bedrag", "").strip(),
             "btw_percentage": request.form.get("btw_percentage", "").strip(),
-            "factuurdatum": request.form.get("factuurdatum", "").strip(),
+            "factuurdatum": request.form.get("factuurdatum", "").strip() or datetime.date.today().isoformat(),
+            "leverdatum": request.form.get("leverdatum", "").strip(),
             "vervaldatum": request.form.get("vervaldatum", "").strip(),
             "betaalddatum": "",
             "contract_referentie": request.form.get("contract_referentie", "").strip(),
+            "incoterm": request.form.get("incoterm", "").strip(),
             "gebruiker": session.get("gebruikersnaam", ""),
             "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
         }
         if nieuwe_factuur["bedrijf"] and nieuwe_factuur["bedrag"] and nieuwe_factuur["vervaldatum"]:
-            alle_facturen = laad_facturen()
-            alle_facturen.append(nieuwe_factuur)
-            bewaar_facturen(alle_facturen)
+            alle_facturen_voor_nummer.append(nieuwe_factuur)
+            bewaar_facturen(alle_facturen_voor_nummer)
             return redirect(url_for("factuur_detail", factuur_id=nieuwe_factuur["id"]))
         # Verplichte velden ontbreken -> terug naar het formulier, met wat al was ingevuld behouden
         return redirect(url_for("facturen_nieuw", bedrijf=nieuwe_factuur["bedrijf"],
@@ -3654,7 +3686,9 @@ def facturen_nieuw():
     vi_referentie = request.args.get("referentie", "").strip()
     vi_bedrag = request.args.get("bedrag", "").strip()
     vi_factuurdatum = request.args.get("factuurdatum", "").strip()
+    vi_leverdatum = request.args.get("leverdatum", "").strip()
     vi_vervaldatum = request.args.get("vervaldatum", "").strip()
+    vi_incoterm = request.args.get("incoterm", "").strip()
 
     _status_alle_fact = laad_status()
     _accountmanagers_alle_fact = laad_accountmanagers()
@@ -3700,8 +3734,16 @@ def facturen_nieuw():
                 <input type="date" name="factuurdatum" value="{{ vi_factuurdatum }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
             </div>
             <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Leveringsdatum (indien anders)</label>
+                <input type="date" name="leverdatum" value="{{ vi_leverdatum }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
                 <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Vervaldatum</label>
                 <input type="date" name="vervaldatum" value="{{ vi_vervaldatum }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Incoterm (bij internationaal)</label>
+                <input type="text" name="incoterm" placeholder="bv. FCA, CIF, DAP" value="{{ vi_incoterm }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
             </div>
         </div>
         <div style="margin-top:20px;display:flex;gap:8px;">
@@ -3714,6 +3756,7 @@ def facturen_nieuw():
     pagina = render_simple_page("Factuur toevoegen", "facturen", inhoud)
     return render_template_string(pagina, vooringevuld_bedrijf=vooringevuld_bedrijf, vi_contract=vi_contract,
                                     vi_referentie=vi_referentie, vi_bedrag=vi_bedrag, vi_factuurdatum=vi_factuurdatum,
+                                    vi_leverdatum=vi_leverdatum, vi_incoterm=vi_incoterm,
                                     vi_vervaldatum=vi_vervaldatum, alle_bedrijfsnamen_fact=alle_bedrijfsnamen_fact)
 
 
@@ -3761,6 +3804,182 @@ def facturen_pagina():
     return render_template_string(pagina, **_tab_context)
 
 
+def _genereer_factuur_pdf(factuur):
+    """Bouwt een volledige, wettelijk correcte NL-factuur als PDF: eigen
+    bedrijfsgegevens (afzender), klantgegevens (incl. BTW-nummer bij EU B2B),
+    factuurgegevens (nummer/datum/leverdatum/vervaldatum), regels met
+    omschrijving/aantal/prijs/subtotaal, en de BTW-uitsplitsing (of 'BTW
+    verlegd' met toelichting). Internationale velden (incoterm, EORI) alleen
+    getoond als ze zijn ingevuld — een binnenlandse factuur wordt er niet
+    onnodig mee volgestouwd."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_RIGHT
+
+    eigen = laad_eigen_bedrijfsgegevens()
+    klant = factuur.get("klant_gegevens") or {"naam": factuur.get("bedrijf",""), "adres":"", "postcode":"", "stad":"", "land":"", "kvk_nummer":"", "vat_nummer":""}
+    bedragen = bereken_factuur_bedragen(factuur)
+    regels = factuur.get("regels", [])
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=18*mm, bottomMargin=18*mm, leftMargin=20*mm, rightMargin=20*mm)
+    stijlen = getSampleStyleSheet()
+    titel_stijl = ParagraphStyle("FactuurTitel", parent=stijlen["Title"], fontSize=20, textColor=colors.HexColor("#0d5c62"))
+    label_stijl = ParagraphStyle("Label", parent=stijlen["Normal"], fontSize=8.5, textColor=colors.HexColor("#64748b"))
+    klein_stijl = ParagraphStyle("Klein", parent=stijlen["Normal"], fontSize=8.5, textColor=colors.HexColor("#64748b"), leading=12)
+    normaal_stijl = stijlen["Normal"]
+    rechts_stijl = ParagraphStyle("Rechts", parent=stijlen["Normal"], alignment=TA_RIGHT)
+
+    elementen = []
+
+    # --- Header: eigen bedrijfsgegevens (afzender) links, klant rechts ---
+    eigen_adresregel = f"{eigen.get('adres','')}<br/>{eigen.get('postcode','')} {eigen.get('stad','')}<br/>{eigen.get('land','')}"
+    eigen_blok = [
+        Paragraph(f"<b>{eigen.get('naam','') or '—'}</b>", normaal_stijl),
+        Paragraph(eigen_adresregel, klein_stijl),
+        Spacer(1, 4),
+        Paragraph(f"KvK: {eigen.get('kvk_nummer','') or '—'}", klein_stijl),
+        Paragraph(f"BTW-id: {eigen.get('btw_nummer','') or '—'}", klein_stijl),
+        Paragraph(f"IBAN: {eigen.get('iban','') or '—'}{' · BIC: ' + eigen['bic'] if eigen.get('bic') else ''}", klein_stijl),
+    ]
+    klant_adresregel = f"{klant.get('adres','') or '—'}<br/>{klant.get('postcode','')} {klant.get('stad','')}<br/>{klant.get('land','')}"
+    klant_blok = [
+        Paragraph("<b>Factuur aan</b>", label_stijl),
+        Paragraph(f"<b>{klant.get('naam','') or '—'}</b>", normaal_stijl),
+        Paragraph(klant_adresregel, klein_stijl),
+    ]
+    if klant.get("kvk_nummer"):
+        klant_blok.append(Paragraph(f"KvK: {klant['kvk_nummer']}", klein_stijl))
+    if klant.get("vat_nummer"):
+        klant_blok.append(Paragraph(f"BTW-nummer: {klant['vat_nummer']}", klein_stijl))
+
+    header_tabel = Table([[eigen_blok, klant_blok]], colWidths=[85*mm, 75*mm])
+    header_tabel.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "TOP")]))
+    elementen.append(header_tabel)
+    elementen.append(Spacer(1, 22))
+
+    # --- Titel + factuurgegevens ---
+    elementen.append(Paragraph("Factuur", titel_stijl))
+    elementen.append(Spacer(1, 8))
+
+    def factuurgegevens_rij(label, waarde):
+        return [Paragraph(label, label_stijl), Paragraph(str(waarde) if waarde else "—", normaal_stijl)]
+
+    factuurgegevens = [
+        factuurgegevens_rij("Factuurnummer", factuur.get("factuurnummer","")),
+        factuurgegevens_rij("Factuurdatum", factuur.get("factuurdatum","")),
+    ]
+    if factuur.get("leverdatum") and factuur.get("leverdatum") != factuur.get("factuurdatum"):
+        factuurgegevens.append(factuurgegevens_rij("Leverings-/prestatiedatum", factuur["leverdatum"]))
+    factuurgegevens.append(factuurgegevens_rij("Uiterste betaaldatum", factuur.get("vervaldatum","")))
+    if factuur.get("incoterm"):
+        factuurgegevens.append(factuurgegevens_rij("Incoterm", factuur["incoterm"]))
+    if eigen.get("eori_nummer") and bedragen["btw_verlegd"]:
+        factuurgegevens.append(factuurgegevens_rij("EORI-nummer", eigen["eori_nummer"]))
+
+    fg_tabel = Table(factuurgegevens, colWidths=[55*mm, 105*mm])
+    fg_tabel.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "TOP"), ("BOTTOMPADDING", (0,0), (-1,-1), 4), ("TOPPADDING", (0,0), (-1,-1), 4),
+    ]))
+    elementen.append(fg_tabel)
+    elementen.append(Spacer(1, 20))
+
+    # --- Regels ---
+    if regels:
+        kop = [Paragraph("Datum", label_stijl), Paragraph("Omschrijving", label_stijl),
+               Paragraph("Aantal (t)", label_stijl), Paragraph("Prijs/t", label_stijl),
+               Paragraph("Bedrag", label_stijl)]
+        regelrijen = [kop]
+        for r in regels:
+            omschrijving = f"{r.get('materiaal','')} — {r.get('kwaliteit','')}" if r.get("kwaliteit") else r.get("materiaal","")
+            if r.get("contractnummer"):
+                omschrijving += f"<br/><font size=7 color='#94a3b8'>{r['contractnummer']}</font>"
+            try:
+                bedrag_tekst = f"{float(r.get('bedrag', 0)):.2f}"
+            except (ValueError, TypeError):
+                bedrag_tekst = str(r.get("bedrag", ""))
+            regelrijen.append([
+                Paragraph(r.get("datum","") or "—", normaal_stijl),
+                Paragraph(omschrijving, normaal_stijl),
+                Paragraph(f"{r.get('ton','')}", rechts_stijl),
+                Paragraph(f"{r.get('prijs_per_ton','')} {r.get('valuta','')}", rechts_stijl),
+                Paragraph(bedrag_tekst, rechts_stijl),
+            ])
+        regeltabel = Table(regelrijen, colWidths=[22*mm, 68*mm, 22*mm, 28*mm, 28*mm])
+        regeltabel.setStyle(TableStyle([
+            ("LINEBELOW", (0,0), (-1,0), 0.8, colors.HexColor("#0d5c62")),
+            ("LINEBELOW", (0,1), (-1,-1), 0.4, colors.HexColor("#e2e8f0")),
+            ("TOPPADDING", (0,0), (-1,-1), 6), ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ]))
+        elementen.append(regeltabel)
+    else:
+        # Handmatige factuur zonder regels: één omschrijvingsregel met het totaalbedrag.
+        enkele_rij = [[Paragraph("Omschrijving", label_stijl), Paragraph("Bedrag", label_stijl)],
+                       [Paragraph(factuur.get("omschrijving") or factuur.get("referentie") or "—", normaal_stijl),
+                        Paragraph(f"{bedragen['subtotaal']:.2f}", rechts_stijl)]]
+        enkele_tabel = Table(enkele_rij, colWidths=[130*mm, 40*mm])
+        enkele_tabel.setStyle(TableStyle([
+            ("LINEBELOW", (0,0), (-1,0), 0.8, colors.HexColor("#0d5c62")),
+            ("LINEBELOW", (0,1), (-1,-1), 0.4, colors.HexColor("#e2e8f0")),
+            ("TOPPADDING", (0,0), (-1,-1), 6), ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ]))
+        elementen.append(enkele_tabel)
+
+    elementen.append(Spacer(1, 14))
+
+    # --- Totalen: subtotaal excl. BTW, BTW-bedrag (of 'BTW verlegd'), totaal incl. BTW ---
+    valuta = regels[0].get("valuta", "EUR") if regels else "EUR"
+    totalen_rijen = [[Paragraph("Subtotaal (excl. BTW)", normaal_stijl), Paragraph(f"{valuta} {bedragen['subtotaal']:.2f}", rechts_stijl)]]
+    if bedragen["btw_verlegd"]:
+        totalen_rijen.append([Paragraph("BTW verlegd", normaal_stijl), Paragraph("€ 0,00", rechts_stijl)])
+    else:
+        totalen_rijen.append([Paragraph(f"BTW ({bedragen['btw_percentage']:.0f}%)", normaal_stijl), Paragraph(f"{valuta} {bedragen['btw_bedrag']:.2f}", rechts_stijl)])
+    totalen_rijen.append([Paragraph("<b>Totaal (incl. BTW)</b>", normaal_stijl), Paragraph(f"<b>{valuta} {bedragen['totaal']:.2f}</b>", rechts_stijl)])
+
+    totalen_tabel = Table(totalen_rijen, colWidths=[150*mm, 20*mm])
+    totalen_tabel.setStyle(TableStyle([
+        ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LINEABOVE", (0,-1), (-1,-1), 0.8, colors.HexColor("#0d5c62")),
+    ]))
+    elementen.append(totalen_tabel)
+
+    if bedragen["btw_verlegd"]:
+        elementen.append(Spacer(1, 10))
+        elementen.append(Paragraph(bedragen["btw_verlegd_uitleg"], klein_stijl))
+
+    elementen.append(Spacer(1, 24))
+    elementen.append(Paragraph(
+        f"Gelieve het totaalbedrag vóór {factuur.get('vervaldatum','') or 'de uiterste betaaldatum'} over te maken naar "
+        f"IBAN {eigen.get('iban','') or '—'} onder vermelding van factuurnummer {factuur.get('factuurnummer','')}.",
+        klein_stijl
+    ))
+
+    doc.build(elementen)
+    buffer.seek(0)
+    return buffer.read()
+
+
+@app.route("/facturen/<factuur_id>/pdf")
+def factuur_pdf(factuur_id):
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    alle_facturen = laad_facturen()
+    factuur = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
+    if not factuur:
+        pagina = render_simple_page("Niet gevonden", "facturen", '<div class="page-title">Factuur niet gevonden</div><div class="lege-staat">Deze factuur bestaat niet (meer). <a href="/facturen">Terug naar Facturen</a></div>')
+        return render_template_string(pagina), 404
+
+    pdf_bytes = _genereer_factuur_pdf(factuur)
+    bestandsnaam = factuur.get("factuurnummer") or factuur.get("referentie") or factuur_id
+    return Response(pdf_bytes, mimetype="application/pdf",
+                     headers={"Content-Disposition": f'inline; filename="factuur_{bestandsnaam}.pdf"'})
+
+
 @app.route("/facturen/<factuur_id>")
 def factuur_detail(factuur_id):
     """Detailweergave van één factuur — voor door de app zelf gegenereerde
@@ -3779,17 +3998,20 @@ def factuur_detail(factuur_id):
 
     factuur["status"] = bepaal_factuur_status(factuur)
     regels = factuur.get("regels", [])
+    bedragen = bereken_factuur_bedragen(factuur)
+    klant = factuur.get("klant_gegevens") or {}
+    valuta_weergave = regels[0].get("valuta", "EUR") if regels else "EUR"
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/facturen" style="color:var(--gray-400);text-decoration:none;">Facturen</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ factuur.referentie or factuur.id }}</span>
+    <a href="/facturen" style="color:var(--gray-400);text-decoration:none;">Facturen</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ factuur.factuurnummer or factuur.referentie or factuur.id }}</span>
 </div>
-<div class="page-title">{{ factuur.bedrijf }}</div>
+<div class="page-title">{{ factuur.bedrijf }} <span style="font-size:0.55em;font-weight:600;color:var(--gray-400);">{{ factuur.factuurnummer }}</span></div>
 
 <div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
     <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
-        <div style="font-size:1.3rem;font-weight:800;color:var(--gray-800);">€{{ "{:,.2f}".format(factuur.bedrag|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
-        <div style="font-size:0.75rem;color:var(--gray-400);">Totaalbedrag</div>
+        <div style="font-size:1.3rem;font-weight:800;color:var(--gray-800);">{{ valuta_weergave }} {{ "{:,.2f}".format(bedragen.totaal).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Totaal (incl. BTW)</div>
     </div>
     <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
         <div style="font-size:1.3rem;font-weight:800;color:{{ '#16a34a' if factuur.status=='Betaald' else ('#dc2626' if factuur.status=='Te laat' else 'var(--gray-800)') }};">{{ factuur.status }}</div>
@@ -3797,7 +4019,7 @@ def factuur_detail(factuur_id):
     </div>
     <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
         <div style="font-size:1.3rem;font-weight:800;color:var(--gray-800);">{{ factuur.vervaldatum or '—' }}</div>
-        <div style="font-size:0.75rem;color:var(--gray-400);">Vervaldatum</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Uiterste betaaldatum</div>
     </div>
     {% if regels %}
     <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
@@ -3807,11 +4029,29 @@ def factuur_detail(factuur_id):
     {% endif %}
 </div>
 
-<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:20px;">
-    <b>Referentie:</b> {{ factuur.referentie or '—' }}
-    {% if factuur.omschrijving %} · {{ factuur.omschrijving }}{% endif %}
-    {% if factuur.contract_referentie %} · <a href="/handelsorders?zoekterm={{ factuur.contract_referentie|urlencode }}" style="color:var(--brand-600);text-decoration:none;">↳ {{ factuur.contract_referentie }}</a>{% endif %}
-    <br><b>Factuurdatum:</b> {{ factuur.factuurdatum or '—' }} · <b>Aangemaakt door:</b> {{ factuur.gebruiker or '—' }} op {{ factuur.aangemaakt or '—' }}
+<div style="display:flex;gap:24px;margin-bottom:24px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:220px;font-size:12.5px;color:var(--gray-600);">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Factuurgegevens</div>
+        <b>Factuurnummer:</b> {{ factuur.factuurnummer or '—' }}<br>
+        <b>Factuurdatum:</b> {{ factuur.factuurdatum or '—' }}<br>
+        {% if factuur.leverdatum and factuur.leverdatum != factuur.factuurdatum %}<b>Leverdatum:</b> {{ factuur.leverdatum }}<br>{% endif %}
+        {% if factuur.incoterm %}<b>Incoterm:</b> {{ factuur.incoterm }}<br>{% endif %}
+        <b>Referentie:</b> {{ factuur.referentie or '—' }}
+        {% if factuur.omschrijving %} · {{ factuur.omschrijving }}{% endif %}
+        {% if factuur.contract_referentie %} · <a href="/handelsorders?zoekterm={{ factuur.contract_referentie|urlencode }}" style="color:var(--brand-600);text-decoration:none;">↳ {{ factuur.contract_referentie }}</a>{% endif %}<br>
+        <b>Aangemaakt door:</b> {{ factuur.gebruiker or '—' }} op {{ factuur.aangemaakt or '—' }}
+    </div>
+    {% if klant.adres %}
+    <div style="flex:1;min-width:220px;font-size:12.5px;color:var(--gray-600);">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Klantgegevens (op moment van facturering)</div>
+        <b>{{ factuur.bedrijf }}</b><br>
+        {{ klant.adres }}<br>
+        {{ klant.postcode }} {{ klant.stad }}<br>
+        {{ klant.land }}<br>
+        {% if klant.kvk_nummer %}KvK: {{ klant.kvk_nummer }}<br>{% endif %}
+        {% if klant.vat_nummer %}BTW-nummer: {{ klant.vat_nummer }}{% endif %}
+    </div>
+    {% endif %}
 </div>
 
 {% if regels %}
@@ -3837,14 +4077,32 @@ def factuur_detail(factuur_id):
         <span style="width:110px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--gray-800);">{{ "%.2f"|format(r.bedrag) }} {{ r.valuta }}</span>
     </div>
     {% endfor %}
-    <div style="display:flex;align-items:center;padding:11px 4px;background:var(--gray-50);font-size:13px;">
-        <span style="flex:1;text-align:right;font-weight:700;color:var(--gray-600);padding-right:16px;">Totaal</span>
-        <span style="width:110px;text-align:right;font-family:var(--font-mono);font-weight:800;color:var(--gray-800);">€{{ "{:,.2f}".format(factuur.bedrag|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</span>
-    </div>
 </div>
 {% endif %}
 
+<div style="max-width:340px;margin-left:auto;margin-bottom:20px;font-size:12.5px;">
+    <div style="display:flex;justify-content:space-between;padding:6px 4px;color:var(--gray-600);">
+        <span>Subtotaal (excl. BTW)</span><span style="font-family:var(--font-mono);">{{ valuta_weergave }} {{ "%.2f"|format(bedragen.subtotaal) }}</span>
+    </div>
+    {% if bedragen.btw_verlegd %}
+    <div style="display:flex;justify-content:space-between;padding:6px 4px;color:var(--gray-600);">
+        <span>BTW verlegd</span><span style="font-family:var(--font-mono);">{{ valuta_weergave }} 0.00</span>
+    </div>
+    {% else %}
+    <div style="display:flex;justify-content:space-between;padding:6px 4px;color:var(--gray-600);">
+        <span>BTW ({{ bedragen.btw_percentage|round|int }}%)</span><span style="font-family:var(--font-mono);">{{ valuta_weergave }} {{ "%.2f"|format(bedragen.btw_bedrag) }}</span>
+    </div>
+    {% endif %}
+    <div style="display:flex;justify-content:space-between;padding:8px 4px;border-top:1px solid var(--gray-800);font-weight:800;color:var(--gray-800);">
+        <span>Totaal (incl. BTW)</span><span style="font-family:var(--font-mono);">{{ valuta_weergave }} {{ "%.2f"|format(bedragen.totaal) }}</span>
+    </div>
+    {% if bedragen.btw_verlegd %}
+    <div style="font-size:11px;color:var(--gray-400);margin-top:6px;">{{ bedragen.btw_verlegd_uitleg }}</div>
+    {% endif %}
+</div>
+
 <div style="display:flex;gap:8px;">
+    <a href="/facturen/{{ factuur.id }}/pdf" target="_blank" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:var(--brand-600);color:#fff;border-radius:6px;text-decoration:none;">PDF downloaden</a>
     {% if factuur.status != "Betaald" %}
     <form method="POST" action="/facturen" style="margin:0;">
         <input type="hidden" name="actie" value="markeer_betaald">
@@ -3855,8 +4113,8 @@ def factuur_detail(factuur_id):
     <a href="/bedrijf/{{ factuur.bedrijf|urlencode }}" style="font-size:12.5px;font-weight:600;padding:8px 16px;border:1px solid var(--gray-200);border-radius:6px;color:var(--gray-600);text-decoration:none;">Naar bedrijfsprofiel</a>
 </div>
     """
-    pagina = render_simple_page(factuur.get("referentie") or "Factuur", "facturen", inhoud)
-    return render_template_string(pagina, factuur=factuur, regels=regels)
+    pagina = render_simple_page(factuur.get("factuurnummer") or factuur.get("referentie") or "Factuur", "facturen", inhoud)
+    return render_template_string(pagina, factuur=factuur, regels=regels, bedragen=bedragen, klant=klant, valuta_weergave=valuta_weergave)
 
 @app.route("/facturen/logistieke-orders", methods=["GET", "POST"])
 def facturen_logistieke_orders():
@@ -4663,6 +4921,106 @@ def gebruikers_beheer():
                                     afdelingen=AFDELINGEN, afdeling_labels=AFDELING_LABELS, rollen=ROLLEN, rol_labels=ROL_LABELS,
                                     organisatiestructuur=laad_organisatiestructuur(), organisatiestructuur_json=json.dumps(laad_organisatiestructuur()))
 
+@app.route("/instellingen/eigen-bedrijfsgegevens", methods=["GET", "POST"])
+def instellingen_eigen_bedrijfsgegevens():
+    """Peute's eigen bedrijfsgegevens — worden als afzender op elke
+    gegenereerde factuur gebruikt (verplicht voor een geldige NL-factuur:
+    bedrijfsnaam, adres, KvK, BTW-id, IBAN)."""
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
+
+    if request.method == "POST":
+        gegevens = {
+            "naam": request.form.get("naam", "").strip(),
+            "adres": request.form.get("adres", "").strip(),
+            "postcode": request.form.get("postcode", "").strip(),
+            "stad": request.form.get("stad", "").strip(),
+            "land": request.form.get("land", "Nederland").strip(),
+            "kvk_nummer": request.form.get("kvk_nummer", "").strip(),
+            "btw_nummer": request.form.get("btw_nummer", "").strip(),
+            "iban": request.form.get("iban", "").strip(),
+            "bic": request.form.get("bic", "").strip(),
+            "eori_nummer": request.form.get("eori_nummer", "").strip(),
+        }
+        bewaar_eigen_bedrijfsgegevens(gegevens)
+        return redirect(url_for("instellingen_eigen_bedrijfsgegevens", opgeslagen="1"))
+
+    waarden = laad_eigen_bedrijfsgegevens()
+    opgeslagen = request.args.get("opgeslagen") == "1"
+    ontbrekende_velden = [label for veld, label in [
+        ("naam","Bedrijfsnaam"), ("adres","Adres"), ("kvk_nummer","KvK-nummer"),
+        ("btw_nummer","BTW-nummer"), ("iban","IBAN"),
+    ] if not waarden.get(veld)]
+
+    inhoud = """
+<div class="page-title">Eigen bedrijfsgegevens</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Deze gegevens verschijnen als afzender op elke factuur die het systeem genereert — verplicht voor een geldige Nederlandse factuur.</p>
+
+{% if opgeslagen %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">Opgeslagen.</div>{% endif %}
+{% if ontbrekende_velden %}
+<div style="background:#fef3c7;color:#b45309;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">
+    Nog niet compleet — ontbreekt: {{ ontbrekende_velden|join(', ') }}. Facturen kunnen wel al gegenereerd worden, maar zijn dan niet volledig conform de wettelijke eisen.
+</div>
+{% endif %}
+
+<div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:600px;">
+    <form method="POST">
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bedrijfsnaam *</label>
+        <input type="text" name="naam" value="{{ waarden.naam }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
+
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Adres *</label>
+        <input type="text" name="adres" value="{{ waarden.adres }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Postcode</label>
+                <input type="text" name="postcode" value="{{ waarden.postcode }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Stad</label>
+                <input type="text" name="stad" value="{{ waarden.stad }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Land</label>
+                <input type="text" name="land" value="{{ waarden.land }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">KvK-nummer *</label>
+                <input type="text" name="kvk_nummer" value="{{ waarden.kvk_nummer }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">BTW-identificatienummer *</label>
+                <input type="text" name="btw_nummer" value="{{ waarden.btw_nummer }}" required placeholder="NL000000000B00" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:6px;">
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">IBAN *</label>
+                <input type="text" name="iban" value="{{ waarden.iban }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">BIC</label>
+                <input type="text" name="bic" value="{{ waarden.bic }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">EORI-nummer</label>
+                <input type="text" name="eori_nummer" value="{{ waarden.eori_nummer }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+        </div>
+        <div style="font-size:11px;color:var(--gray-400);margin-bottom:16px;">EORI alleen nodig bij internationale handel buiten de EU.</div>
+
+        <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Opslaan</button>
+    </form>
+</div>
+    """
+    pagina = render_simple_page("Eigen bedrijfsgegevens", "instellingen", inhoud)
+    return render_template_string(pagina, waarden=waarden, opgeslagen=opgeslagen, ontbrekende_velden=ontbrekende_velden)
+
+
 @app.route("/instellingen")
 def instellingen():
     _guard = vereist_afdeling_of_403("instellingen")
@@ -4690,6 +5048,7 @@ def instellingen():
         <a href="/gebruikers-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
         <a href="/materialen-beheer" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Materialen beheren</a>
         <a href="/instellingen/commercieel" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;margin-top:8px;">→ Commerciële instellingen (Incoterms, Betalingstermijnen, Valuta, POD, Bedrijfseenheden)</a>
+        <a href="/instellingen/eigen-bedrijfsgegevens" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;margin-top:8px;">→ Eigen bedrijfsgegevens (voor op facturen: KvK, BTW, IBAN)</a>
     </div>
     <div class="info-kaart" style="max-width:400px;margin-top:16px;">
         <div class="dg-kaart-titel">Bedrijfslogo (op de weegbon)</div>
