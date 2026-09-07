@@ -2665,25 +2665,7 @@ def _overzicht_factuur_inhoud():
     if request.method == "POST":
         actie = request.form.get("actie", "")
         alle_facturen = laad_facturen()
-        if actie == "toevoegen":
-            nieuwe_factuur = {
-                "id": str(uuid.uuid4()),
-                "bedrijf": request.form.get("bedrijf", "").strip(),
-                "referentie": request.form.get("referentie", "").strip(),
-                "omschrijving": request.form.get("omschrijving", "").strip(),
-                "bedrag": request.form.get("bedrag", "").strip(),
-                "btw_percentage": request.form.get("btw_percentage", "").strip(),
-                "factuurdatum": request.form.get("factuurdatum", "").strip(),
-                "vervaldatum": request.form.get("vervaldatum", "").strip(),
-                "betaalddatum": "",
-                "contract_referentie": request.form.get("contract_referentie", "").strip(),
-                "gebruiker": session.get("gebruikersnaam", ""),
-                "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
-            }
-            if nieuwe_factuur["bedrijf"] and nieuwe_factuur["bedrag"] and nieuwe_factuur["vervaldatum"]:
-                alle_facturen.append(nieuwe_factuur)
-                bewaar_facturen(alle_facturen)
-        elif actie == "markeer_betaald":
+        if actie == "markeer_betaald":
             factuur_id = request.form.get("factuur_id", "")
             for f in alle_facturen:
                 if f.get("id") == factuur_id:
@@ -2829,33 +2811,7 @@ def _overzicht_factuur_inhoud():
     <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_facturen|length }} van {{ alle_facturen|length }}</span>
 </form>
 
-<div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px 18px;max-width:600px;margin-bottom:20px;">
-    <div class="dg-kaart-titel" style="margin-bottom:10px;">Factuur toevoegen</div>
-    {% if vi_contract %}
-    <div style="background:#eff6ff;color:#1d4ed8;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:12.5px;">
-        Wordt gekoppeld aan contract <b>{{ vi_contract }}</b>.
-    </div>
-    {% endif %}
-    <form method="POST">
-        <input type="hidden" name="actie" value="toevoegen">
-        <input type="hidden" name="contract_referentie" value="{{ vi_contract }}">
-        <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" list="bedrijvenLijstFacturen" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
-        <datalist id="bedrijvenLijstFacturen">{% for naam in alle_bedrijfsnamen_fact %}<option value="{{ naam }}">{% endfor %}</datalist>
-        <input type="text" name="referentie" placeholder="Referentie / omschrijving" value="{{ vi_referentie }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
-            <input type="text" name="bedrag" placeholder="Bedrag (€)" value="{{ vi_bedrag }}" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-            <select name="btw_percentage" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-                <option value="">BTW %</option>
-                <option value="0">0%</option>
-                <option value="9">9%</option>
-                <option value="21">21%</option>
-            </select>
-            <input type="date" name="factuurdatum" title="Factuurdatum" value="{{ vi_factuurdatum }}" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-            <input type="date" name="vervaldatum" title="Vervaldatum" value="{{ vi_vervaldatum }}" required style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-        </div>
-        <button type="submit" style="margin-top:10px;padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">+ Factuur toevoegen</button>
-    </form>
-</div>
+<a href="/facturen/nieuw{% if vooringevuld_bedrijf %}?bedrijf={{ vooringevuld_bedrijf|urlencode }}{% endif %}" style="display:inline-block;margin-bottom:20px;padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;text-decoration:none;font-size:13px;">+ Factuur toevoegen</a>
 
 {% if getoonde_facturen %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
@@ -3655,6 +3611,110 @@ def facturen_peute_genereer():
     bewaar_logistieke_orders(alle_orders)
 
     return redirect(url_for("facturen_pagina", modus="overzicht", bedrijf=leverancier))
+
+
+@app.route("/facturen/nieuw", methods=["GET", "POST"])
+def facturen_nieuw():
+    """Handmatig een factuur toevoegen — een eigen, aparte pagina (i.p.v. een
+    formulier ingeklemd tussen de KPI's en de factuurlijst op het Overzicht-
+    tabblad) voor overzichtelijkheid. Bereikbaar met een vooringevulde
+    leverancier/klant via ?bedrijf=... (bv. vanaf de Leveranciers/Klanten-
+    pagina, een contract, of het bedrijfsprofiel)."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    if request.method == "POST":
+        nieuwe_factuur = {
+            "id": str(uuid.uuid4()),
+            "bedrijf": request.form.get("bedrijf", "").strip(),
+            "referentie": request.form.get("referentie", "").strip(),
+            "omschrijving": request.form.get("omschrijving", "").strip(),
+            "bedrag": request.form.get("bedrag", "").strip(),
+            "btw_percentage": request.form.get("btw_percentage", "").strip(),
+            "factuurdatum": request.form.get("factuurdatum", "").strip(),
+            "vervaldatum": request.form.get("vervaldatum", "").strip(),
+            "betaalddatum": "",
+            "contract_referentie": request.form.get("contract_referentie", "").strip(),
+            "gebruiker": session.get("gebruikersnaam", ""),
+            "aangemaakt": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
+        }
+        if nieuwe_factuur["bedrijf"] and nieuwe_factuur["bedrag"] and nieuwe_factuur["vervaldatum"]:
+            alle_facturen = laad_facturen()
+            alle_facturen.append(nieuwe_factuur)
+            bewaar_facturen(alle_facturen)
+            return redirect(url_for("factuur_detail", factuur_id=nieuwe_factuur["id"]))
+        # Verplichte velden ontbreken -> terug naar het formulier, met wat al was ingevuld behouden
+        return redirect(url_for("facturen_nieuw", bedrijf=nieuwe_factuur["bedrijf"],
+                                  referentie=nieuwe_factuur["referentie"], bedrag=nieuwe_factuur["bedrag"],
+                                  factuurdatum=nieuwe_factuur["factuurdatum"], vervaldatum=nieuwe_factuur["vervaldatum"],
+                                  contract_referentie=nieuwe_factuur["contract_referentie"]))
+
+    vooringevuld_bedrijf = request.args.get("bedrijf", "")
+    vi_contract = request.args.get("contract_referentie", "").strip()
+    vi_referentie = request.args.get("referentie", "").strip()
+    vi_bedrag = request.args.get("bedrag", "").strip()
+    vi_factuurdatum = request.args.get("factuurdatum", "").strip()
+    vi_vervaldatum = request.args.get("vervaldatum", "").strip()
+
+    _status_alle_fact = laad_status()
+    _accountmanagers_alle_fact = laad_accountmanagers()
+    alle_bedrijfsnamen_fact = sorted(set(_status_alle_fact.keys()) | set(_accountmanagers_alle_fact.keys()))[:500]
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/facturen" style="color:var(--gray-400);text-decoration:none;">Facturen</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuwe factuur</span>
+</div>
+<div class="page-title">Factuur toevoegen</div>
+
+<div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:600px;">
+    {% if vi_contract %}
+    <div style="background:#eff6ff;color:#1d4ed8;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">
+        Wordt gekoppeld aan contract <b>{{ vi_contract }}</b>.
+    </div>
+    {% endif %}
+    <form method="POST">
+        <input type="hidden" name="contract_referentie" value="{{ vi_contract }}">
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bedrijf</label>
+        <input type="text" name="bedrijf" placeholder="Bedrijfsnaam" value="{{ vooringevuld_bedrijf }}" list="bedrijvenLijstFacturen" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
+        <datalist id="bedrijvenLijstFacturen">{% for naam in alle_bedrijfsnamen_fact %}<option value="{{ naam }}">{% endfor %}</datalist>
+
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Referentie / omschrijving</label>
+        <input type="text" name="referentie" placeholder="Referentie / omschrijving" value="{{ vi_referentie }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bedrag (€)</label>
+                <input type="text" name="bedrag" placeholder="Bedrag (€)" value="{{ vi_bedrag }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">BTW %</label>
+                <select name="btw_percentage" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+                    <option value="">BTW %</option>
+                    <option value="0">0%</option>
+                    <option value="9">9%</option>
+                    <option value="21">21%</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Factuurdatum</label>
+                <input type="date" name="factuurdatum" value="{{ vi_factuurdatum }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+            <div>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Vervaldatum</label>
+                <input type="date" name="vervaldatum" value="{{ vi_vervaldatum }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
+            </div>
+        </div>
+        <div style="margin-top:20px;display:flex;gap:8px;">
+            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">+ Factuur toevoegen</button>
+            <a href="/facturen" style="padding:9px 20px;color:var(--gray-400);text-decoration:none;font-size:13px;">Annuleren</a>
+        </div>
+    </form>
+</div>
+    """
+    pagina = render_simple_page("Factuur toevoegen", "facturen", inhoud)
+    return render_template_string(pagina, vooringevuld_bedrijf=vooringevuld_bedrijf, vi_contract=vi_contract,
+                                    vi_referentie=vi_referentie, vi_bedrag=vi_bedrag, vi_factuurdatum=vi_factuurdatum,
+                                    vi_vervaldatum=vi_vervaldatum, alle_bedrijfsnamen_fact=alle_bedrijfsnamen_fact)
 
 
 @app.route("/facturen", methods=["GET", "POST"])

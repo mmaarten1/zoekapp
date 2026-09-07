@@ -1003,7 +1003,7 @@ def handelsorder_detail(order_id):
         {% if bestaande_factuur %}
         <a href="/facturen?bedrijf={{ order.tegenpartij_naam|urlencode }}" style="padding:9px 18px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Factuur bekijken ({{ bestaande_factuur.status }})</a>
         {% else %}
-        <a href="/facturen?bedrijf={{ order.tegenpartij_naam|urlencode }}&contract_referentie={{ order.contractnummer|urlencode }}&referentie={{ order.contractnummer|urlencode }}&bedrag={{ factuur_bedrag_voorstel }}&vervaldatum={{ factuur_vervaldatum_voorstel }}" style="padding:9px 18px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Factuur aanmaken →</a>
+        <a href="/facturen/nieuw?bedrijf={{ order.tegenpartij_naam|urlencode }}&contract_referentie={{ order.contractnummer|urlencode }}&referentie={{ order.contractnummer|urlencode }}&bedrag={{ factuur_bedrag_voorstel }}&vervaldatum={{ factuur_vervaldatum_voorstel }}" style="padding:9px 18px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Factuur aanmaken →</a>
         {% endif %}
     {% endif %}
     {% endif %}

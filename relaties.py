@@ -191,6 +191,7 @@ def leveranciers_pagina():
             </span>
         </a>
         <a href="/leverancier/{{ b.naam|urlencode }}/commercieel" style="font-size:11px;color:var(--gray-400);text-decoration:none;margin-left:8px;white-space:nowrap;">Commercieel →</a>
+        <a href="/facturen/nieuw?bedrijf={{ b.naam|urlencode }}" style="font-size:11px;color:var(--gray-400);text-decoration:none;margin-left:8px;white-space:nowrap;">Factuur maken →</a>
         </div>
         {% endfor %}
     </div>
@@ -359,7 +360,8 @@ def klanten_pagina():
             <span style="width:100px;text-align:right;"></span>
         </div>
         {% for f in klanten_lijst %}
-        <a class="data-row" href="/bedrijf/{{ f.naam|urlencode }}"
+        <div class="data-row">
+        <a href="/bedrijf/{{ f.naam|urlencode }}" style="display:contents;color:inherit;text-decoration:none;"
            data-naam="{{ f.naam|e }}" data-locatie="{{ f.stad|default('',true)|e }}, {{ f.land|default('',true)|e }}" data-materialen="{{ f.materialen|default('',true)|e }}"
            data-status="{{ f.status|default('',true)|e }}">
             <span style="flex:1.6;font-weight:600;color:var(--gray-800);">🏭 {{ f.naam }}</span>
@@ -376,6 +378,8 @@ def klanten_pagina():
                 <span style="font-size:12px;font-weight:600;color:var(--brand-600);">Profiel →</span>
             </span>
         </a>
+        <a href="/facturen/nieuw?bedrijf={{ f.naam|urlencode }}" style="font-size:11px;color:var(--gray-400);text-decoration:none;margin-left:8px;white-space:nowrap;">Factuur maken →</a>
+        </div>
         {% endfor %}
     </div>
 </div>
