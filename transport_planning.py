@@ -185,8 +185,7 @@ def transport_planning_nieuw():
         # Combi: dit contract wordt samen met (een) ander(e) contract(en) in
         # dezelfde vrachtwagen/container geladen (kleine order, truck vol
         # maken) — allemaal gekoppeld via een gedeelde combi_groep_id.
-        _combi_ruw = request.form.get("combi_contracten", "").strip()
-        _combi_contracten = [c.strip() for c in _combi_ruw.split(",") if c.strip()]
+        _combi_contracten = [c.strip() for c in request.form.getlist("combi_contracten") if c.strip()]
         _combi_groep_id = str(uuid.uuid4()) if _combi_contracten else ""
         _gedeelde_velden["combi_groep_id"] = _combi_groep_id
         _gedeelde_velden["combi_gekoppelde_contracten"] = _combi_contracten
@@ -247,6 +246,10 @@ def transport_planning_nieuw():
     fabriek_namen = sorted({b["naam"] for b in toegewezen_klant_fabrieken()})
     fabriek_steden = {b["naam"]: b.get("stad","") for b in toegewezen_klant_fabrieken()}
     leverancier_namen_tp = sorted({b["naam"] for b in ENF_BEDRIJVEN})
+    combi_contract_opties = [
+        {"contractnummer": h["contractnummer"], "label": f"{h['contractnummer']} — {h.get('tegenpartij_naam','')} ({h.get('materiaal','')})"}
+        for h in laad_handelsorders() if h.get("status") == "Definitief"
+    ]
     _vi_leverancier = request.args.get("leverancier", "").strip()
     _vi_materiaal = request.args.get("materiaal", "").strip()
     _vi_hoeveelheid = request.args.get("hoeveelheid", "").strip()
@@ -382,11 +385,12 @@ def transport_planning_nieuw():
 
     <div style="margin-bottom:10px;">
         <label style="font-size:12.5px;color:var(--gray-600);">
-            <input type="checkbox" id="combi_checkbox" onchange="document.getElementById('combi_veld').style.display=this.checked?'block':'none';" style="margin-right:6px;">
+            <input type="checkbox" id="combi_checkbox" onchange="document.getElementById('combi_veld').style.display=this.checked?'block':'none'; if(this.checked && document.getElementById('combirijen_container').children.length===0){voegCombiRijToe();}" style="margin-right:6px;">
             Combi — dit gaat samen met (een) ander(e) contract(en) in dezelfde truck/container
         </label>
         <div id="combi_veld" style="display:none;margin-top:8px;">
-            <input type="text" name="combi_contracten" placeholder="Ander contractnummer (of meerdere, gescheiden door een komma)" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <div id="combirijen_container"></div>
+            <button type="button" onclick="voegCombiRijToe()" style="font-size:12px;padding:5px 10px;border:1px solid var(--gray-200);border-radius:6px;background:#fff;cursor:pointer;color:var(--brand-600);font-weight:600;">+ Contract toevoegen</button>
             <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">Deze contracten worden aan elkaar gekoppeld als 'samen geladen' — handig bij een kleine order die de vrachtwagen/container mee vol maakt.</div>
         </div>
     </div>
@@ -495,6 +499,36 @@ async function zoekAfhaallocaties(leverancierNaam) {
 if (document.getElementById("leverancier_tp_veld").value) {
     zoekAfhaallocaties(document.getElementById("leverancier_tp_veld").value);
 }
+var COMBI_CONTRACT_OPTIES = {{ combi_contract_opties|tojson }};
+var combiRijTeller = 0;
+function voegCombiRijToe() {
+    combiRijTeller++;
+    var i = combiRijTeller;
+    var rij = document.createElement("div");
+    rij.id = "combirij_" + i;
+    rij.style.cssText = "display:grid;grid-template-columns:1fr 30px;gap:8px;margin-bottom:6px;align-items:center;";
+    var select = document.createElement("select");
+    select.name = "combi_contracten";
+    select.style.cssText = "padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;box-sizing:border-box;font-family:inherit;width:100%;";
+    var legeOptie = document.createElement("option");
+    legeOptie.value = "";
+    legeOptie.textContent = "Contract kiezen...";
+    select.appendChild(legeOptie);
+    COMBI_CONTRACT_OPTIES.forEach(function(optie) {
+        var el = document.createElement("option");
+        el.value = optie.contractnummer;
+        el.textContent = optie.label;
+        select.appendChild(el);
+    });
+    var verwijderKnop = document.createElement("button");
+    verwijderKnop.type = "button";
+    verwijderKnop.textContent = "×";
+    verwijderKnop.style.cssText = "background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:16px;";
+    verwijderKnop.onclick = function() { rij.remove(); };
+    rij.appendChild(select);
+    rij.appendChild(verwijderKnop);
+    document.getElementById("combirijen_container").appendChild(rij);
+}
 async function toonTariefSuggestie(fabriekNaam) {
     var doel = document.getElementById("tarief_suggestie");
     if (!fabriekNaam) { doel.innerHTML = ""; return; }
@@ -519,7 +553,8 @@ async function toonTariefSuggestie(fabriekNaam) {
                                     vi_contract=_vi_contract, vi_fabriek=_vi_fabriek,
                                     vi_haven=_vi_haven, vi_transportmodus=_vi_transportmodus,
                                     vi_laadlocatie=request_laadlocatie_override, pod_havens=laad_pod_havens(),
-                                    fabriek_steden=fabriek_steden, leverancier_namen_tp=leverancier_namen_tp)
+                                    fabriek_steden=fabriek_steden, leverancier_namen_tp=leverancier_namen_tp,
+                                    combi_contract_opties=combi_contract_opties)
 
 @transport_planning_bp.route("/transport-planning/<transport_id>/koppel-verkoop", methods=["POST"])
 def transport_planning_koppel_verkoop(transport_id):
