@@ -16,7 +16,7 @@ from core import (
     laad_users, render_simple_page, vereist_afdeling_of_403,
     laad_leverancier_instellingen, bewaar_leverancier_instellingen, leverancier_instelling_voor,
     laad_betalingstermijnen, geocode_adres, laad_handelsorders, laad_logistieke_orders,
-    parse_hoeveelheid_getal,
+    parse_hoeveelheid_getal, parse_ton_intern,
 )
 
 relaties_bp = Blueprint("relaties", __name__)
@@ -468,7 +468,7 @@ def leverancier_commercieel_instellingen(naam):
     alle_logistieke_orders = laad_logistieke_orders()
     def _geleverd_op_contract(contractnummer):
         return round(sum(
-            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
             for o in alle_logistieke_orders
             if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
         ), 3)

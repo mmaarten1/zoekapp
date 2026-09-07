@@ -16,7 +16,7 @@ from core import (
     laad_voorraad, bewaar_voorraad, laad_shipments, bewaar_shipments,
     laad_contracten, bewaar_contracten, laad_voorraadmomenten, bewaar_voorraadmomenten,
     laad_orders, laad_status, laad_accountmanagers, laad_materiaal_taxonomie,
-    parse_hoeveelheid_getal, bereken_voorraad_status, is_huidige_gebruiker_admin,
+    parse_hoeveelheid_getal, parse_ton_intern, bereken_voorraad_status, is_huidige_gebruiker_admin,
     vereist_admin_of_403, render_simple_page, ENF_BEDRIJVEN,
     ALBLASSERDAM_NAAM, bepaal_shipment_flow_type, shipment_hoeveelheid, SHIPMENT_STATUSSEN,
     vereist_afdeling_of_403, laad_handelsorders, laad_voorraadwaardering, bewaar_voorraadwaardering,
@@ -252,7 +252,7 @@ def _bouw_mutatielog(periode=None):
         regels.append({
             "datum": o.get("aangemaakt",""), "materiaal": f"{o.get('materiaal','')} — {o.get('kwaliteit','')}" if o.get("kwaliteit") else o.get("materiaal",""),
             "type": "Ontvangst (vrachtwagen)" if _order_type != "verkoop" else "Uitgaand (vrachtwagen)",
-            "hoeveelheid": parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid","")) * (1 if _order_type != "verkoop" else -1),
+            "hoeveelheid": parse_ton_intern(o.get("werkelijke_hoeveelheid","")) * (1 if _order_type != "verkoop" else -1),
             "referentie": f"{o.get('ordernummer','')} · {o.get('contract_referentie','')}",
             "gebruiker": o.get("aangemaakt_door",""),
         })
@@ -918,7 +918,7 @@ def voorraad_beheer_pagina():
         # Vrachtwagen-inkoop: via logistieke orders (Weegbrug/Live Operaties)
         if order_type == "inkoop" and transportmodus != "Schip":
             _via_logistiek = sum(
-                parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
                 for o in _alle_logistieke_orders_vr
                 if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
             )
@@ -990,7 +990,7 @@ def voorraad_beheer_pagina():
                 )
             else:
                 _gepland = sum(
-                    parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                    parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
                     for o in laad_logistieke_orders()
                     if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
                 )
@@ -1245,7 +1245,7 @@ def voorraad_beheer_pagina():
                 <option value="">Alle materialen</option>
                 {% for m in shipment_materialen %}<option value="{{ m }}" {% if filter_shipment_materiaal == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
             </select>
-            {% if filter_flow_type or filter_shipment_status or filter_shipment_materiaal %}<a href="/voorraad#shipments" style="font-size:11px;color:var(--gray-400);text-decoration:none;">Wis</a>{% endif %}
+            {% if filter_flow_type or filter_shipment_status or filter_shipment_materiaal %}<a href="/voorraad/beheer#shipments" style="font-size:11px;color:var(--gray-400);text-decoration:none;">Wis</a>{% endif %}
             <span style="font-size:11px;color:var(--gray-400);">{{ getoonde_shipments|length }} van {{ actieve_shipments|length }}</span>
             <a href="/export-shipments-csv?filter_flow_type={{ filter_flow_type }}&filter_shipment_status={{ filter_shipment_status|urlencode }}&filter_shipment_materiaal={{ filter_shipment_materiaal|urlencode }}" style="font-size:11px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:4px 8px;border-radius:5px;">⬇ CSV</a>
         </form>
@@ -1719,14 +1719,14 @@ def _bereken_mutatiestaat(periode_sleutel, _diepte=0):
                 else:
                     for o in _logistieke_orders_alle:
                         if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond") and _in_periode(o.get("aangemaakt","")):
-                            ontvangsten += parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                            ontvangsten += parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
             elif h.get("order_type") == "verkoop":
                 for t in _transport_planning_alle:
                     if t.get("contract_referentie") == h["contractnummer"] and t.get("status") != "Geannuleerd" and _in_periode(t.get("aangemaakt","")):
                         uitgaand += parse_hoeveelheid_getal(t.get("hoeveelheid",""))
                 for o in _logistieke_orders_alle:
                     if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond") and _in_periode(o.get("aangemaakt","")):
-                        uitgaand += parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                        uitgaand += parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
 
         productie_uit_mutaties = _getal_of_0(_productie_effect.get(kwaliteit, 0))
         productie_verwerking = round(productie_uit_mutaties + _getal_of_0(handmatig.get("productie_verwerking", 0)), 1)
@@ -1766,7 +1766,7 @@ def _bereken_voorraadposities():
         if modus == "Schip":
             geleverd = sum(parse_hoeveelheid_getal(t.get("hoeveelheid","")) for t in _transport_planning_alle if t.get("contract_referentie")==h["contractnummer"] and t.get("status")!="Geannuleerd")
         else:
-            geleverd = sum(parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid","")) for o in _logistieke_orders_alle if o.get("contract_referentie")==h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond"))
+            geleverd = sum(parse_ton_intern(o.get("werkelijke_hoeveelheid","")) for o in _logistieke_orders_alle if o.get("contract_referentie")==h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond"))
         geleverd = round(geleverd, 3)
         resterend = round(max(0, volume - geleverd), 3)
 
@@ -1836,7 +1836,7 @@ def _bereken_beschikbaarheid_per_categorie(bedrijfseenheid_naam, alle_posities=N
                 for t in _transport_planning_besch
                 if t.get("contract_referentie") == h["contractnummer"] and t.get("status") not in ("Geannuleerd",)
             ) + sum(
-                parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+                parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
                 for o in _logistieke_orders_besch
                 if o.get("contract_referentie") == h["contractnummer"] and o.get("status") in ("Weegbon compleet","Afhandeling","Klaar voor Finance","Gefactureerd","Afgerond")
             )

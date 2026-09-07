@@ -630,6 +630,26 @@ def bewaar_geocode_cache(data):
 
 import math
 
+def parse_ton_intern(tekst):
+    """Voor TON-velden die de applicatie zelf programmatisch opslaat (bv.
+    werkelijke_hoeveelheid op een logistieke order, altijd via str(round(x, 3))
+    geschreven) — dus altijd Python's standaardformaat met een punt als
+    decimaalteken, nooit vrije-tekst gebruikersinvoer.
+
+    Gebruik dit i.p.v. parse_hoeveelheid_getal() voor zulke velden: die laatste
+    past een duizendtal/decimaal-heuristiek toe die bedoeld is voor vrije tekst
+    ('1.500 kg' -> 1500), maar ton-waarden met kg-precisie hebben vaak precies
+    3 decimalen (bv. '20.899') — de heuristiek zou dat dan verkeerd als
+    duizendtal lezen (20899 i.p.v. 20,899) terwijl het gewoon een decimaal is.
+    Voor deze, altijd-schoon-geformatteerde interne waarden is geen heuristiek
+    nodig: gewoon een directe, veilige float-conversie."""
+    if not tekst:
+        return 0.0
+    try:
+        return float(str(tekst).replace(",", "."))
+    except (ValueError, TypeError):
+        return 0.0
+
 def parse_hoeveelheid_getal(tekst):
     """Haalt het eerste getal uit een vrije-tekst hoeveelheid zoals '500 ton', '1.250,5' of '1,250.5' -> float."""
     if not tekst:

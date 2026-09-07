@@ -17,7 +17,7 @@ from core import (
     datapad, laad_status, laad_shipments, laad_voorraad, laad_orders,
     laad_accountmanagers, laad_users, laad_notities, laad_marktprijzen,
     laad_transport_data, laad_cert_vervaldatums, _cert_sleutel, laad_meldingen,
-    parse_hoeveelheid_getal, bereken_afstand_km, bepaal_shipment_flow_type,
+    parse_hoeveelheid_getal, parse_ton_intern, bereken_afstand_km, bepaal_shipment_flow_type,
     shipment_hoeveelheid, render_simple_page, ENF_BEDRIJVEN, LANDEN,
     effectieve_afdeling, laad_weegbrug, laad_logistieke_orders, laad_transport_planning,
     laad_containers, vereist_afdeling_of_403, laad_handelsorders, laad_facturen, bepaal_factuur_status,
@@ -942,7 +942,7 @@ def _bereken_contractvoortgang_inzichten(gekozen_materiaal, gekozen_land):
 
     def _geleverd_op_contract(contractnummer):
         return round(sum(
-            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
             for o in laad_logistieke_orders()
             if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
         ), 3)

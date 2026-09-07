@@ -25,7 +25,7 @@ from core import (
     bewaar_meldingen, laad_materiaal_taxonomie, bewaar_materiaal_taxonomie, laad_fotos,
     bewaar_fotos, laad_fotomappen, bewaar_fotomappen, laad_notities,
     bewaar_notities, get_user_id, laad_geocode_cache, bewaar_geocode_cache,
-    parse_hoeveelheid_getal, bereken_voorraad_status, voldoet_aan_materiaal_min_volume, bereken_afstand_km,
+    parse_hoeveelheid_getal, parse_ton_intern, bereken_voorraad_status, voldoet_aan_materiaal_min_volume, bereken_afstand_km,
     geocode_adres, ACCOUNTMANAGERS_FILE, CERT_VERVALDATUMS_FILE, CONTACTPERSONEN_FILE,
     CONTRACTEN_FILE, DATA_DIR, DOCUMENTEN_FILE, DOCUMENTEN_MAP,
     DOCUMENT_EXTENSIES_TOEGESTAAN, FACTUREN_FILE, FOTOMAPPEN_FILE, FOTOS_FILE,
@@ -3023,7 +3023,7 @@ def _bereken_contractvergelijking_financieel():
     zelfde principe als Contractvoortgang bij Commerciële Inzichten."""
     def _geleverd_op_contract(contractnummer):
         _via_orders = sum(
-            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
             for o in laad_logistieke_orders()
             if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
         )

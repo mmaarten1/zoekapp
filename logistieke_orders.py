@@ -26,7 +26,7 @@ from core import (
     laad_logistieke_orders, bewaar_logistieke_orders, genereer_logistiek_ordernummer,
     LOGISTIEKE_ORDER_STATUSSEN, laad_weegbrug, bewaar_weegbrug, WEEGBRUG_STATUS_BADGES,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
-    laad_documenten, laad_orders, laad_shipments, bereken_voorraad_status, parse_hoeveelheid_getal,
+    laad_documenten, laad_orders, laad_shipments, bereken_voorraad_status, parse_hoeveelheid_getal, parse_ton_intern,
     laad_handelsorders, laad_marktprijzen, laad_transport_planning, land_afkorting, mag_pagina_zien,
 )
 
@@ -46,7 +46,7 @@ def _bereken_open_contracten(order_type, modus_filter=None):
 
     def _geleverd_inkoop_vrachtwagen(contractnummer):
         return round(sum(
-            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
             for o in alle_logistieke_orders
             if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
         ), 3)
@@ -1290,7 +1290,7 @@ def _bereken_vraag_vs_aanbod_logistiek():
 
     def _uitgeleverd_op_verkoopcontract(contractnummer):
         _via_orders = sum(
-            parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid",""))
+            parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
             for o in laad_logistieke_orders()
             if o.get("contract_referentie") == contractnummer and o.get("status") in ("Weegbon compleet", "Afhandeling", "Klaar voor Finance", "Gefactureerd", "Afgerond")
         )
@@ -1658,17 +1658,25 @@ def _contract_geleverd_volume(contract_referentie, alle_orders=None):
     ]
     for o in betrokken:
         _herstel_indien_kg_ipv_ton(o, alle_orders)
-    geleverd = sum(parse_hoeveelheid_getal(o.get("werkelijke_hoeveelheid","")) for o in betrokken)
+    geleverd = sum(parse_ton_intern(o.get("werkelijke_hoeveelheid","")) for o in betrokken)
     return round(geleverd, 3)
 
-def _contract_opties_voor_order(order):
+def _contract_opties_voor_order(order, alle_orders=None):
     """Geeft (passend, overig) terug: goedgekeurde inkoopcontracten die MATERIAAL ÉN
     KWALITEIT exact matchen met de order komen als 'passend' — dus als er een SOP-weging
     binnenkomt, zie je hier alleen SOP-contracten, geen andere papierkwaliteiten. Beide
     lijsten zijn FIFO gesorteerd (oudste eerst) en elke optie krijgt het al-geleverde en
-    resterende tonnage mee, zodat je in één oogopslag ziet hoeveel er nog openstaat."""
-    alle_orders_voor_geleverd = laad_logistieke_orders()
-    deze_weging_ton = parse_hoeveelheid_getal(order.get("werkelijke_hoeveelheid",""))
+    resterende tonnage mee, zodat je in één oogopslag ziet hoeveel er nog openstaat.
+
+    alle_orders: geef de lijst mee waar 'order' zelf al een item van is (dezelfde
+    objecten, niet een verse laad_logistieke_orders()-kopie), zodat het
+    kg-naar-ton-vangnet hieronder de correctie ook BLIJVEND opslaat via
+    bewaar_logistieke_orders(). Zonder deze parameter wordt een verse lijst
+    geladen — de correctie werkt dan alleen voor déze berekening, niet blijvend,
+    omdat 'order' dan een ander object is dan wat er opgeslagen wordt."""
+    alle_orders_voor_geleverd = alle_orders if alle_orders is not None else laad_logistieke_orders()
+    _herstel_indien_kg_ipv_ton(order, alle_orders_voor_geleverd)
+    deze_weging_ton = parse_ton_intern(order.get("werkelijke_hoeveelheid",""))
     alle_handelsorders = [
         h for h in laad_handelsorders()
         if h.get("order_type") == "inkoop" and h.get("status") == "Definitief"
@@ -1753,7 +1761,7 @@ def verwerk_complete_weging_automatisch(weegrecord_id):
         bewaar_weegbrug(weegrecords)
 
     if not order.get("contract_referentie"):
-        passend, _ = _contract_opties_voor_order(order)
+        passend, _ = _contract_opties_voor_order(order, alle_orders=orders)
         passend_nog_open = [h for h in passend if h.get("resterend_ton", 0) > 0]
         if len(passend_nog_open) == 1:
             gekozen_contract = passend_nog_open[0]
@@ -1885,7 +1893,7 @@ def api_contract_opties(order_id):
     if not order:
         return jsonify({"error": "Order niet gevonden"}), 404
 
-    passend, overig = _contract_opties_voor_order(order)
+    passend, overig = _contract_opties_voor_order(order, alle_orders=orders)
     return jsonify({
         "order": {"ordernummer": order["ordernummer"], "leverancier": order.get("leverancier",""),
                    "materiaal": order.get("materiaal",""), "kwaliteit": order.get("kwaliteit",""),
@@ -1962,7 +1970,7 @@ def logistieke_order_koppel_contract(order_id):
         pagina = render_simple_page("Niet gevonden", "live_operations", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/live-operations">Terug naar Live Operaties</a></div>')
         return render_template_string(pagina), 404
 
-    passende_contracten, overige_contracten = _contract_opties_voor_order(order)
+    passende_contracten, overige_contracten = _contract_opties_voor_order(order, alle_orders=orders)
 
     if request.method == "POST":
         keuze = request.form.get("contract_keuze", "")
