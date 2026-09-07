@@ -25,7 +25,7 @@ from core import (
     bewaar_meldingen, laad_materiaal_taxonomie, bewaar_materiaal_taxonomie, laad_fotos,
     bewaar_fotos, laad_fotomappen, bewaar_fotomappen, laad_notities,
     bewaar_notities, get_user_id, laad_geocode_cache, bewaar_geocode_cache,
-    parse_hoeveelheid_getal, parse_ton_intern, bereken_voorraad_status, voldoet_aan_materiaal_min_volume, bereken_afstand_km,
+    parse_hoeveelheid_getal, parse_ton_intern, bereken_voorraad_status, voldoet_aan_materiaal_min_volume, bereken_afstand_km, leverancier_instelling_voor,
     geocode_adres, ACCOUNTMANAGERS_FILE, CERT_VERVALDATUMS_FILE, CONTACTPERSONEN_FILE,
     CONTRACTEN_FILE, DATA_DIR, DOCUMENTEN_FILE, DOCUMENTEN_MAP,
     DOCUMENT_EXTENSIES_TOEGESTAAN, FACTUREN_FILE, FOTOMAPPEN_FILE, FOTOS_FILE,
@@ -2657,10 +2657,11 @@ def containerbeheer_pagina():
                                     fabriek_namen_cont=fabriek_namen_cont, landen_herkomst=landen_herkomst,
                                     filter_land_cont=filter_land_cont, per_land=per_land)
 
-@app.route("/facturen", methods=["GET", "POST"])
-def facturen_pagina():
-    _guard = vereist_afdeling_of_403("facturen")
-    if _guard: return _guard
+def _overzicht_factuur_inhoud():
+    """Het algemene facturenoverzicht: KPI's, BTW-alerts, handmatig een factuur
+    toevoegen, en de volledige lijst van alle facturen (ongeacht type/herkomst).
+    Dit was de oorspronkelijke /facturen-pagina, nu een tabblad naast de
+    specifiekere Inkoop/Verkoop/Export/Peute-tabbladen."""
     if request.method == "POST":
         actie = request.form.get("actie", "")
         alle_facturen = laad_facturen()
@@ -2766,7 +2767,6 @@ def facturen_pagina():
 .fact-row { padding-top:11px; padding-bottom:11px; border-bottom:1px solid var(--gray-100); font-size:12.5px; }
 .fact-row:last-child { border-bottom:none; }
 </style>
-<div class="page-title">Facturen</div>
 {% if aantal_klaar_voor_finance %}
 <a href="/facturen/logistieke-orders" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:16px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">
     Logistieke orders klaar voor verwerking
@@ -2817,6 +2817,7 @@ def facturen_pagina():
 </div>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    <input type="hidden" name="modus" value="overzicht">
     {% if vooringevuld_bedrijf %}<input type="hidden" name="bedrijf" value="{{ vooringevuld_bedrijf }}">{% endif %}
     <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
         <option value="">Alle statussen</option>
@@ -2824,7 +2825,7 @@ def facturen_pagina():
         <option value="Te laat" {% if filter_status_fact == "Te laat" %}selected{% endif %}>Te laat</option>
         <option value="Betaald" {% if filter_status_fact == "Betaald" %}selected{% endif %}>Betaald</option>
     </select>
-    {% if vooringevuld_bedrijf %}<a href="/facturen" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Alle bedrijven tonen</a>{% endif %}
+    {% if vooringevuld_bedrijf %}<a href="/facturen?modus=overzicht" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Alle bedrijven tonen</a>{% endif %}
     <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_facturen|length }} van {{ alle_facturen|length }}</span>
 </form>
 
@@ -2857,7 +2858,7 @@ def facturen_pagina():
 </div>
 
 {% if getoonde_facturen %}
-<div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);overflow:hidden;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="fact-rij fact-thead">
         <span style="flex:1.4;">Bedrijf</span>
         <span style="flex:1.2;">Referentie</span>
@@ -2895,8 +2896,7 @@ def facturen_pagina():
 <div class="lege-staat">{% if vooringevuld_bedrijf %}Nog geen facturen voor {{ vooringevuld_bedrijf }}.{% else %}Nog geen facturen toegevoegd.{% endif %}</div>
 {% endif %}
     """
-    pagina = render_simple_page("Facturen", "facturen", inhoud)
-    return render_template_string(pagina,
+    return inhoud, dict(
         vooringevuld_bedrijf=vooringevuld_bedrijf, filter_status_fact=filter_status_fact,
         vi_contract=vi_contract, vi_referentie=vi_referentie, vi_bedrag=vi_bedrag,
         vi_factuurdatum=vi_factuurdatum, vi_vervaldatum=vi_vervaldatum,
@@ -2907,6 +2907,258 @@ def facturen_pagina():
         te_verwerken_betalingen=te_verwerken_betalingen, facturen_zonder_btw=facturen_zonder_btw,
         facturen_ongebruikelijk_btw=facturen_ongebruikelijk_btw, btw_deadline=btw_deadline,
         btw_deadline_dagen=btw_deadline_dagen)
+
+
+def _eenvoudig_factuur_tabblad_inhoud(type_naam, type_label, uitleg):
+    """Eenvoudige, gefilterde weergave van facturen met een bepaald 'type'-veld
+    (inkoop/verkoop/export) — toont wat er al is, met een link naar het
+    Overzicht-tabblad om er handmatig een toe te voegen. Minder uitgebreid dan
+    Peute (die heeft de volledige 'selecteer wegingen -> genereer factuur'-flow),
+    maar wel al bruikbaar en consistent qua stijl."""
+    alle_facturen = [f for f in laad_facturen() if f.get("type") == type_naam]
+    for f in alle_facturen:
+        f["status"] = bepaal_factuur_status(f)
+    alle_facturen.sort(key=lambda f: f.get("vervaldatum", ""))
+
+    def _bedrag_getal(f):
+        try:
+            return float(str(f.get("bedrag", "0")).replace(",", "."))
+        except (ValueError, TypeError):
+            return 0.0
+    totaal = sum(_bedrag_getal(f) for f in alle_facturen)
+
+    inhoud = """
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">""" + uitleg + """</p>
+<div style="display:flex;gap:16px;margin-bottom:20px;">
+    <div style="flex:1;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
+        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">{{ alle_facturen|length }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Facturen</div>
+    </div>
+    <div style="flex:1;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
+        <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">€{{ "{:,.0f}".format(totaal).replace(",", ".") }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Totaal</div>
+    </div>
+</div>
+{% if alle_facturen %}
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
+    {% for f in alle_facturen %}
+    <div style="display:flex;align-items:center;padding:11px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="flex:1.4;"><a href="/bedrijf/{{ f.bedrijf|urlencode }}" style="color:var(--gray-800);font-weight:600;text-decoration:none;">{{ f.bedrijf }}</a></span>
+        <span style="flex:1.2;color:var(--gray-600);">{{ f.referentie|default('—', true) }}</span>
+        <span style="width:100px;text-align:right;font-family:var(--font-mono);">€{{ f.bedrag }}</span>
+        <span style="width:100px;color:var(--gray-500);">{{ f.vervaldatum }}</span>
+        <span style="width:90px;font-weight:700;color:{{ '#16a34a' if f.status=='Betaald' else ('#dc2626' if f.status=='Te laat' else '#1d4ed8') }};">{{ f.status }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="lege-staat">Nog geen """ + type_label + """-facturen.</div>
+{% endif %}
+    """
+    return inhoud, dict(alle_facturen=alle_facturen, totaal=totaal)
+
+
+def _peute_factuur_inhoud():
+    """Wat er nog gefactureerd moet worden voor 'Peute' (alles wat op locatie
+    binnenkomt via de Weegbrug): gewogen ladingen met een gekoppeld
+    inkoopcontract, nog niet gefactureerd. Gegroepeerd per leverancier —
+    typisch scenario: leverancier levert meerdere vrachtwagens per week,
+    en aan het einde van de week vink je ze allemaal aan voor één factuur."""
+    alle_orders = laad_logistieke_orders()
+    alle_handelsorders = {h["contractnummer"]: h for h in laad_handelsorders()}
+
+    te_factureren = [
+        o for o in alle_orders
+        if o.get("contract_referentie") and o.get("status") not in ("Gefactureerd", "Afgerond")
+    ]
+
+    for o in te_factureren:
+        contract = alle_handelsorders.get(o["contract_referentie"])
+        o["_prijs_per_ton"] = float(contract["prijs"]) if contract and contract.get("prijs") else None
+        o["_valuta"] = contract.get("valuta", "EUR") if contract else "EUR"
+        o["_ton"] = parse_ton_intern(o.get("werkelijke_hoeveelheid", ""))
+        o["_bedrag"] = round(o["_ton"] * o["_prijs_per_ton"], 2) if o["_prijs_per_ton"] is not None else None
+
+    per_leverancier = {}
+    for o in te_factureren:
+        per_leverancier.setdefault(o.get("leverancier","Onbekend"), []).append(o)
+    for lijst in per_leverancier.values():
+        lijst.sort(key=lambda o: o.get("datum",""), reverse=True)
+    leverancier_groepen = sorted(
+        [{"leverancier": lev, "orders": orders, "aantal": len(orders),
+          "totaal_ton": round(sum(o["_ton"] for o in orders), 3),
+          "totaal_bedrag": round(sum(o["_bedrag"] for o in orders if o["_bedrag"] is not None), 2)}
+         for lev, orders in per_leverancier.items()],
+        key=lambda g: g["leverancier"]
+    )
+
+    inhoud = """
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Gewogen ladingen met een gekoppeld inkoopcontract, nog niet gefactureerd — per leverancier. Vink de ladingen aan die op één factuur moeten (bv. alle leveringen van deze week) en klik op 'Factuur aanmaken'.</p>
+
+<style>
+.pf-groep { border:none; border-top:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); margin-bottom:20px; }
+.pf-groepkop { padding:12px 14px; background:var(--gray-50); border-bottom:1px solid var(--gray-200); display:flex; align-items:center; gap:12px; font-size:12.5px; }
+.pf-rij { padding:9px 14px; border-bottom:1px solid var(--gray-100); font-size:12.5px; display:flex; align-items:center; gap:12px; }
+.pf-rij:last-child { border-bottom:none; }
+</style>
+
+{% if leverancier_groepen %}
+{% for g in leverancier_groepen %}
+<form method="POST" action="/facturen/peute/genereer" class="pf-groep-form">
+<div class="pf-groep">
+    <div class="pf-groepkop">
+        <b style="flex:1;color:var(--gray-800);">{{ g.leverancier }}</b>
+        <span style="color:var(--gray-400);">{{ g.aantal }} lading{{ 'en' if g.aantal != 1 else '' }} · {{ g.totaal_ton }} t open</span>
+        <button type="submit" style="font-size:12px;font-weight:700;padding:6px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;">Factuur aanmaken van geselecteerde →</button>
+    </div>
+    {% for o in g.orders %}
+    <div class="pf-rij">
+        <input type="checkbox" name="order_ids" value="{{ o.id }}" checked style="margin:0;">
+        <span style="width:90px;color:var(--gray-500);">{{ o.datum }}</span>
+        <span style="width:120px;font-family:var(--font-mono);color:var(--gray-500);">{{ o.ordernummer }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ o.materiaal }} — {{ o.kwaliteit }}</span>
+        <span style="width:130px;color:var(--gray-500);">{{ o.contract_referentie }}</span>
+        <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--gray-700);">{{ o._ton }} t</span>
+        {% if o._prijs_per_ton is not none %}
+        <span style="width:90px;text-align:right;color:var(--gray-500);">{{ o._prijs_per_ton }}/t</span>
+        <span style="width:100px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--gray-800);">{{ "%.2f"|format(o._bedrag) }} {{ o._valuta }}</span>
+        {% else %}
+        <span style="width:190px;text-align:right;color:#dc2626;font-size:11px;">Geen prijs op het contract — bedrag onbekend</span>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+</form>
+{% endfor %}
+{% else %}
+<div class="lege-staat">Niets te factureren — alle gewogen, gekoppelde ladingen zijn al gefactureerd.</div>
+{% endif %}
+    """
+    return inhoud, {"leverancier_groepen": leverancier_groepen}
+
+
+@app.route("/facturen/peute/genereer", methods=["POST"])
+def facturen_peute_genereer():
+    """Maakt één factuur aan van de geselecteerde, gewogen ladingen — met een
+    regel per lading (datum, ton, prijs, bedrag) en een totaalbedrag. Alle
+    geselecteerde orders moeten van dezelfde leverancier zijn (een factuur
+    gaat naar één partij); de leverancier wordt bepaald aan de hand van de
+    eerste geselecteerde order."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    order_ids = request.form.getlist("order_ids")
+    if not order_ids:
+        return redirect(url_for("facturen_pagina", modus="peute"))
+
+    alle_orders = laad_logistieke_orders()
+    alle_handelsorders = {h["contractnummer"]: h for h in laad_handelsorders()}
+    geselecteerd = [o for o in alle_orders if o["id"] in order_ids]
+    if not geselecteerd:
+        return redirect(url_for("facturen_pagina", modus="peute"))
+
+    leverancier = geselecteerd[0].get("leverancier", "")
+    geselecteerd = [o for o in geselecteerd if o.get("leverancier") == leverancier]  # veiligheid: alleen dezelfde leverancier
+
+    regels = []
+    totaal_bedrag = 0.0
+    for o in geselecteerd:
+        contract = alle_handelsorders.get(o.get("contract_referentie",""))
+        prijs_per_ton = float(contract["prijs"]) if contract and contract.get("prijs") else 0.0
+        valuta = contract.get("valuta", "EUR") if contract else "EUR"
+        ton = parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
+        bedrag = round(ton * prijs_per_ton, 2)
+        totaal_bedrag += bedrag
+        regels.append({
+            "logistieke_order_id": o["id"], "ordernummer": o.get("ordernummer",""),
+            "datum": o.get("datum",""), "materiaal": o.get("materiaal",""), "kwaliteit": o.get("kwaliteit",""),
+            "ton": ton, "prijs_per_ton": prijs_per_ton, "valuta": valuta, "bedrag": bedrag,
+            "contractnummer": o.get("contract_referentie",""),
+        })
+
+    contractnummers = {r["contractnummer"] for r in regels}
+    nu = datetime.datetime.now()
+
+    # Vervaldatum: standaard betalingstermijn van de leverancier indien ingesteld, anders 30 dagen.
+    termijn_dagen = 30
+    _termijn_ingesteld = leverancier_instelling_voor(leverancier).get("standaard_betalingstermijn","")
+    if _termijn_ingesteld:
+        try:
+            termijn_dagen = int(_termijn_ingesteld)
+        except (ValueError, TypeError):
+            pass
+    vervaldatum = (nu.date() + datetime.timedelta(days=termijn_dagen)).isoformat()
+
+    alle_facturen = laad_facturen()
+    nieuwe_factuur = {
+        "id": str(uuid.uuid4()),
+        "bedrijf": leverancier,
+        "type": "peute",
+        "referentie": f"PEUTE-{nu.strftime('%Y%m%d')}-{len([f for f in alle_facturen if f.get('type')=='peute' and f.get('aangemaakt','').startswith(nu.strftime('%d-%m-%Y'))]) + 1:03d}",
+        "omschrijving": f"{len(regels)} lading{'en' if len(regels) != 1 else ''} — {', '.join(sorted(contractnummers))}",
+        "regels": regels,
+        "bedrag": str(round(totaal_bedrag, 2)),
+        "btw_percentage": "",
+        "factuurdatum": nu.date().isoformat(),
+        "vervaldatum": vervaldatum,
+        "betaalddatum": "",
+        "contract_referentie": next(iter(contractnummers)) if len(contractnummers) == 1 else "",
+        "gebruiker": session.get("gebruikersnaam", ""),
+        "aangemaakt": nu.strftime("%d-%m-%Y %H:%M"),
+    }
+    alle_facturen.append(nieuwe_factuur)
+    bewaar_facturen(alle_facturen)
+
+    for o in alle_orders:
+        if o["id"] in [r["logistieke_order_id"] for r in regels]:
+            o["status"] = "Gefactureerd"
+    bewaar_logistieke_orders(alle_orders)
+
+    return redirect(url_for("facturen_pagina", modus="overzicht", bedrijf=leverancier))
+
+
+@app.route("/facturen", methods=["GET", "POST"])
+def facturen_pagina():
+    """Facturen als tabbladen: Overzicht (alle facturen, KPI's, BTW-alerts,
+    handmatig toevoegen — de oorspronkelijke pagina), Inkoop, Verkoop, Export
+    (alles wat geëxporteerd wordt) en Peute (alles wat op locatie binnenkomt,
+    via de Weegbrug). Peute heeft de volledige 'selecteer gewogen ladingen met
+    gekoppeld contract -> genereer één factuur'-flow; de andere tabbladen
+    tonen voorlopig wat er al is, met de bestaande 'handmatig toevoegen' op
+    Overzicht als gemeenschappelijke ingang."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    modus = request.args.get("modus", "overzicht")
+    if modus not in ("overzicht", "inkoop", "verkoop", "export", "peute"):
+        modus = "overzicht"
+
+    if modus == "overzicht":
+        _tab_inhoud, _tab_context = _overzicht_factuur_inhoud()
+    elif modus == "inkoop":
+        _tab_inhoud, _tab_context = _eenvoudig_factuur_tabblad_inhoud("inkoop", "inkoop", "Alle inkoopfacturen (van leveranciers aan Peute).")
+    elif modus == "verkoop":
+        _tab_inhoud, _tab_context = _eenvoudig_factuur_tabblad_inhoud("verkoop", "verkoop", "Alle verkoopfacturen (van Peute aan klanten) — alle uitgaande facturen.")
+    elif modus == "export":
+        _tab_inhoud, _tab_context = _eenvoudig_factuur_tabblad_inhoud("export", "export", "Alles wat per schip/container geëxporteerd wordt.")
+    else:
+        _tab_inhoud, _tab_context = _peute_factuur_inhoud()
+
+    _tabbladen = [("overzicht", "Overzicht"), ("inkoop", "Inkoop"), ("verkoop", "Verkoop"), ("export", "Export"), ("peute", "Peute")]
+    _tabbladen_html = "".join(
+        f'<a href="/facturen?modus={sleutel}" style="padding:8px 16px;font-size:12.5px;font-weight:700;text-decoration:none;border-bottom:2px solid {"var(--brand-600)" if sleutel == modus else "transparent"};color:{"var(--brand-600)" if sleutel == modus else "var(--gray-400)"};">{titel}</a>'
+        for sleutel, titel in _tabbladen
+    )
+
+    inhoud = f"""
+<div class="page-title">Facturen</div>
+<div style="display:flex;gap:4px;border-bottom:1px solid var(--gray-200);margin-bottom:16px;">
+    {_tabbladen_html}
+</div>
+{_tab_inhoud}
+    """
+    pagina = render_simple_page("Facturen", "facturen", inhoud)
+    return render_template_string(pagina, **_tab_context)
 
 @app.route("/facturen/logistieke-orders", methods=["GET", "POST"])
 def facturen_logistieke_orders():
