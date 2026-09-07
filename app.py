@@ -2871,7 +2871,7 @@ def _overzicht_factuur_inhoud():
     <div class="fact-rij fact-row">
         <span style="flex:1.4;"><a href="/bedrijf/{{ f.bedrijf|urlencode }}" style="color:var(--gray-800);font-weight:600;text-decoration:none;">{{ f.bedrijf }}</a></span>
         <span style="flex:1.2;color:var(--gray-600);">
-            {{ f.referentie|default('—', true) }}
+            <a href="/facturen/{{ f.id }}" style="color:var(--gray-600);text-decoration:none;">{{ f.referentie|default('—', true) }}{% if f.get('regels') %} ({{ f.regels|length }}){% endif %}</a>
             {% if f.contract_referentie %}<br><a href="/handelsorders?zoekterm={{ f.contract_referentie|urlencode }}" style="font-size:10.5px;color:var(--brand-600);text-decoration:none;">↳ {{ f.contract_referentie }}</a>{% endif %}
         </span>
         <span style="width:100px;text-align:right;font-family:var(--font-mono);">€{{ f.bedrag }}</span>
@@ -3699,6 +3699,104 @@ def facturen_pagina():
     """
     pagina = render_simple_page("Facturen", "facturen", inhoud)
     return render_template_string(pagina, **_tab_context)
+
+
+@app.route("/facturen/<factuur_id>")
+def factuur_detail(factuur_id):
+    """Detailweergave van één factuur — voor door de app zelf gegenereerde
+    facturen (Peute/Inkoop/Verkoop/Export) toont dit de regels waaruit hij is
+    opgebouwd (datum, materiaal, ton, prijs, bedrag per lading/transport) en
+    het totaalbedrag onderaan. Voor handmatig toegevoegde facturen (geen
+    regels) toont het gewoon de basisgegevens."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    alle_facturen = laad_facturen()
+    factuur = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
+    if not factuur:
+        pagina = render_simple_page("Niet gevonden", "facturen", '<div class="page-title">Factuur niet gevonden</div><div class="lege-staat">Deze factuur bestaat niet (meer). <a href="/facturen">Terug naar Facturen</a></div>')
+        return render_template_string(pagina), 404
+
+    factuur["status"] = bepaal_factuur_status(factuur)
+    regels = factuur.get("regels", [])
+
+    inhoud = """
+<div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
+    <a href="/facturen" style="color:var(--gray-400);text-decoration:none;">Facturen</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ factuur.referentie or factuur.id }}</span>
+</div>
+<div class="page-title">{{ factuur.bedrijf }}</div>
+
+<div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
+        <div style="font-size:1.3rem;font-weight:800;color:var(--gray-800);">€{{ "{:,.2f}".format(factuur.bedrag|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Totaalbedrag</div>
+    </div>
+    <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
+        <div style="font-size:1.3rem;font-weight:800;color:{{ '#16a34a' if factuur.status=='Betaald' else ('#dc2626' if factuur.status=='Te laat' else 'var(--gray-800)') }};">{{ factuur.status }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Status</div>
+    </div>
+    <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
+        <div style="font-size:1.3rem;font-weight:800;color:var(--gray-800);">{{ factuur.vervaldatum or '—' }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">Vervaldatum</div>
+    </div>
+    {% if regels %}
+    <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
+        <div style="font-size:1.3rem;font-weight:800;color:var(--gray-800);">{{ regels|length }}</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">{{ 'Ladingen' if factuur.type == 'peute' else 'Regels' }}</div>
+    </div>
+    {% endif %}
+</div>
+
+<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:20px;">
+    <b>Referentie:</b> {{ factuur.referentie or '—' }}
+    {% if factuur.omschrijving %} · {{ factuur.omschrijving }}{% endif %}
+    {% if factuur.contract_referentie %} · <a href="/handelsorders?zoekterm={{ factuur.contract_referentie|urlencode }}" style="color:var(--brand-600);text-decoration:none;">↳ {{ factuur.contract_referentie }}</a>{% endif %}
+    <br><b>Factuurdatum:</b> {{ factuur.factuurdatum or '—' }} · <b>Aangemaakt door:</b> {{ factuur.gebruiker or '—' }} op {{ factuur.aangemaakt or '—' }}
+</div>
+
+{% if regels %}
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Regels</div>
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:12px;">
+    <div style="display:flex;align-items:center;padding:9px 4px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#7d8792;">
+        <span style="width:90px;">Datum</span>
+        <span style="width:130px;">Referentie</span>
+        <span style="flex:1;">Materiaal</span>
+        <span style="width:130px;">Contract</span>
+        <span style="width:90px;text-align:right;">Ton</span>
+        <span style="width:90px;text-align:right;">Prijs/ton</span>
+        <span style="width:110px;text-align:right;">Bedrag</span>
+    </div>
+    {% for r in regels %}
+    <div style="display:flex;align-items:center;padding:9px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
+        <span style="width:90px;color:var(--gray-500);">{{ r.datum or '—' }}</span>
+        <span style="width:130px;font-family:var(--font-mono);color:var(--gray-500);">{{ r.ordernummer or r.referentienummer or '—' }}</span>
+        <span style="flex:1;color:var(--gray-600);">{{ r.materiaal }}{% if r.kwaliteit %} — {{ r.kwaliteit }}{% endif %}</span>
+        <span style="width:130px;color:var(--gray-500);">{{ r.contractnummer or '—' }}</span>
+        <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--gray-700);">{{ r.ton }} t</span>
+        <span style="width:90px;text-align:right;color:var(--gray-500);">{{ r.prijs_per_ton }} {{ r.valuta }}</span>
+        <span style="width:110px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--gray-800);">{{ "%.2f"|format(r.bedrag) }} {{ r.valuta }}</span>
+    </div>
+    {% endfor %}
+    <div style="display:flex;align-items:center;padding:11px 4px;background:var(--gray-50);font-size:13px;">
+        <span style="flex:1;text-align:right;font-weight:700;color:var(--gray-600);padding-right:16px;">Totaal</span>
+        <span style="width:110px;text-align:right;font-family:var(--font-mono);font-weight:800;color:var(--gray-800);">€{{ "{:,.2f}".format(factuur.bedrag|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</span>
+    </div>
+</div>
+{% endif %}
+
+<div style="display:flex;gap:8px;">
+    {% if factuur.status != "Betaald" %}
+    <form method="POST" action="/facturen" style="margin:0;">
+        <input type="hidden" name="actie" value="markeer_betaald">
+        <input type="hidden" name="factuur_id" value="{{ factuur.id }}">
+        <button type="submit" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:#f0fdf4;color:#16a34a;border:none;border-radius:6px;cursor:pointer;">✓ Markeer betaald</button>
+    </form>
+    {% endif %}
+    <a href="/bedrijf/{{ factuur.bedrijf|urlencode }}" style="font-size:12.5px;font-weight:600;padding:8px 16px;border:1px solid var(--gray-200);border-radius:6px;color:var(--gray-600);text-decoration:none;">Naar bedrijfsprofiel</a>
+</div>
+    """
+    pagina = render_simple_page(factuur.get("referentie") or "Factuur", "facturen", inhoud)
+    return render_template_string(pagina, factuur=factuur, regels=regels)
 
 @app.route("/facturen/logistieke-orders", methods=["GET", "POST"])
 def facturen_logistieke_orders():
