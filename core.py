@@ -71,6 +71,17 @@ def bewaar_users(users):
     with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
 
+def haal_weergavenaam(gebruikersnaam):
+    """De naam zoals die getoond wordt (zijbalk, notities, enz.) — de
+    gebruiker kan die zelf instellen bij Persoonlijke informatie, los van de
+    inlognaam zelf. Zonder ingevulde weergavenaam valt dit terug op de
+    inlognaam, zodat bestaande gebruikers niets merken totdat ze het zelf
+    instellen."""
+    if not gebruikersnaam:
+        return "Gast"
+    gebruiker = laad_users().get(gebruikersnaam, {})
+    return gebruiker.get("weergavenaam", "").strip() or gebruikersnaam
+
 # ============================================================
 # Rechtensysteem — Fase 1: datamodel (afdeling + rol per gebruiker).
 # Nog GEEN afscherming van schermen o.b.v. deze velden — dat komt in een
@@ -1981,8 +1992,8 @@ function toggleMobielMenu() {
 }
 </script>'''.replace("ITEMS_HIER", links) \
              .replace("WEERGAVE_BALK_HIER", weergave_balk) \
-             .replace("GEBRUIKERSNAAM_HIER", session.get("gebruikersnaam", "Gast")) \
-             .replace("GEBRUIKERSNAAM_INITIALEN", (session.get("gebruikersnaam", "??")[:2]).upper()) \
+             .replace("GEBRUIKERSNAAM_HIER", haal_weergavenaam(session.get("gebruikersnaam", ""))) \
+             .replace("GEBRUIKERSNAAM_INITIALEN", (haal_weergavenaam(session.get("gebruikersnaam", "??"))[:2]).upper()) \
              .replace("TEAM_HIER", session.get("team", "") or "Teamlid")
 
 def render_simple_page(titel, actief, inhoud_html):
