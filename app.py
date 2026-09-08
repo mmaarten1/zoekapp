@@ -5228,37 +5228,92 @@ def instellingen_eigen_bedrijfsgegevens():
     return render_template_string(pagina, waarden=waarden, opgeslagen=opgeslagen, ontbrekende_velden=ontbrekende_velden)
 
 
-@app.route("/instellingen")
-def instellingen():
-    _guard = vereist_afdeling_of_403("instellingen")
-    if _guard: return _guard
+def _persoonlijke_informatie_inhoud():
+    """Eigen profiel: weergavenaam (los van de inlognaam), e-mailadres en een
+    profielfoto. De weergavenaam wordt gebruikt in de zijbalk; e-mailadres en
+    profielfoto zijn voor nu puur informatief (nog niet elders in de app
+    gebruikt, bijvoorbeeld voor toewijzingen of meldingen)."""
+    gebruikersnaam = session.get("gebruikersnaam", "")
+    users = laad_users()
+    eigen_gegevens = users.get(gebruikersnaam, {})
+    opgeslagen = request.args.get("opgeslagen") == "1"
+
     inhoud = """
-    <div class="page-title">Instellingen</div>
-    <div class="info-kaart" style="max-width:400px;margin-bottom:16px;">
-        <div class="drawer-row"><span class="drawer-row-label">Ingelogd als</span><span class="drawer-row-value">{{ gebruikersnaam }}</span></div>
+    <div class="page-title">Persoonlijke informatie</div>
+    {% if opgeslagen %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;max-width:420px;">Opgeslagen.</div>{% endif %}
+
+    <div class="info-kaart" style="max-width:420px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+            {% if eigen_gegevens.profielfoto %}
+            <img src="/fotos_uploads/{{ eigen_gegevens.profielfoto }}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;">
+            {% else %}
+            <div style="width:56px;height:56px;border-radius:50%;background:var(--brand-600);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;">{{ (eigen_gegevens.weergavenaam or gebruikersnaam)[:2]|upper }}</div>
+            {% endif %}
+            <div>
+                <div style="font-weight:700;color:var(--gray-800);">{{ eigen_gegevens.weergavenaam or gebruikersnaam }}</div>
+                <div style="font-size:11.5px;color:var(--gray-400);">Inlognaam: {{ gebruikersnaam }}</div>
+            </div>
+        </div>
+
+        <form method="POST" enctype="multipart/form-data">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Naam (zichtbaar in de app)</label>
+            <input type="text" name="weergavenaam" value="{{ eigen_gegevens.weergavenaam or '' }}" placeholder="{{ gebruikersnaam }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
+
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">E-mailadres</label>
+            <input type="email" name="email" value="{{ eigen_gegevens.email or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
+
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Profielfoto</label>
+            <input type="file" name="profielfoto" accept="image/*" style="width:100%;font-size:12.5px;margin-top:4px;margin-bottom:14px;">
+
+            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Opslaan</button>
+        </form>
+    </div>
+
+    <div class="info-kaart" style="max-width:420px;">
         <div class="drawer-row"><span class="drawer-row-label">Team</span><span class="drawer-row-value">{{ team or "—" }}</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">Afdeling</span><span class="drawer-row-value">{{ AFDELING_LABELS.get(eigen_gegevens.get("afdeling",""), eigen_gegevens.get("afdeling","") or "—") }}</span></div>
         <hr class="drawer-divider">
         <a href="/logout" class="btn-nav btn-nav-primary" style="display:inline-block;">Uitloggen</a>
     </div>
-    {% if is_admin %}
-    <div class="info-kaart" style="max-width:400px;">
-        <div class="dg-kaart-titel">Beheer <span style="font-size:10px;font-weight:700;color:var(--gray-400);background:var(--gray-100);padding:2px 6px;border-radius:4px;">ADMIN</span></div>
+    """
+    return inhoud, dict(gebruikersnaam=gebruikersnaam, eigen_gegevens=eigen_gegevens, opgeslagen=opgeslagen,
+                          team=session.get("team",""), AFDELING_LABELS=AFDELING_LABELS)
+
+
+def _beheer_inhoud():
+    """De bestaande admin-links, nu gegroepeerd in logische categorieën
+    i.p.v. één lange, ongesorteerde lijst — dezelfde links als voorheen."""
+    inhoud = """
+    <div class="page-title">Beheer</div>
+    <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Alleen zichtbaar voor beheerders.</p>
+
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Data importeren</div>
+    <div class="info-kaart" style="max-width:440px;margin-bottom:20px;">
         <a href="/importeer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Excel-import</a>
         <a href="/importeer-osm" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ OpenStreetMap-import</a>
+        <a href="/importeer-scrapmonster" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ ScrapMonster-import (schroothandels)</a>
+        <a href="/importeer-gov-uk" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK overheidsregister-import</a>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Data-onderhoud</div>
+    <div class="info-kaart" style="max-width:440px;margin-bottom:20px;">
         <a href="/opschonen-dubbelen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Dubbele bedrijven opschonen</a>
         <a href="/geocode-aanvullen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Ontbrekende coördinaten aanvullen</a>
         <a href="/herlabel-brontype" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Bedrijfstypes aanvullen</a>
-        <a href="/importeer-scrapmonster" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ ScrapMonster-import (schroothandels)</a>
-        <a href="/importeer-gov-uk" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK overheidsregister-import</a>
         <a href="/controleer-uk-status" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK-bedrijven controleren (Companies House)</a>
-        <a href="/export-data" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
-        <a href="/gebruikers-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
-        <a href="/materialen-beheer" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Materialen beheren</a>
-        <a href="/instellingen/commercieel" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;margin-top:8px;">→ Commerciële instellingen (Incoterms, Betalingstermijnen, Valuta, POD, Bedrijfseenheden)</a>
-        <a href="/instellingen/eigen-bedrijfsgegevens" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;margin-top:8px;">→ Eigen bedrijfsgegevens (voor op facturen: KvK, BTW, IBAN)</a>
+        <a href="/export-data" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
     </div>
-    <div class="info-kaart" style="max-width:400px;margin-top:16px;">
-        <div class="dg-kaart-titel">Bedrijfslogo (op de weegbon)</div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Gebruikers &amp; instellingen</div>
+    <div class="info-kaart" style="max-width:440px;margin-bottom:20px;">
+        <a href="/gebruikers-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
+        <a href="/materialen-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Materialen beheren</a>
+        <a href="/instellingen/commercieel" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Commerciële instellingen (Incoterms, Betalingstermijnen, Valuta, POD, Bedrijfseenheden)</a>
+        <a href="/instellingen/eigen-bedrijfsgegevens" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Eigen bedrijfsgegevens (voor op facturen: KvK, BTW, IBAN)</a>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Bedrijfslogo (op de weegbon)</div>
+    <div class="info-kaart" style="max-width:440px;">
         {% if logo_instelling.bestandsnaam %}
         <img src="/bedrijfslogo/{{ logo_instelling.bestandsnaam }}" style="max-width:160px;max-height:60px;margin-bottom:10px;display:block;">
         {% else %}
@@ -5273,12 +5328,59 @@ def instellingen():
             <button type="submit" style="padding:7px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Opslaan</button>
         </form>
     </div>
-    {% endif %}
+    """
+    return inhoud, dict(logo_instelling=laad_bedrijfslogo_instelling(), logo_posities=LOGO_POSITIES)
+
+
+@app.route("/instellingen", methods=["GET", "POST"])
+def instellingen():
+    _guard = vereist_afdeling_of_403("instellingen")
+    if _guard: return _guard
+
+    is_admin = is_huidige_gebruiker_admin()
+    modus = request.args.get("modus", "profiel")
+    if modus == "beheer" and not is_admin:
+        modus = "profiel"
+
+    if request.method == "POST" and modus == "profiel":
+        gebruikersnaam = session.get("gebruikersnaam", "")
+        users = laad_users()
+        if gebruikersnaam in users:
+            users[gebruikersnaam]["weergavenaam"] = request.form.get("weergavenaam", "").strip()
+            users[gebruikersnaam]["email"] = request.form.get("email", "").strip()
+            bestand = request.files.get("profielfoto")
+            if bestand and bestand.filename:
+                extensie = bestand.filename.rsplit(".", 1)[-1].lower() if "." in bestand.filename else ""
+                if extensie in ("jpg", "jpeg", "png", "gif", "webp"):
+                    if not os.path.exists(FOTOS_MAP):
+                        os.makedirs(FOTOS_MAP)
+                    nieuwe_bestandsnaam = f"profiel_{uuid.uuid4()}.{extensie}"
+                    bestand.save(os.path.join(FOTOS_MAP, nieuwe_bestandsnaam))
+                    users[gebruikersnaam]["profielfoto"] = nieuwe_bestandsnaam
+            bewaar_users(users)
+        return redirect(url_for("instellingen", modus="profiel", opgeslagen="1"))
+
+    if modus == "beheer":
+        _tab_inhoud, _tab_context = _beheer_inhoud()
+    else:
+        _tab_inhoud, _tab_context = _persoonlijke_informatie_inhoud()
+
+    _tabbladen = [("profiel", "Persoonlijke informatie")]
+    if is_admin:
+        _tabbladen.append(("beheer", "Beheer"))
+    _tabbladen_html = "".join(
+        f'<a href="/instellingen?modus={sleutel}" style="padding:8px 16px;font-size:12.5px;font-weight:700;text-decoration:none;border-bottom:2px solid {"var(--brand-600)" if sleutel == modus else "transparent"};color:{"var(--brand-600)" if sleutel == modus else "var(--gray-400)"};">{titel}</a>'
+        for sleutel, titel in _tabbladen
+    )
+
+    inhoud = f"""
+    <div style="display:flex;gap:4px;border-bottom:1px solid var(--gray-200);margin-bottom:20px;">
+        {_tabbladen_html}
+    </div>
+    {_tab_inhoud}
     """
     pagina = render_simple_page("Instellingen", "instellingen", inhoud)
-    return render_template_string(pagina, gebruikersnaam=session.get("gebruikersnaam",""), team=session.get("team",""),
-                                    is_admin=is_huidige_gebruiker_admin(), logo_instelling=laad_bedrijfslogo_instelling(),
-                                    logo_posities=LOGO_POSITIES)
+    return render_template_string(pagina, **_tab_context)
 
 @app.route("/instellingen/logo", methods=["POST"])
 def instellingen_logo_upload():
