@@ -3522,13 +3522,29 @@ herbouwVolumeRijen();
         ]
         _alle_logistieke_orders = laad_logistieke_orders()
         _materialen_met_volume = set(_volumes_dict.keys()) if isinstance(_volumes_dict, dict) else set()
-        for mat_naam in sorted({h.get("materiaal","") for h in _eigen_definitieve_inkoop if h.get("materiaal","")}):
-            heeft_jaarvolume = mat_naam in _materialen_met_volume
-            beschikbaar_jaar = parse_hoeveelheid_getal(_volumes_dict.get(mat_naam, "")) if heeft_jaarvolume else 0.0
+        # Groeperen op de specifieke KWALITEIT (bv. 'OCC 95/5'), niet de brede materiaal-
+        # categorie ('Karton') — dat laatste zegt een leverancier niets over wélke soort
+        # het precies is, terwijl elk contract die specifieke kwaliteit al vastlegt.
+        _kwaliteiten_per_contract = sorted({
+            (h.get("materiaal",""), h.get("kwaliteit","") or h.get("materiaal",""))
+            for h in _eigen_definitieve_inkoop if h.get("materiaal","")
+        }, key=lambda mk: mk[1])
+        for mat_naam, kwal_naam in _kwaliteiten_per_contract:
+            # Het jaarvolume kan op het bedrijfsprofiel op kwaliteit-niveau zijn ingesteld
+            # (bv. 'OCC 95/5': '2000') of, als er geen specifieke kwaliteiten zijn
+            # aangevinkt, op het bredere categorie-niveau (bv. 'Karton': '2000') — probeer
+            # eerst de specifieke kwaliteit, val anders terug op de categorie.
+            if kwal_naam in _materialen_met_volume:
+                volume_sleutel, heeft_jaarvolume = kwal_naam, True
+            elif mat_naam in _materialen_met_volume:
+                volume_sleutel, heeft_jaarvolume = mat_naam, True
+            else:
+                volume_sleutel, heeft_jaarvolume = kwal_naam, False
+            beschikbaar_jaar = parse_hoeveelheid_getal(_volumes_dict.get(volume_sleutel, "")) if heeft_jaarvolume else 0.0
             ingekocht_dit_jaar = 0.0
             nog_te_leveren = 0.0
             for h in _eigen_definitieve_inkoop:
-                if h.get("materiaal", "") != mat_naam:
+                if h.get("materiaal", "") != mat_naam or (h.get("kwaliteit","") or h.get("materiaal","")) != kwal_naam:
                     continue
                 try:
                     jaar_contract = datetime.datetime.strptime(h.get("aangemaakt",""), "%d-%m-%Y %H:%M").year
@@ -3546,7 +3562,7 @@ herbouwVolumeRijen();
                 nog_te_leveren += max(0.0, contract_hoeveelheid - _al_gewogen)
             restant_jaarvolume = max(0.0, beschikbaar_jaar - ingekocht_dit_jaar)
             inkoop_voortgang_lijst.append({
-                "naam": mat_naam, "beschikbaar_jaar": beschikbaar_jaar, "heeft_jaarvolume": heeft_jaarvolume,
+                "naam": kwal_naam, "beschikbaar_jaar": beschikbaar_jaar, "heeft_jaarvolume": heeft_jaarvolume,
                 "ingekocht_dit_jaar": ingekocht_dit_jaar, "nog_te_leveren": nog_te_leveren,
                 "restant_jaarvolume": restant_jaarvolume,
                 "pct_ingekocht": round(min(100, ingekocht_dit_jaar / beschikbaar_jaar * 100)) if beschikbaar_jaar else 0,
