@@ -2647,9 +2647,9 @@ select.klik-bewerken-veld { cursor:pointer; }
 {% else %}
 <div style="display:flex;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:20px;">
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-200);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume totaal</div>
-        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ bedrijf.volume|default('—',true) }}</div>
-        <div style="font-size:11px;color:var(--gray-400);">t/jaar{% if bedrijf.materiaal_volumes %}, {{ bedrijf.materiaal_volumes|length }} materialen{% endif %}</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Inkoop dit jaar</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{% if totaal_ingekocht_dit_jaar %}{{ "{:,.0f}".format(totaal_ingekocht_dit_jaar) }}t{% else %}—{% endif %}</div>
+        <div style="font-size:11px;color:var(--gray-400);">{% if inkoop_voortgang_lijst %}{{ inkoop_voortgang_lijst|length }} materia{{ 'al' if inkoop_voortgang_lijst|length == 1 else 'len' }}{% else %}nog geen definitieve contracten{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-200);">
         <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Open orders</div>
@@ -3506,10 +3506,12 @@ herbouwVolumeRijen();
     # het oude shipments.json, dat sinds Handelsorders/Transport Planning nergens meer
     # gevuld wordt en dus nooit meebewoog met nieuwe contracten.
     #
-    # Belangrijk: we itereren over ELK materiaal waar dit jaar een definitief inkoopcontract
-    # voor bestaat — niet alleen over materialen met een al-ingesteld jaarvolume. Anders zou
-    # een net-aangemaakt contract voor een materiaal zonder ingesteld jaarvolume nergens
-    # verschijnen, zonder dat er ook maar een hint is waarom (stil, verwarrend "niets te zien").
+    # Belangrijk: we tonen ALLEEN materialen waar dit jaar daadwerkelijk een definitief
+    # inkoopcontract voor bestaat — niet (ook) generieke categorieën uit materiaal_volumes
+    # die verder geen eigen contract-activiteit hebben (bv. een brede 'Karton'-categorie
+    # naast het specifieke 'OCC 95/5' dat echt gecontracteerd is). Een materiaal zonder
+    # ingesteld jaarvolume verschijnt wel gewoon, met een duidelijke melding daarover,
+    # zodat een net-aangemaakt contract nooit stil verdwijnt.
     inkoop_voortgang_lijst = []
     if not is_fabriek_profiel:
         _huidig_jaar = datetime.date.today().year
@@ -3519,13 +3521,10 @@ herbouwVolumeRijen();
             and h.get("tegenpartij_naam", "").strip().lower() == bedrijf["naam"].strip().lower()
         ]
         _alle_logistieke_orders = laad_logistieke_orders()
-        _materialen_met_activiteit = sorted({h.get("materiaal","") for h in _eigen_definitieve_inkoop if h.get("materiaal","")})
         _materialen_met_volume = set(_volumes_dict.keys()) if isinstance(_volumes_dict, dict) else set()
-        for mat_naam in sorted(_materialen_met_volume | set(_materialen_met_activiteit)):
+        for mat_naam in sorted({h.get("materiaal","") for h in _eigen_definitieve_inkoop if h.get("materiaal","")}):
             heeft_jaarvolume = mat_naam in _materialen_met_volume
             beschikbaar_jaar = parse_hoeveelheid_getal(_volumes_dict.get(mat_naam, "")) if heeft_jaarvolume else 0.0
-            if heeft_jaarvolume and beschikbaar_jaar <= 0 and mat_naam not in _materialen_met_activiteit:
-                continue  # jaarvolume ingesteld op 0/leeg én geen contracten -> niets zinvols te tonen
             ingekocht_dit_jaar = 0.0
             nog_te_leveren = 0.0
             for h in _eigen_definitieve_inkoop:
@@ -3553,6 +3552,7 @@ herbouwVolumeRijen();
                 "pct_ingekocht": round(min(100, ingekocht_dit_jaar / beschikbaar_jaar * 100)) if beschikbaar_jaar else 0,
             })
         inkoop_voortgang_lijst.sort(key=lambda x: -x["beschikbaar_jaar"])
+    totaal_ingekocht_dit_jaar = sum(i["ingekocht_dit_jaar"] for i in inkoop_voortgang_lijst)
 
     # --- Recente orders (echte data, laatste 5) + geleverd/openstaand obv gekoppelde shipments ---
     _alle_shipments_profiel = laad_shipments()
@@ -3648,6 +3648,7 @@ herbouwVolumeRijen();
                                     open_orders_aantal=open_orders_aantal, open_orders_ton=open_orders_ton,
                                     laatst_contact_profiel=laatst_contact_profiel, afstand_alblasserdam=afstand_alblasserdam,
                                     materialen_volume_lijst=materialen_volume_lijst, inkoop_voortgang_lijst=inkoop_voortgang_lijst,
+                                    totaal_ingekocht_dit_jaar=totaal_ingekocht_dit_jaar,
                                     recente_orders_profiel=recente_orders_profiel,
                                     actieve_leveranciers=actieve_leveranciers, bestemmingen_lijst=bestemmingen_lijst,
                                     fabrieken_gedeelde_kwaliteiten=fabrieken_gedeelde_kwaliteiten, matchpoel_label=matchpoel_label,
