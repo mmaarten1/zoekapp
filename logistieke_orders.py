@@ -1166,7 +1166,9 @@ def live_operations_pagina():
         <span style="width:130px;">
             {% if r.type == "order" %}
                 {% if r.contract_referentie %}<span style="font-size:11px;color:var(--gray-600);">{{ r.contract_referentie }}</span>
+                <button type="button" onclick="openKoppelModal('{{ r.id }}', false)" title="Contract wijzigen" style="font-size:10.5px;color:var(--brand-600);background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;margin-left:4px;font-family:inherit;">wijzigen</button>
                 {% elif r.prijstype %}<span style="font-size:11px;color:var(--gray-500);">{{ r.prijstype }}</span>
+                <button type="button" onclick="openKoppelModal('{{ r.id }}', false)" title="Contract wijzigen" style="font-size:10.5px;color:var(--brand-600);background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;margin-left:4px;font-family:inherit;">wijzigen</button>
                 {% else %}<button type="button" onclick="openKoppelModal('{{ r.id }}', false)" style="font-size:11px;color:var(--brand-600);background:none;border:none;text-decoration:none;font-weight:600;cursor:pointer;padding:0;font-family:inherit;">Contract koppelen</button>{% endif %}
             {% elif r.type == "weegbrug" and r.status == "Compleet" %}
             <button type="button" onclick="openKoppelModal('{{ r.id }}', true)" style="font-size:11px;color:var(--brand-600);background:none;border:none;text-decoration:none;font-weight:600;cursor:pointer;padding:0;font-family:inherit;">Afhandelen</button>
@@ -1719,7 +1721,13 @@ def _contract_opties_voor_order(order, alle_orders=None):
             totaal = float(str(h.get("hoeveelheid_mt","0")).replace(",",""))
         except (ValueError, TypeError):
             totaal = 0.0
-        geleverd = _contract_geleverd_volume(h["contractnummer"], alle_orders_voor_geleverd)
+        # Als 'order' zelf al aan DIT contract gekoppeld is (bv. je opent de koppel-
+        # popup nogmaals om te wijzigen), moet die hier worden uitgesloten van
+        # 'geleverd' — anders telt haar eigen gewicht dubbel: één keer hier als
+        # 'al geleverd', en nog een keer hieronder via 'deze_weging_ton'.
+        _orders_voor_dit_contract = [o for o in alle_orders_voor_geleverd if o.get("id") != order.get("id")] \
+            if h["contractnummer"] == order.get("contract_referentie") else alle_orders_voor_geleverd
+        geleverd = _contract_geleverd_volume(h["contractnummer"], _orders_voor_dit_contract)
         h = dict(h)
         h["totaal_ton"] = round(totaal, 1)
         h["geleverd_ton"] = geleverd

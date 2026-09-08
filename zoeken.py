@@ -2706,15 +2706,21 @@ select.klik-bewerken-veld { cursor:pointer; }
     <div style="padding:10px 0;border-bottom:1px solid var(--gray-50);font-size:13px;">
         <div style="display:flex;align-items:center;">
             <span style="flex:1.2;font-weight:600;color:var(--gray-800);">{{ i.naam }}</span>
-            <span style="width:90px;text-align:right;font-family:var(--font-mono);">{{ "{:,.0f}".format(i.beschikbaar_jaar) }}t</span>
+            <span style="width:90px;text-align:right;font-family:var(--font-mono);">{% if i.heeft_jaarvolume %}{{ "{:,.0f}".format(i.beschikbaar_jaar) }}t{% else %}<span style="color:var(--gray-300);font-family:inherit;font-size:11px;">geen volume</span>{% endif %}</span>
             <span style="width:90px;text-align:right;font-family:var(--font-mono);color:var(--brand-600);">{{ "{:,.0f}".format(i.ingekocht_dit_jaar) }}t</span>
             <span style="width:90px;text-align:right;font-family:var(--font-mono);color:{{ '#d97706' if i.nog_te_leveren else 'var(--gray-400)' }};">{{ "{:,.0f}".format(i.nog_te_leveren) }}t</span>
             <span style="width:130px;padding-left:16px;display:flex;align-items:center;gap:8px;">
+                {% if i.heeft_jaarvolume %}
                 <span style="flex:1;height:5px;background:var(--gray-100);border-radius:5px;overflow:hidden;"><span style="display:block;height:100%;background:var(--brand-600);width:{{ i.pct_ingekocht }}%;"></span></span>
                 <span style="font-size:11px;color:var(--gray-400);width:32px;text-align:right;">{{ i.pct_ingekocht }}%</span>
+                {% else %}
+                <span style="font-size:11px;color:var(--gray-300);">geen jaarvolume</span>
+                {% endif %}
             </span>
         </div>
-        <div style="font-size:11px;color:var(--gray-400);margin-top:3px;">nog {{ "{:,.0f}".format(i.restant_jaarvolume) }}t beschikbaar dit jaar</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:3px;">
+            {% if i.heeft_jaarvolume %}nog {{ "{:,.0f}".format(i.restant_jaarvolume) }}t beschikbaar dit jaar{% else %}geen jaarvolume ingesteld voor dit materiaal — dit contract telt hierboven wel mee{% endif %}
+        </div>
     </div>
     {% endfor %}
 </div>
@@ -3499,8 +3505,13 @@ herbouwVolumeRijen();
     # Gebaseerd op DEFINITIEVE handelsorders (het actieve contractsysteem) — niet meer op
     # het oude shipments.json, dat sinds Handelsorders/Transport Planning nergens meer
     # gevuld wordt en dus nooit meebewoog met nieuwe contracten.
+    #
+    # Belangrijk: we itereren over ELK materiaal waar dit jaar een definitief inkoopcontract
+    # voor bestaat — niet alleen over materialen met een al-ingesteld jaarvolume. Anders zou
+    # een net-aangemaakt contract voor een materiaal zonder ingesteld jaarvolume nergens
+    # verschijnen, zonder dat er ook maar een hint is waarom (stil, verwarrend "niets te zien").
     inkoop_voortgang_lijst = []
-    if not is_fabriek_profiel and isinstance(_volumes_dict, dict) and _volumes_dict:
+    if not is_fabriek_profiel:
         _huidig_jaar = datetime.date.today().year
         _eigen_definitieve_inkoop = [
             h for h in laad_handelsorders()
@@ -3508,10 +3519,13 @@ herbouwVolumeRijen();
             and h.get("tegenpartij_naam", "").strip().lower() == bedrijf["naam"].strip().lower()
         ]
         _alle_logistieke_orders = laad_logistieke_orders()
-        for mat_naam, waarde in _volumes_dict.items():
-            beschikbaar_jaar = parse_hoeveelheid_getal(waarde)
-            if beschikbaar_jaar <= 0:
-                continue
+        _materialen_met_activiteit = sorted({h.get("materiaal","") for h in _eigen_definitieve_inkoop if h.get("materiaal","")})
+        _materialen_met_volume = set(_volumes_dict.keys()) if isinstance(_volumes_dict, dict) else set()
+        for mat_naam in sorted(_materialen_met_volume | set(_materialen_met_activiteit)):
+            heeft_jaarvolume = mat_naam in _materialen_met_volume
+            beschikbaar_jaar = parse_hoeveelheid_getal(_volumes_dict.get(mat_naam, "")) if heeft_jaarvolume else 0.0
+            if heeft_jaarvolume and beschikbaar_jaar <= 0 and mat_naam not in _materialen_met_activiteit:
+                continue  # jaarvolume ingesteld op 0/leeg én geen contracten -> niets zinvols te tonen
             ingekocht_dit_jaar = 0.0
             nog_te_leveren = 0.0
             for h in _eigen_definitieve_inkoop:
@@ -3533,7 +3547,7 @@ herbouwVolumeRijen();
                 nog_te_leveren += max(0.0, contract_hoeveelheid - _al_gewogen)
             restant_jaarvolume = max(0.0, beschikbaar_jaar - ingekocht_dit_jaar)
             inkoop_voortgang_lijst.append({
-                "naam": mat_naam, "beschikbaar_jaar": beschikbaar_jaar,
+                "naam": mat_naam, "beschikbaar_jaar": beschikbaar_jaar, "heeft_jaarvolume": heeft_jaarvolume,
                 "ingekocht_dit_jaar": ingekocht_dit_jaar, "nog_te_leveren": nog_te_leveren,
                 "restant_jaarvolume": restant_jaarvolume,
                 "pct_ingekocht": round(min(100, ingekocht_dit_jaar / beschikbaar_jaar * 100)) if beschikbaar_jaar else 0,
