@@ -24,7 +24,7 @@ from core import (
     datapad, laad_status, bewaar_status, laad_accountmanagers, bewaar_accountmanagers,
     laad_materiaal_taxonomie, laad_orders, laad_users, laad_notities, laad_meldingen,
     bewaar_meldingen, vereist_admin_of_403, render_simple_page, geocode_adres,
-    bereken_afstand_km, vind_transport_tarieven_dichtbij, sync_contactpersoon_naar_contacten,
+    bereken_afstand_km, vind_transport_tarieven_dichtbij, sync_contactpersoon_naar_contacten, laad_contactpersonen,
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
     laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien, vereist_afdeling_of_403,
@@ -2555,6 +2555,10 @@ def bedrijf_profiel(naam):
     opgeslagen = bedrijf["naam"] in set(laad_opgeslagen())
     geverifieerd = bool(bedrijf.get("adres") or bedrijf.get("telefoon"))
     afhaallocaties = [] if is_fabriek_profiel else leverancier_instelling_voor(naam).get("afhaallocaties", [])
+    eigen_contactpersonen = sorted(
+        [p for p in laad_contactpersonen() if p.get("bedrijf") == bedrijf["naam"]],
+        key=lambda p: p.get("naam", "")
+    )
 
     inhoud = """
 {% if is_fabriek_profiel %}<input type="hidden" id="isFabriekProfiel" value="1">{% endif %}
@@ -2785,6 +2789,16 @@ select.klik-bewerken-veld { cursor:pointer; }
             <div class="veld-label">Contactpersoon</div>
             <input type="text" value="{{ bedrijf.contactpersoon or '' }}" data-veld="contactpersoon" onblur="wijzigBedrijfVeld(this)" placeholder="Naam invullen..." class="klik-bewerken-veld">
             <a href="/contacten/nieuw/bestaand?bedrijf={{ bedrijf.naam|urlencode }}" style="display:inline-block;margin-top:4px;font-size:11px;color:var(--brand-600);text-decoration:none;">+ Extra contactpersoon →</a>
+            {% if eigen_contactpersonen %}
+            <div style="margin-top:10px;">
+                {% for p in eigen_contactpersonen %}
+                <div style="font-size:12.5px;padding:6px 0;border-top:1px solid var(--gray-100);">
+                    <b style="color:var(--gray-800);">{{ p.naam }}</b>{% if p.rol %} <span style="color:var(--gray-400);">— {{ p.rol }}</span>{% endif %}
+                    {% if p.email or p.telefoon %}<br><span style="color:var(--gray-500);">{{ p.email }}{% if p.email and p.telefoon %} · {% endif %}{{ p.telefoon }}</span>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
         <div>
             <div class="veld-label">Adres hoofdvestiging</div>
@@ -3617,4 +3631,5 @@ herbouwVolumeRijen();
                                     gebruikersnaam=session.get("gebruikersnaam", ""),
                                     bedrijf_shipments=_bedrijf_shipments,
                                     materiaal_categorieen_lijst=[k.strip() for k in (bedrijf.get("kwaliteiten","") or "").split(",") if k.strip()],
-                                    materiaal_taxonomie=laad_materiaal_taxonomie())
+                                    materiaal_taxonomie=laad_materiaal_taxonomie(),
+                                    eigen_contactpersonen=eigen_contactpersonen)
