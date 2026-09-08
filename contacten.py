@@ -104,18 +104,17 @@ def contacten():
 <div class="page-title">Contacten</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Contactpersonen bij bedrijven, met rol en laatste contactmoment</p>
 
-<form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
-    <input type="text" name="zoekterm" value="{{ zoekterm }}" placeholder="Naam, bedrijf of e-mail" style="flex:1;max-width:280px;padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
-    <select name="accountmanager" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle accountmanagers</option>
-        {% for a in alle_accountmanagers %}<option value="{{ a }}" {% if gekozen_am == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
-    </select>
-    <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">Zoeken</button>
-    {% if zoekterm or gekozen_am %}<a href="/contacten" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
-</form>
-
-<div style="margin-bottom:20px;">
-    <a href="/contacten/nieuw" style="display:inline-block;padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">+ Contact toevoegen</a>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+    <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input type="text" name="zoekterm" value="{{ zoekterm }}" placeholder="Naam, bedrijf of e-mail" style="flex:1;max-width:280px;padding:8px 12px;border:none;background:var(--gray-50);border-radius:6px;font-size:12.5px;font-family:inherit;">
+        <select name="accountmanager" onchange="this.form.submit()" style="padding:8px 12px;border:none;background:var(--gray-50);border-radius:6px;font-size:12.5px;">
+            <option value="">Alle accountmanagers</option>
+            {% for a in alle_accountmanagers %}<option value="{{ a }}" {% if gekozen_am == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">Zoeken</button>
+        {% if zoekterm or gekozen_am %}<a href="/contacten" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
+    </form>
+    <a href="/contacten/nieuw" style="display:inline-block;padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap;">+ Contact toevoegen</a>
 </div>
 
 {% if contacten_lijst %}
