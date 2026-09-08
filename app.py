@@ -52,6 +52,7 @@ from core import (
     laad_logistieke_orders, bewaar_logistieke_orders, laad_weegbrug, laad_documenten,
     laad_handelsorders, laad_transport_planning, bewaar_transport_planning,
     laad_bedrijfslogo_instelling, bewaar_bedrijfslogo_instelling, LOGO_MAP, LOGO_POSITIES,
+    DOCUMENT_TYPES, DOCUMENT_TYPE_LABELS,
 )
 
 from bs4 import BeautifulSoup
@@ -3880,17 +3881,35 @@ def _genereer_factuur_pdf(factuur):
     klant = factuur.get("klant_gegevens") or {"naam": factuur.get("bedrijf",""), "adres":"", "postcode":"", "stad":"", "land":"", "kvk_nummer":"", "vat_nummer":""}
     bedragen = bereken_factuur_bedragen(factuur)
     regels = factuur.get("regels", [])
+    logo_instelling = laad_bedrijfslogo_instelling("factuur")
+    accentkleur = logo_instelling.get("accentkleur") or "#0d5c62"
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=18*mm, bottomMargin=18*mm, leftMargin=20*mm, rightMargin=20*mm)
     stijlen = getSampleStyleSheet()
-    titel_stijl = ParagraphStyle("FactuurTitel", parent=stijlen["Title"], fontSize=20, textColor=colors.HexColor("#0d5c62"))
+    titel_stijl = ParagraphStyle("FactuurTitel", parent=stijlen["Title"], fontSize=20, textColor=colors.HexColor(accentkleur))
     label_stijl = ParagraphStyle("Label", parent=stijlen["Normal"], fontSize=8.5, textColor=colors.HexColor("#64748b"))
     klein_stijl = ParagraphStyle("Klein", parent=stijlen["Normal"], fontSize=8.5, textColor=colors.HexColor("#64748b"), leading=12)
     normaal_stijl = stijlen["Normal"]
     rechts_stijl = ParagraphStyle("Rechts", parent=stijlen["Normal"], alignment=TA_RIGHT)
 
     elementen = []
+
+    # --- Logo (indien ingesteld voor Factuur) ---
+    if logo_instelling.get("bestandsnaam"):
+        logo_pad = os.path.join(LOGO_MAP, logo_instelling["bestandsnaam"])
+        if os.path.exists(logo_pad):
+            try:
+                from PIL import Image as PILImage
+                from reportlab.platypus import Image as RLImage
+                with PILImage.open(logo_pad) as test_img:
+                    test_img.verify()
+                logo_img = RLImage(logo_pad, width=45*mm, height=18*mm, kind="proportional")
+                logo_img.hAlign = {"links": "LEFT", "midden": "CENTER", "rechts": "RIGHT"}.get(logo_instelling.get("positie","links"), "LEFT")
+                elementen.append(logo_img)
+                elementen.append(Spacer(1, 10))
+            except Exception:
+                pass  # Ongeldig of beschadigd logo-bestand: factuur gewoon zonder logo genereren
 
     # --- Header: eigen bedrijfsgegevens (afzender) links, klant rechts ---
     eigen_adresregel = f"{eigen.get('adres','')}<br/>{eigen.get('postcode','')} {eigen.get('stad','')}<br/>{eigen.get('land','')}"
@@ -5361,6 +5380,7 @@ def _beheer_inhoud():
             {"titel": "Materialen beheren", "href": "/materialen-beheer", "beschrijving": "Het materialen- en kwaliteitenoverzicht bijwerken."},
             {"titel": "Commerciële instellingen", "href": "/instellingen/commercieel", "beschrijving": "Incoterms, betalingstermijnen, valuta, POD, bedrijfseenheden."},
             {"titel": "Eigen bedrijfsgegevens", "href": "/instellingen/eigen-bedrijfsgegevens", "beschrijving": "KvK, BTW en IBAN voor op facturen."},
+            {"titel": "Documentopmaak", "href": "/instellingen/documenten", "beschrijving": "Logo, positie en accentkleur per document — Factuur, Weegbon en Contract."},
         ]),
     ]
 
@@ -5379,25 +5399,8 @@ def _beheer_inhoud():
         {% endfor %}
     </div>
     {% endfor %}
-
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Bedrijfslogo (op de weegbon)</div>
-    <div class="info-kaart" style="max-width:440px;">
-        {% if logo_instelling.bestandsnaam %}
-        <img src="/bedrijfslogo/{{ logo_instelling.bestandsnaam }}" style="max-width:160px;max-height:60px;margin-bottom:10px;display:block;">
-        {% else %}
-        <div style="font-size:12.5px;color:var(--gray-400);margin-bottom:10px;">Nog geen logo geüpload.</div>
-        {% endif %}
-        <form method="POST" action="/instellingen/logo" enctype="multipart/form-data">
-            <input type="file" name="logo" accept="image/*" style="font-size:12px;margin-bottom:8px;display:block;">
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Positie op de weegbon</label>
-            <select name="positie" style="width:100%;padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;margin-top:2px;">
-                {% for p in logo_posities %}<option value="{{ p }}" {% if logo_instelling.positie == p %}selected{% endif %}>{{ p|capitalize }}</option>{% endfor %}
-            </select>
-            <button type="submit" style="padding:7px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Opslaan</button>
-        </form>
-    </div>
     """
-    return inhoud, dict(categorieen=categorieen, logo_instelling=laad_bedrijfslogo_instelling(), logo_posities=LOGO_POSITIES)
+    return inhoud, dict(categorieen=categorieen)
 
 
 @app.route("/instellingen/wachtwoord", methods=["POST"])
@@ -5477,23 +5480,85 @@ def instellingen():
     pagina = render_simple_page("Instellingen", "instellingen", inhoud)
     return render_template_string(pagina, **_tab_context)
 
-@app.route("/instellingen/logo", methods=["POST"])
-def instellingen_logo_upload():
-    if not is_huidige_gebruiker_admin():
-        return redirect(url_for("instellingen"))
-    instelling = laad_bedrijfslogo_instelling()
-    bestand = request.files.get("logo")
-    if bestand and bestand.filename:
-        _, extensie = os.path.splitext(bestand.filename)
-        if extensie.lower() in (".png", ".jpg", ".jpeg", ".svg", ".gif"):
-            if not os.path.exists(LOGO_MAP):
-                os.makedirs(LOGO_MAP)
-            nieuwe_bestandsnaam = f"logo{extensie.lower()}"
-            bestand.save(os.path.join(LOGO_MAP, nieuwe_bestandsnaam))
-            instelling["bestandsnaam"] = nieuwe_bestandsnaam
-    instelling["positie"] = request.form.get("positie", "links") if request.form.get("positie") in LOGO_POSITIES else instelling.get("positie", "links")
-    bewaar_bedrijfslogo_instelling(instelling)
-    return redirect(url_for("instellingen"))
+@app.route("/instellingen/documenten", methods=["GET", "POST"])
+def instellingen_documenten():
+    """Logo, positie en accentkleur per documenttype (Factuur/Weegbon/
+    Contract) — elk document kan zijn eigen opmaak hebben, in plaats van één
+    gedeeld logo dat voorheen alleen op de weegbon verscheen."""
+    _guard = vereist_admin_of_403()
+    if _guard: return _guard
+
+    document_type = request.args.get("type", "factuur")
+    if document_type not in DOCUMENT_TYPES:
+        document_type = "factuur"
+
+    if request.method == "POST":
+        instelling = laad_bedrijfslogo_instelling(document_type)
+        bestand = request.files.get("logo")
+        if bestand and bestand.filename:
+            _, extensie = os.path.splitext(bestand.filename)
+            if extensie.lower() in (".png", ".jpg", ".jpeg", ".svg", ".gif"):
+                if not os.path.exists(LOGO_MAP):
+                    os.makedirs(LOGO_MAP)
+                nieuwe_bestandsnaam = f"logo_{document_type}{extensie.lower()}"
+                bestand.save(os.path.join(LOGO_MAP, nieuwe_bestandsnaam))
+                instelling["bestandsnaam"] = nieuwe_bestandsnaam
+        if request.form.get("positie") in LOGO_POSITIES:
+            instelling["positie"] = request.form.get("positie")
+        ingevoerde_kleur = request.form.get("accentkleur", "").strip()
+        if re.match(r"^#[0-9a-fA-F]{6}$", ingevoerde_kleur):
+            instelling["accentkleur"] = ingevoerde_kleur
+        bewaar_bedrijfslogo_instelling(instelling, document_type)
+        return redirect(url_for("instellingen_documenten", type=document_type, opgeslagen="1"))
+
+    instelling = laad_bedrijfslogo_instelling(document_type)
+    opgeslagen = request.args.get("opgeslagen") == "1"
+    _tabbladen_html = "".join(
+        f'<a href="/instellingen/documenten?type={sleutel}" style="padding:8px 16px;font-size:12.5px;font-weight:700;text-decoration:none;border-bottom:2px solid {"var(--brand-600)" if sleutel == document_type else "transparent"};color:{"var(--brand-600)" if sleutel == document_type else "var(--gray-400)"};">{titel}</a>'
+        for sleutel, titel in DOCUMENT_TYPE_LABELS.items()
+    )
+
+    inhoud = """
+    <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;"><a href="/instellingen?modus=beheer" style="color:var(--gray-400);text-decoration:none;">Beheer</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Documentopmaak</span></div>
+    <div class="page-title">Documentopmaak</div>
+    <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Logo, positie en accentkleur — apart in te stellen per document.</p>
+
+    <div style="display:flex;gap:4px;border-bottom:1px solid var(--gray-200);margin-bottom:20px;">
+        """ + _tabbladen_html + """
+    </div>
+
+    {% if opgeslagen %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;max-width:440px;">Opgeslagen.</div>{% endif %}
+
+    <div class="info-kaart" style="max-width:440px;">
+        {% if instelling.bestandsnaam %}
+        <img src="/bedrijfslogo/{{ instelling.bestandsnaam }}" style="max-width:160px;max-height:60px;margin-bottom:10px;display:block;">
+        {% else %}
+        <div style="font-size:12.5px;color:var(--gray-400);margin-bottom:10px;">Nog geen logo geüpload voor {{ document_type_label }}.</div>
+        {% endif %}
+        <form method="POST" enctype="multipart/form-data">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Logo</label>
+            <input type="file" name="logo" accept="image/*" style="font-size:12px;margin-bottom:14px;margin-top:2px;display:block;">
+
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Positie</label>
+            <select name="positie" style="width:100%;padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:2px;">
+                {% for p in logo_posities %}<option value="{{ p }}" {% if instelling.positie == p %}selected{% endif %}>{{ p|capitalize }}</option>{% endfor %}
+            </select>
+
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Accentkleur (titel op het document)</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;margin-bottom:10px;">
+                <input type="color" name="accentkleur" value="{{ instelling.accentkleur }}" style="width:44px;height:32px;border:1px solid var(--gray-200);border-radius:6px;padding:2px;cursor:pointer;">
+                <span style="font-size:12px;color:var(--gray-400);font-family:var(--font-mono);">{{ instelling.accentkleur }}</span>
+            </div>
+
+            <button type="submit" style="padding:7px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Opslaan</button>
+        </form>
+    </div>
+    """
+    pagina = render_simple_page("Documentopmaak", "instellingen", inhoud)
+    return render_template_string(pagina, instelling=instelling, logo_posities=LOGO_POSITIES,
+                                    document_type=document_type, document_type_label=DOCUMENT_TYPE_LABELS[document_type],
+                                    opgeslagen=opgeslagen)
+
 
 @app.route("/bedrijfslogo/<bestandsnaam>")
 def bedrijfslogo_bestand(bestandsnaam):

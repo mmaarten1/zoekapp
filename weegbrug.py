@@ -624,12 +624,12 @@ def _genereer_weegbon_pdf(record):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=20*mm, bottomMargin=20*mm, leftMargin=20*mm, rightMargin=20*mm)
     stijlen = getSampleStyleSheet()
-    titel_stijl = ParagraphStyle("WeegbonTitel", parent=stijlen["Title"], fontSize=18, textColor=colors.HexColor("#0d5c62"))
+    logo_instelling = laad_bedrijfslogo_instelling("weegbon")
+    titel_stijl = ParagraphStyle("WeegbonTitel", parent=stijlen["Title"], fontSize=18, textColor=colors.HexColor(logo_instelling.get("accentkleur") or "#0d5c62"))
     label_stijl = ParagraphStyle("Label", parent=stijlen["Normal"], fontSize=9, textColor=colors.HexColor("#64748b"))
 
     elementen = []
 
-    logo_instelling = laad_bedrijfslogo_instelling()
     if logo_instelling.get("bestandsnaam"):
         logo_pad = os.path.join(LOGO_MAP, logo_instelling["bestandsnaam"])
         if os.path.exists(logo_pad):

@@ -2129,17 +2129,58 @@ LANDEN = sorted(set(b["land"] for b in ENF_BEDRIJVEN))
 LOGO_MAP = datapad("bedrijfslogo")
 LOGO_INSTELLING_FILE = datapad("logo_instelling.json")
 LOGO_POSITIES = ["links", "midden", "rechts"]
+DOCUMENT_TYPES = ["factuur", "weegbon", "contract"]
+DOCUMENT_TYPE_LABELS = {"factuur": "Factuur", "weegbon": "Weegbon", "contract": "Contract"}
+STANDAARD_ACCENTKLEUR = "#0d5c62"
 
-def laad_bedrijfslogo_instelling():
+def laad_bedrijfslogo_instelling(document_type=None):
+    """Logo/positie/accentkleur per documenttype (factuur/weegbon/contract).
+    Zonder document_type: geeft de oude, gedeelde structuur terug voor
+    achterwaartse compatibiliteit (bestaande code die alleen de weegbon-
+    instelling kende). Met document_type: geeft de instelling voor dát
+    specifieke document terug, met een schone standaard als er nog niets is
+    ingesteld — zodat elk document een eigen logo/positie/kleur kan hebben."""
+    standaard = {"bestandsnaam": "", "positie": "links", "accentkleur": STANDAARD_ACCENTKLEUR}
     try:
         with open(LOGO_INSTELLING_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            opgeslagen = json.load(f)
     except:
-        return {"bestandsnaam": "", "positie": "links"}
+        opgeslagen = {}
 
-def bewaar_bedrijfslogo_instelling(instelling):
+    if document_type is None:
+        # Oude aanroepstijl (geen document_type) -> geef de weegbon-instelling terug,
+        # want dat was het enige document dat het logo tot nu toe gebruikte.
+        document_type = "weegbon"
+
+    if document_type in DOCUMENT_TYPES and document_type in opgeslagen:
+        resultaat = dict(standaard)
+        resultaat.update(opgeslagen[document_type])
+        return resultaat
+    if "bestandsnaam" in opgeslagen:
+        # Nog de oude, ongesplitste structuur (van vóór per-document-instellingen) —
+        # gebruik die als startpunt voor alle documenttypen totdat iemand een
+        # document specifiek anders instelt.
+        resultaat = dict(standaard)
+        resultaat.update(opgeslagen)
+        return resultaat
+    return standaard
+
+def bewaar_bedrijfslogo_instelling(instelling, document_type=None):
+    """Bewaart de instelling voor één documenttype, zonder de instellingen van
+    de andere documenttypen te overschrijven. Zonder document_type (oude
+    aanroepstijl): bewaart als 'weegbon', consistent met laad_bedrijfslogo_instelling."""
+    if document_type is None:
+        document_type = "weegbon"
+    try:
+        with open(LOGO_INSTELLING_FILE, "r", encoding="utf-8") as f:
+            alles = json.load(f)
+    except:
+        alles = {}
+    if not isinstance(alles, dict) or "bestandsnaam" in alles:
+        alles = {}  # oude, ongesplitste structuur -> vervangen door de nieuwe, per-document structuur
+    alles[document_type] = instelling
     with open(LOGO_INSTELLING_FILE, "w", encoding="utf-8") as f:
-        json.dump(instelling, f, ensure_ascii=False, indent=2)
+        json.dump(alles, f, ensure_ascii=False, indent=2)
 
 # ============================================================
 # Commerciële instellingen voor Inkoop-/Verkooporders: eenvoudige,

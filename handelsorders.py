@@ -18,6 +18,7 @@ import uuid
 import datetime
 import re
 import io
+import os
 from flask import Blueprint, request, session, redirect, url_for, render_template_string, Response, jsonify
 
 from core import (
@@ -28,6 +29,7 @@ from core import (
     laad_bedrijfseenheden, laad_leverancier_instellingen, leverancier_instelling_voor,
     genereer_supplier_reference, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     parse_hoeveelheid_getal, AFDELINGEN, AFDELING_LABELS, haal_live_wisselkoers, laad_facturen,
+    laad_bedrijfslogo_instelling, LOGO_MAP,
     bepaal_factuur_status, laad_marktprijzen, bewaar_marktprijzen, laad_documenten, laad_logistieke_orders,
 )
 
@@ -1215,16 +1217,35 @@ def _genereer_contract_pdf(order):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    logo_instelling = laad_bedrijfslogo_instelling("contract")
+    accentkleur = logo_instelling.get("accentkleur") or "#0d5c62"
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=20*mm, bottomMargin=20*mm, leftMargin=20*mm, rightMargin=20*mm)
     stijlen = getSampleStyleSheet()
-    titel_stijl = ParagraphStyle("ContractTitel", parent=stijlen["Title"], fontSize=18, textColor=colors.HexColor("#0d5c62"))
+    titel_stijl = ParagraphStyle("ContractTitel", parent=stijlen["Title"], fontSize=18, textColor=colors.HexColor(accentkleur))
     label_stijl = ParagraphStyle("Label", parent=stijlen["Normal"], fontSize=9, textColor=colors.HexColor("#64748b"))
 
-    elementen = [
+    elementen = []
+
+    if logo_instelling.get("bestandsnaam"):
+        logo_pad = os.path.join(LOGO_MAP, logo_instelling["bestandsnaam"])
+        if os.path.exists(logo_pad):
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(logo_pad) as test_img:
+                    test_img.verify()
+                logo_img = Image(logo_pad, width=45*mm, height=18*mm, kind="proportional")
+                logo_img.hAlign = {"links": "LEFT", "midden": "CENTER", "rechts": "RIGHT"}.get(logo_instelling.get("positie","links"), "LEFT")
+                elementen.append(logo_img)
+                elementen.append(Spacer(1, 10))
+            except Exception:
+                pass  # Ongeldig of beschadigd logo-bestand: contract gewoon zonder logo genereren
+
+    elementen += [
         Paragraph("Inkoopcontract" if order["order_type"] == "inkoop" else "Verkoopcontract", titel_stijl),
         Paragraph(f"Contractnummer: <b>{order['contractnummer']}</b>", stijlen["Normal"]),
         Spacer(1, 14),
