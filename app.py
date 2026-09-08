@@ -5242,28 +5242,35 @@ def _persoonlijke_informatie_inhoud():
     <div class="page-title">Persoonlijke informatie</div>
     {% if opgeslagen %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;max-width:420px;">Opgeslagen.</div>{% endif %}
 
-    <div class="info-kaart" style="max-width:420px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-            {% if eigen_gegevens.profielfoto %}
-            <img src="/fotos_uploads/{{ eigen_gegevens.profielfoto }}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;">
-            {% else %}
-            <div style="width:56px;height:56px;border-radius:50%;background:var(--brand-600);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;">{{ (eigen_gegevens.weergavenaam or gebruikersnaam)[:2]|upper }}</div>
-            {% endif %}
-            <div>
-                <div style="font-weight:700;color:var(--gray-800);">{{ eigen_gegevens.weergavenaam or gebruikersnaam }}</div>
-                <div style="font-size:11.5px;color:var(--gray-400);">Inlognaam: {{ gebruikersnaam }}</div>
-            </div>
-        </div>
+    <style>
+        .profielfoto-cirkel { position:relative; width:64px; height:64px; flex-shrink:0; }
+        .profielfoto-cirkel img, .profielfoto-cirkel .profielfoto-initialen { width:64px; height:64px; border-radius:50%; object-fit:cover; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:19px; background:var(--brand-600); color:#fff; }
+        .profielfoto-plus { position:absolute; bottom:-2px; right:-2px; width:22px; height:22px; border-radius:50%; background:var(--brand-600); color:#fff; border:2px solid #fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; cursor:pointer; line-height:1; }
+        .profielfoto-label { cursor:pointer; display:block; }
+    </style>
 
+    <div class="info-kaart" style="max-width:420px;margin-bottom:16px;">
         <form method="POST" enctype="multipart/form-data">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+                <label class="profielfoto-label" title="Profielfoto wijzigen">
+                    <div class="profielfoto-cirkel">
+                        <img id="profielfotoPreview" src="{% if eigen_gegevens.profielfoto %}/fotos_uploads/{{ eigen_gegevens.profielfoto }}{% endif %}" style="{% if not eigen_gegevens.profielfoto %}display:none;{% endif %}">
+                        <div id="profielfotoInitialen" class="profielfoto-initialen" style="{% if eigen_gegevens.profielfoto %}display:none;{% endif %}">{{ (eigen_gegevens.weergavenaam or gebruikersnaam)[:2]|upper }}</div>
+                        <div class="profielfoto-plus">+</div>
+                    </div>
+                    <input type="file" name="profielfoto" accept="image/*" style="display:none;" onchange="profielfotoWijzigen(this)">
+                </label>
+                <div>
+                    <div style="font-weight:700;color:var(--gray-800);">{{ eigen_gegevens.weergavenaam or gebruikersnaam }}</div>
+                    <div style="font-size:11.5px;color:var(--gray-400);">Inlognaam: {{ gebruikersnaam }}</div>
+                </div>
+            </div>
+
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Naam (zichtbaar in de app)</label>
             <input type="text" name="weergavenaam" value="{{ eigen_gegevens.weergavenaam or '' }}" placeholder="{{ gebruikersnaam }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
 
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">E-mailadres</label>
-            <input type="email" name="email" value="{{ eigen_gegevens.email or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
-
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Profielfoto</label>
-            <input type="file" name="profielfoto" accept="image/*" style="width:100%;font-size:12.5px;margin-top:4px;margin-bottom:14px;">
+            <input type="email" name="email" value="{{ eigen_gegevens.email or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:18px;margin-top:4px;box-sizing:border-box;">
 
             <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Opslaan</button>
         </form>
@@ -5275,42 +5282,66 @@ def _persoonlijke_informatie_inhoud():
         <hr class="drawer-divider">
         <a href="/logout" class="btn-nav btn-nav-primary" style="display:inline-block;">Uitloggen</a>
     </div>
+
+    <script>
+    function profielfotoWijzigen(input) {
+        if (!input.files || !input.files[0]) return;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var img = document.getElementById("profielfotoPreview");
+            img.src = e.target.result;
+            img.style.display = "block";
+            document.getElementById("profielfotoInitialen").style.display = "none";
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+    </script>
     """
     return inhoud, dict(gebruikersnaam=gebruikersnaam, eigen_gegevens=eigen_gegevens, opgeslagen=opgeslagen,
                           team=session.get("team",""), AFDELING_LABELS=AFDELING_LABELS)
 
 
 def _beheer_inhoud():
-    """De bestaande admin-links, nu gegroepeerd in logische categorieën
-    i.p.v. één lange, ongesorteerde lijst — dezelfde links als voorheen."""
+    """De bestaande admin-links, nu als klikbare kaart-tegels gegroepeerd in
+    logische categorieën — zelfde grid-patroon als de /logistiek-hubpagina,
+    i.p.v. tekstlinks onder elkaar. Zelfde links als voorheen."""
+    categorieen = [
+        ("Data importeren", [
+            {"titel": "Excel-import", "href": "/importeer", "beschrijving": "Bedrijven in bulk toevoegen vanuit een Excel-bestand."},
+            {"titel": "OpenStreetMap-import", "href": "/importeer-osm", "beschrijving": "Bedrijven zoeken en toevoegen via OpenStreetMap."},
+            {"titel": "ScrapMonster-import", "href": "/importeer-scrapmonster", "beschrijving": "Schroothandels importeren vanuit ScrapMonster."},
+            {"titel": "UK overheidsregister-import", "href": "/importeer-gov-uk", "beschrijving": "Britse bedrijven importeren via het overheidsregister."},
+        ]),
+        ("Data-onderhoud", [
+            {"titel": "Dubbele bedrijven opschonen", "href": "/opschonen-dubbelen", "beschrijving": "Vindt en verwijdert dubbel ingevoerde bedrijven."},
+            {"titel": "Ontbrekende coördinaten aanvullen", "href": "/geocode-aanvullen", "beschrijving": "Geocodeert bedrijven zonder lat/lon, 50 per keer."},
+            {"titel": "Bedrijfstypes aanvullen", "href": "/herlabel-brontype", "beschrijving": "Vult ontbrekende bedrijfstype-labels aan."},
+            {"titel": "UK-bedrijven controleren", "href": "/controleer-uk-status", "beschrijving": "Controleert Britse bedrijven bij Companies House."},
+            {"titel": "Live data downloaden", "href": "/export-data", "beschrijving": "Backup of synchronisatie van alle live data."},
+        ]),
+        ("Gebruikers & instellingen", [
+            {"titel": "Gebruikers beheren", "href": "/gebruikers-beheer", "beschrijving": "Accounts toevoegen, verwijderen en rechten instellen."},
+            {"titel": "Materialen beheren", "href": "/materialen-beheer", "beschrijving": "Het materialen- en kwaliteitenoverzicht bijwerken."},
+            {"titel": "Commerciële instellingen", "href": "/instellingen/commercieel", "beschrijving": "Incoterms, betalingstermijnen, valuta, POD, bedrijfseenheden."},
+            {"titel": "Eigen bedrijfsgegevens", "href": "/instellingen/eigen-bedrijfsgegevens", "beschrijving": "KvK, BTW en IBAN voor op facturen."},
+        ]),
+    ]
+
     inhoud = """
     <div class="page-title">Beheer</div>
     <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Alleen zichtbaar voor beheerders.</p>
 
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Data importeren</div>
-    <div class="info-kaart" style="max-width:440px;margin-bottom:20px;">
-        <a href="/importeer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Excel-import</a>
-        <a href="/importeer-osm" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ OpenStreetMap-import</a>
-        <a href="/importeer-scrapmonster" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ ScrapMonster-import (schroothandels)</a>
-        <a href="/importeer-gov-uk" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK overheidsregister-import</a>
+    {% for categorie_titel, kaarten in categorieen %}
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">{{ categorie_titel }}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:24px;">
+        {% for k in kaarten %}
+        <a href="{{ k.href }}" style="display:block;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px 18px;text-decoration:none;color:inherit;">
+            <div style="font-size:13.5px;font-weight:700;color:var(--gray-800);margin-bottom:6px;">{{ k.titel }} →</div>
+            <div style="font-size:12px;color:var(--gray-500);line-height:1.5;">{{ k.beschrijving }}</div>
+        </a>
+        {% endfor %}
     </div>
-
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Data-onderhoud</div>
-    <div class="info-kaart" style="max-width:440px;margin-bottom:20px;">
-        <a href="/opschonen-dubbelen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Dubbele bedrijven opschonen</a>
-        <a href="/geocode-aanvullen" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Ontbrekende coördinaten aanvullen</a>
-        <a href="/herlabel-brontype" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Bedrijfstypes aanvullen</a>
-        <a href="/controleer-uk-status" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ UK-bedrijven controleren (Companies House)</a>
-        <a href="/export-data" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Live data downloaden (backup/synchroniseren)</a>
-    </div>
-
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Gebruikers &amp; instellingen</div>
-    <div class="info-kaart" style="max-width:440px;margin-bottom:20px;">
-        <a href="/gebruikers-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Gebruikers beheren</a>
-        <a href="/materialen-beheer" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Materialen beheren</a>
-        <a href="/instellingen/commercieel" style="display:block;margin-bottom:8px;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Commerciële instellingen (Incoterms, Betalingstermijnen, Valuta, POD, Bedrijfseenheden)</a>
-        <a href="/instellingen/eigen-bedrijfsgegevens" style="display:block;color:var(--brand-600);font-weight:600;text-decoration:none;">→ Eigen bedrijfsgegevens (voor op facturen: KvK, BTW, IBAN)</a>
-    </div>
+    {% endfor %}
 
     <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Bedrijfslogo (op de weegbon)</div>
     <div class="info-kaart" style="max-width:440px;">
@@ -5329,7 +5360,7 @@ def _beheer_inhoud():
         </form>
     </div>
     """
-    return inhoud, dict(logo_instelling=laad_bedrijfslogo_instelling(), logo_posities=LOGO_POSITIES)
+    return inhoud, dict(categorieen=categorieen, logo_instelling=laad_bedrijfslogo_instelling(), logo_posities=LOGO_POSITIES)
 
 
 @app.route("/instellingen", methods=["GET", "POST"])
