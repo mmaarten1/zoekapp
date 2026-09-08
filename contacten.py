@@ -118,7 +118,8 @@ def contacten():
 </div>
 
 {% if contacten_lijst %}
-<div class="data-thead" style="border-radius:var(--radius-md) var(--radius-md) 0 0;">
+<div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
+<div class="data-thead">
     <span style="flex:1.2;" data-sort="naam">Contactpersoon</span>
     <span style="flex:1.4;" data-sort="bedrijf">Bedrijf</span>
     <span style="flex:1;" data-sort="rol">Rol</span>
@@ -128,7 +129,7 @@ def contacten():
     <span style="width:90px;text-align:right;" data-sort="laatst">Contact</span>
     <span style="width:26px;"></span>
 </div>
-<div id="contactenLijst" style="border:1px solid var(--gray-200);border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);overflow:hidden;">
+<div id="contactenLijst">
     {% for c in contacten_lijst %}
     <div class="data-row"
        data-naam="{{ c.naam|e }}" data-bedrijf="{{ c.bedrijf|e }}" data-rol="{{ c.rol|default('',true)|e }}"
@@ -151,6 +152,7 @@ def contacten():
         </span>
     </div>
     {% endfor %}
+</div>
 </div>
 <div style="display:flex;justify-content:space-between;padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">
     <span>{{ contacten_lijst|length }} contactpersonen</span>
