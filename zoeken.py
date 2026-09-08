@@ -2559,6 +2559,8 @@ def bedrijf_profiel(naam):
         [p for p in laad_contactpersonen() if p.get("bedrijf") == bedrijf["naam"]],
         key=lambda p: p.get("naam", "")
     )
+    for _p in eigen_contactpersonen:
+        _p["mag_bewerken"] = _p.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()
 
     inhoud = """
 {% if is_fabriek_profiel %}<input type="hidden" id="isFabriekProfiel" value="1">{% endif %}
@@ -2792,9 +2794,12 @@ select.klik-bewerken-veld { cursor:pointer; }
             {% if eigen_contactpersonen %}
             <div style="margin-top:10px;">
                 {% for p in eigen_contactpersonen %}
-                <div style="font-size:12.5px;padding:6px 0;border-top:1px solid var(--gray-100);">
-                    <b style="color:var(--gray-800);">{{ p.naam }}</b>{% if p.rol %} <span style="color:var(--gray-400);">— {{ p.rol }}</span>{% endif %}
-                    {% if p.email or p.telefoon %}<br><span style="color:var(--gray-500);">{{ p.email }}{% if p.email and p.telefoon %} · {% endif %}{{ p.telefoon }}</span>{% endif %}
+                <div style="font-size:12.5px;padding:6px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                    <div>
+                        <b style="color:var(--gray-800);">{{ p.naam }}</b>{% if p.rol %} <span style="color:var(--gray-400);">— {{ p.rol }}</span>{% endif %}
+                        {% if p.email or p.telefoon %}<br><span style="color:var(--gray-500);">{{ p.email }}{% if p.email and p.telefoon %} · {% endif %}{{ p.telefoon }}</span>{% endif %}
+                    </div>
+                    {% if p.mag_bewerken %}<a href="/contacten/{{ p.id }}/bewerken?terug_naar=/bedrijf/{{ bedrijf.naam|urlencode }}" title="Bewerken" style="color:var(--gray-300);text-decoration:none;font-size:12px;flex-shrink:0;">✎</a>{% endif %}
                 </div>
                 {% endfor %}
             </div>

@@ -70,7 +70,7 @@ def contacten():
             "id": p["id"], "naam": p["naam"], "bedrijf": p["bedrijf"], "rol": p.get("rol",""),
             "email": p.get("email",""), "telefoon": p.get("telefoon",""),
             "accountmanager": accountmanagers_alle.get(p["bedrijf"], ""), "laatst": p.get("laatst",""),
-            "eigen": p.get("gebruiker") == session.get("gebruikersnaam",""),
+            "eigen": p.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin(),
         })
 
     # Bedrijven met een los ingevuld 'contactpersoon'-veld die nog geen formeel record hebben: ook tonen (niet verzinnen, wel niet verliezen)
@@ -127,7 +127,7 @@ def contacten():
     <span style="width:130px;" data-sort="telefoon">Telefoon</span>
     <span style="width:110px;" data-sort="accountmanager">Accountmgr.</span>
     <span style="width:90px;text-align:right;" data-sort="laatst">Contact</span>
-    <span style="width:26px;"></span>
+    <span style="width:60px;"></span>
 </div>
 <div id="contactenLijst">
     {% for c in contacten_lijst %}
@@ -142,8 +142,9 @@ def contacten():
         <span style="width:130px;" class="num">{{ c.telefoon|default('—',true) }}</span>
         <span style="width:110px;" class="zacht">{{ c.accountmanager|default('—',true) }}</span>
         <span style="width:90px;text-align:right;font-size:11.5px;color:var(--gray-400);">{{ c.laatst|default('—',true) }}</span>
-        <span style="width:26px;">
+        <span style="width:60px;text-align:right;display:flex;justify-content:flex-end;gap:6px;align-items:center;">
             {% if c.id and c.eigen %}
+            <a href="/contacten/{{ c.id }}/bewerken" title="Bewerken" style="color:var(--gray-300);text-decoration:none;font-size:12px;">✎</a>
             <form method="POST" onsubmit="return confirm('Contactpersoon verwijderen?');" style="margin:0;">
                 <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="persoon_id" value="{{ c.id }}">
                 <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;">✕</button>
@@ -411,6 +412,66 @@ def contacten_importeren_bevestigen():
     """
     pagina = render_simple_page("Import voltooid", "contacten", inhoud)
     return render_template_string(pagina)
+
+@contacten_bp.route("/contacten/<persoon_id>/bewerken", methods=["GET", "POST"])
+def contact_bewerken(persoon_id):
+    """Een bestaande contactpersoon bewerken — alleen door wie hem aanmaakte
+    of een admin (zelfde regel als bij verwijderen)."""
+    alle = laad_contactpersonen()
+    persoon = next((p for p in alle if p["id"] == persoon_id), None)
+    if not persoon:
+        pagina = render_simple_page("Niet gevonden", "contacten", '<div class="page-title">Niet gevonden</div><div class="lege-staat">Deze contactpersoon bestaat niet (meer). <a href="/contacten">Terug</a></div>')
+        return render_template_string(pagina), 404
+    if not (persoon.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()):
+        pagina = render_simple_page("Geen toegang", "contacten", '<div class="page-title">Geen toegang</div><div class="lege-staat">Je kunt alleen contactpersonen bewerken die je zelf hebt toegevoegd. <a href="/contacten">Terug</a></div>')
+        return render_template_string(pagina), 403
+
+    terug_naar = request.values.get("terug_naar", "/contacten")
+
+    if request.method == "POST":
+        naam = request.form.get("naam", "").strip()
+        bedrijf = request.form.get("bedrijf", "").strip()
+        if naam and bedrijf:
+            persoon["naam"] = naam
+            persoon["bedrijf"] = bedrijf
+            persoon["rol"] = request.form.get("rol", "").strip()
+            persoon["email"] = request.form.get("email", "").strip()
+            persoon["telefoon"] = request.form.get("telefoon", "").strip()
+            persoon["laatst"] = request.form.get("laatst", "") or persoon.get("laatst", "")
+            bewaar_contactpersonen(alle)
+            return redirect(request.form.get("terug_naar") or "/contacten")
+
+    inhoud = """
+    <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;"><a href="{{ terug_naar }}" style="color:var(--gray-400);text-decoration:none;">← Terug</a></div>
+    <div class="page-title">Contactpersoon bewerken</div>
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:480px;margin-top:16px;">
+        <form method="POST">
+            <input type="hidden" name="terug_naar" value="{{ terug_naar }}">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Naam *</label>
+            <input type="text" name="naam" value="{{ persoon.naam }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
+
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bedrijf *</label>
+            <input type="text" name="bedrijf" value="{{ persoon.bedrijf }}" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+                <div><label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Rol</label>
+                <input type="text" name="rol" value="{{ persoon.rol or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;"></div>
+                <div><label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">E-mail</label>
+                <input type="email" name="email" value="{{ persoon.email or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;"></div>
+                <div><label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Telefoon</label>
+                <input type="text" name="telefoon" value="{{ persoon.telefoon or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;"></div>
+                <div><label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Laatste contactmoment</label>
+                <input type="date" name="laatst" value="{{ persoon.laatst or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;"></div>
+            </div>
+
+            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Opslaan</button>
+            <a href="{{ terug_naar }}" style="padding:9px 16px;color:var(--gray-400);text-decoration:none;font-size:13px;">Annuleren</a>
+        </form>
+    </div>
+    """
+    pagina = render_simple_page("Contactpersoon bewerken", "contacten", inhoud)
+    return render_template_string(pagina, persoon=persoon, terug_naar=terug_naar)
+
 
 @contacten_bp.route("/contacten/nieuw")
 def contacten_nieuw_keuze():
