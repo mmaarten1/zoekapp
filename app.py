@@ -2087,7 +2087,7 @@ LOGIN_HTML = '''
         {% if fout %}<div class="fout">{{ fout }}</div>{% endif %}
         <form method="POST">
             <label>Gebruikersnaam</label>
-            <input type="text" name="gebruikersnaam" placeholder="jouw.naam" required autofocus>
+            <input type="text" name="gebruikersnaam" placeholder="Gebruikersnaam of e-mailadres" required autofocus>
             <label>Wachtwoord</label>
             <input type="password" name="wachtwoord" placeholder="••••••••" required>
             <button type="submit">Inloggen →</button>
@@ -2101,14 +2101,27 @@ LOGIN_HTML = '''
 def login():
     fout = None
     if request.method == "POST":
-        gebruikersnaam = request.form.get("gebruikersnaam", "")
+        ingevoerd = request.form.get("gebruikersnaam", "").strip()
         wachtwoord = request.form.get("wachtwoord", "")
+        users = laad_users()
+
+        # Ingevoerde waarde kan de gebruikersnaam zelf zijn, of het e-mailadres
+        # dat bij Persoonlijke informatie is ingesteld — in dat laatste geval
+        # herleiden we hier de echte gebruikersnaam, zodat rate-limiting en
+        # sessie-opslag altijd op dezelfde, echte gebruiker werken (anders zou
+        # iemand de blokkade kunnen omzeilen door af te wisselen tussen naam
+        # en e-mail).
+        gebruikersnaam = ingevoerd
+        if ingevoerd not in users and ingevoerd:
+            gevonden = next((naam for naam, gegevens in users.items()
+                              if gegevens.get("email", "").strip().lower() == ingevoerd.lower()), None)
+            if gevonden:
+                gebruikersnaam = gevonden
 
         geblokkeerd, resterende_minuten = is_account_tijdelijk_geblokkeerd(gebruikersnaam)
         if geblokkeerd:
             fout = f"Te veel mislukte inlogpogingen. Probeer het over {resterende_minuten} minuten opnieuw."
         else:
-            users = laad_users()
             if gebruikersnaam in users and check_password_hash(users[gebruikersnaam]["wachtwoord"], wachtwoord):
                 reset_mislukte_inlogpogingen(gebruikersnaam)
                 session["ingelogd"] = True
@@ -5237,6 +5250,13 @@ def _persoonlijke_informatie_inhoud():
     users = laad_users()
     eigen_gegevens = users.get(gebruikersnaam, {})
     opgeslagen = request.args.get("opgeslagen") == "1"
+    wachtwoord_gewijzigd = request.args.get("wachtwoord_gewijzigd") == "1"
+    wachtwoord_fout = request.args.get("wachtwoord_fout", "")
+    WACHTWOORD_FOUTMELDINGEN = {
+        "wachtwoord_onjuist": "Je huidige wachtwoord klopt niet.",
+        "wachtwoord_te_kort": "Nieuw wachtwoord moet minstens 6 tekens zijn.",
+        "wachtwoord_komt_niet_overeen": "De bevestiging komt niet overeen met het nieuwe wachtwoord.",
+    }
 
     inhoud = """
     <div class="page-title">Persoonlijke informatie</div>
@@ -5283,6 +5303,21 @@ def _persoonlijke_informatie_inhoud():
         <a href="/logout" class="btn-nav btn-nav-primary" style="display:inline-block;">Uitloggen</a>
     </div>
 
+    <div class="info-kaart" style="max-width:420px;margin-top:16px;">
+        <div class="dg-kaart-titel">Wachtwoord wijzigen</div>
+        {% if wachtwoord_gewijzigd %}<div style="background:#f0fdf4;color:#16a34a;padding:9px 12px;border-radius:7px;margin-bottom:12px;font-size:12px;">Wachtwoord gewijzigd.</div>{% endif %}
+        {% if wachtwoord_fout %}<div style="background:#fef2f2;color:#dc2626;padding:9px 12px;border-radius:7px;margin-bottom:12px;font-size:12px;">{{ wachtwoord_foutmeldingen.get(wachtwoord_fout, "Er ging iets mis.") }}</div>{% endif %}
+        <form method="POST" action="/instellingen/wachtwoord">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Huidig wachtwoord</label>
+            <input type="password" name="huidig_wachtwoord" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:12px;margin-top:4px;box-sizing:border-box;">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Nieuw wachtwoord</label>
+            <input type="password" name="nieuw_wachtwoord" required minlength="6" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:12px;margin-top:4px;box-sizing:border-box;">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Nieuw wachtwoord bevestigen</label>
+            <input type="password" name="nieuw_wachtwoord_bevestig" required minlength="6" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:16px;margin-top:4px;box-sizing:border-box;">
+            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Wachtwoord wijzigen</button>
+        </form>
+    </div>
+
     <script>
     function profielfotoWijzigen(input) {
         if (!input.files || !input.files[0]) return;
@@ -5298,7 +5333,9 @@ def _persoonlijke_informatie_inhoud():
     </script>
     """
     return inhoud, dict(gebruikersnaam=gebruikersnaam, eigen_gegevens=eigen_gegevens, opgeslagen=opgeslagen,
-                          team=session.get("team",""), AFDELING_LABELS=AFDELING_LABELS)
+                          team=session.get("team",""), AFDELING_LABELS=AFDELING_LABELS,
+                          wachtwoord_gewijzigd=wachtwoord_gewijzigd, wachtwoord_fout=wachtwoord_fout,
+                          wachtwoord_foutmeldingen=WACHTWOORD_FOUTMELDINGEN)
 
 
 def _beheer_inhoud():
@@ -5361,6 +5398,33 @@ def _beheer_inhoud():
     </div>
     """
     return inhoud, dict(categorieen=categorieen, logo_instelling=laad_bedrijfslogo_instelling(), logo_posities=LOGO_POSITIES)
+
+
+@app.route("/instellingen/wachtwoord", methods=["POST"])
+def instellingen_wachtwoord_wijzigen():
+    """Eigen wachtwoord wijzigen — vereist het huidige wachtwoord ter
+    verificatie (niet zomaar overschrijfbaar door iemand die al bij een
+    ingelogde sessie kan, en beschermt tegen een fout-getypt nieuw
+    wachtwoord door een verplichte bevestiging)."""
+    gebruikersnaam = session.get("gebruikersnaam", "")
+    huidig_wachtwoord = request.form.get("huidig_wachtwoord", "")
+    nieuw_wachtwoord = request.form.get("nieuw_wachtwoord", "")
+    nieuw_wachtwoord_bevestig = request.form.get("nieuw_wachtwoord_bevestig", "")
+
+    users = laad_users()
+    fout = ""
+    if gebruikersnaam not in users or not check_password_hash(users[gebruikersnaam]["wachtwoord"], huidig_wachtwoord):
+        fout = "wachtwoord_onjuist"
+    elif len(nieuw_wachtwoord) < 6:
+        fout = "wachtwoord_te_kort"
+    elif nieuw_wachtwoord != nieuw_wachtwoord_bevestig:
+        fout = "wachtwoord_komt_niet_overeen"
+    else:
+        users[gebruikersnaam]["wachtwoord"] = generate_password_hash(nieuw_wachtwoord)
+        bewaar_users(users)
+        return redirect(url_for("instellingen", modus="profiel", wachtwoord_gewijzigd="1"))
+
+    return redirect(url_for("instellingen", modus="profiel", wachtwoord_fout=fout))
 
 
 @app.route("/instellingen", methods=["GET", "POST"])
