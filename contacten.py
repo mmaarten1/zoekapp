@@ -106,8 +106,8 @@ def contacten():
 
 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
     <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <input type="text" name="zoekterm" value="{{ zoekterm }}" placeholder="Naam, bedrijf of e-mail" style="flex:1;max-width:280px;padding:8px 12px;border:none;background:var(--gray-50);border-radius:6px;font-size:12.5px;font-family:inherit;">
-        <select name="accountmanager" onchange="this.form.submit()" style="padding:8px 12px;border:none;background:var(--gray-50);border-radius:6px;font-size:12.5px;">
+        <input type="text" name="zoekterm" value="{{ zoekterm }}" placeholder="Naam, bedrijf of e-mail" style="flex:1;max-width:280px;padding:7px 10px;border:1px solid var(--gray-200);background:#fff;border-radius:6px;font-size:12.5px;font-family:inherit;">
+        <select name="accountmanager" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);background:#fff;border-radius:6px;font-size:12.5px;">
             <option value="">Alle accountmanagers</option>
             {% for a in alle_accountmanagers %}<option value="{{ a }}" {% if gekozen_am == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
         </select>
@@ -135,8 +135,11 @@ def contacten():
        data-naam="{{ c.naam|e }}" data-bedrijf="{{ c.bedrijf|e }}" data-rol="{{ c.rol|default('',true)|e }}"
        data-email="{{ c.email|default('',true)|e }}" data-telefoon="{{ c.telefoon|default('',true)|e }}"
        data-accountmanager="{{ c.accountmanager|default('',true)|e }}" data-laatst="{{ c.laatst|default('',true)|e }}">
-        <span style="flex:1.2;"><a href="/bedrijf/{{ c.bedrijf|urlencode }}" style="font-weight:600;color:var(--gray-800);text-decoration:none;">{{ c.naam }}</a></span>
-        <span style="flex:1.4;" class="zacht">{{ c.bedrijf }}</span>
+        <span style="flex:1.2;">
+            {% if c.id %}<a href="/contacten/{{ c.id }}" style="font-weight:600;color:var(--gray-800);text-decoration:none;">{{ c.naam }}</a>
+            {% else %}<span style="font-weight:600;color:var(--gray-800);">{{ c.naam }}</span>{% endif %}
+        </span>
+        <span style="flex:1.4;"><a href="/bedrijf/{{ c.bedrijf|urlencode }}" class="zacht" style="text-decoration:none;">{{ c.bedrijf }}</a></span>
         <span style="flex:1;" class="zacht">{{ c.rol|default('—',true) }}</span>
         <span style="flex:1.2;" class="zacht" style="color:var(--brand-600);">{{ c.email|default('—',true) }}</span>
         <span style="width:130px;" class="num">{{ c.telefoon|default('—',true) }}</span>
@@ -412,6 +415,48 @@ def contacten_importeren_bevestigen():
     """
     pagina = render_simple_page("Import voltooid", "contacten", inhoud)
     return render_template_string(pagina)
+
+@contacten_bp.route("/contacten/<persoon_id>")
+def contact_detail(persoon_id):
+    """Detailpagina van één contactpersoon — losstaand van het bedrijfsprofiel,
+    zodat je vanuit de Contacten-lijst direct bij deze persoon's eigen
+    gegevens uitkomt (i.p.v. altijd op de bredere bedrijfspagina)."""
+    alle = laad_contactpersonen()
+    persoon = next((p for p in alle if p["id"] == persoon_id), None)
+    if not persoon:
+        pagina = render_simple_page("Niet gevonden", "contacten", '<div class="page-title">Niet gevonden</div><div class="lege-staat">Deze contactpersoon bestaat niet (meer). <a href="/contacten">Terug</a></div>')
+        return render_template_string(pagina), 404
+
+    mag_bewerken = persoon.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()
+    accountmanager = laad_accountmanagers().get(persoon.get("bedrijf",""), "")
+
+    inhoud = """
+    <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;"><a href="/contacten" style="color:var(--gray-400);text-decoration:none;">Contacten</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ persoon.naam }}</span></div>
+    <div class="page-title">{{ persoon.naam }}</div>
+    {% if persoon.rol %}<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.9rem;">{{ persoon.rol }}</p>{% endif %}
+
+    <div class="info-kaart" style="max-width:440px;">
+        <div class="drawer-row"><span class="drawer-row-label">Bedrijf</span><span class="drawer-row-value"><a href="/bedrijf/{{ persoon.bedrijf|urlencode }}" style="color:var(--brand-600);text-decoration:none;font-weight:600;">{{ persoon.bedrijf }}</a></span></div>
+        {% if persoon.rol %}<div class="drawer-row"><span class="drawer-row-label">Rol</span><span class="drawer-row-value">{{ persoon.rol }}</span></div>{% endif %}
+        <div class="drawer-row"><span class="drawer-row-label">E-mail</span><span class="drawer-row-value">{{ persoon.email or "—" }}</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">Telefoon</span><span class="drawer-row-value">{{ persoon.telefoon or "—" }}</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">Laatste contactmoment</span><span class="drawer-row-value">{{ persoon.laatst or "—" }}</span></div>
+        {% if accountmanager %}<div class="drawer-row"><span class="drawer-row-label">Accountmanager</span><span class="drawer-row-value">{{ accountmanager }}</span></div>{% endif %}
+    </div>
+
+    {% if mag_bewerken %}
+    <div style="margin-top:16px;display:flex;gap:8px;">
+        <a href="/contacten/{{ persoon.id }}/bewerken?terug_naar=/contacten/{{ persoon.id }}" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:var(--brand-600);color:#fff;border-radius:6px;text-decoration:none;">Bewerken</a>
+        <form method="POST" action="/contacten" onsubmit="return confirm('Contactpersoon verwijderen?');" style="margin:0;">
+            <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="persoon_id" value="{{ persoon.id }}">
+            <button type="submit" style="font-size:12.5px;font-weight:600;padding:8px 16px;background:none;border:1px solid var(--gray-200);border-radius:6px;color:#dc2626;cursor:pointer;">Verwijderen</button>
+        </form>
+    </div>
+    {% endif %}
+    """
+    pagina = render_simple_page(persoon["naam"], "contacten", inhoud)
+    return render_template_string(pagina, persoon=persoon, mag_bewerken=mag_bewerken, accountmanager=accountmanager)
+
 
 @contacten_bp.route("/contacten/<persoon_id>/bewerken", methods=["GET", "POST"])
 def contact_bewerken(persoon_id):

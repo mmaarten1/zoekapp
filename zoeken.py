@@ -25,6 +25,7 @@ from core import (
     laad_materiaal_taxonomie, laad_orders, laad_users, laad_notities, laad_meldingen,
     bewaar_meldingen, vereist_admin_of_403, render_simple_page, geocode_adres,
     bereken_afstand_km, vind_transport_tarieven_dichtbij, sync_contactpersoon_naar_contacten, laad_contactpersonen,
+    laad_handelsorders, laad_logistieke_orders, parse_ton_intern,
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
     laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien, vereist_afdeling_of_403,
@@ -3494,35 +3495,42 @@ herbouwVolumeRijen();
             vol = parse_hoeveelheid_getal(waarde)
             materialen_volume_lijst.append({"naam": mat_naam, "volume": vol, "aandeel": round(vol / _totaal_volume * 100) if _totaal_volume else 0})
 
-    # --- Inkoop-voortgang dit jaar vs. jaarlijks beschikbaar volume (alleen leveranciers, echte shipment-data) ---
+    # --- Inkoop-voortgang dit jaar vs. jaarlijks beschikbaar volume (alleen leveranciers) ---
+    # Gebaseerd op DEFINITIEVE handelsorders (het actieve contractsysteem) — niet meer op
+    # het oude shipments.json, dat sinds Handelsorders/Transport Planning nergens meer
+    # gevuld wordt en dus nooit meebewoog met nieuwe contracten.
     inkoop_voortgang_lijst = []
     if not is_fabriek_profiel and isinstance(_volumes_dict, dict) and _volumes_dict:
         _huidig_jaar = datetime.date.today().year
-        _ontvangen_statussen = ("Weighed", "Received", "Delivered")
-        _gepland_statussen = ("Planned", "Confirmed", "Loading", "Loaded", "In Transit", "Arrived")
+        _eigen_definitieve_inkoop = [
+            h for h in laad_handelsorders()
+            if h.get("order_type") == "inkoop" and h.get("status") == "Definitief"
+            and h.get("tegenpartij_naam", "").strip().lower() == bedrijf["naam"].strip().lower()
+        ]
+        _alle_logistieke_orders = laad_logistieke_orders()
         for mat_naam, waarde in _volumes_dict.items():
             beschikbaar_jaar = parse_hoeveelheid_getal(waarde)
             if beschikbaar_jaar <= 0:
                 continue
             ingekocht_dit_jaar = 0.0
             nog_te_leveren = 0.0
-            for s in laad_shipments():
-                if s.get("origin_leverancier", "").strip().lower() != bedrijf["naam"].strip().lower():
-                    continue
-                if s.get("materiaal", "") != mat_naam:
-                    continue
-                if not s.get("datum"):
+            for h in _eigen_definitieve_inkoop:
+                if h.get("materiaal", "") != mat_naam:
                     continue
                 try:
-                    jaar_shipment = datetime.datetime.strptime(s["datum"], "%Y-%m-%d").date().year
+                    jaar_contract = datetime.datetime.strptime(h.get("aangemaakt",""), "%d-%m-%Y %H:%M").year
                 except (ValueError, TypeError):
                     continue
-                if jaar_shipment != _huidig_jaar:
+                if jaar_contract != _huidig_jaar:
                     continue
-                if s.get("status") in _ontvangen_statussen:
-                    ingekocht_dit_jaar += shipment_hoeveelheid(s)
-                elif s.get("status") in _gepland_statussen:
-                    nog_te_leveren += shipment_hoeveelheid(s)
+                contract_hoeveelheid = parse_hoeveelheid_getal(h.get("hoeveelheid_mt",""))
+                ingekocht_dit_jaar += contract_hoeveelheid
+                _al_gewogen = sum(
+                    parse_ton_intern(o.get("werkelijke_hoeveelheid",""))
+                    for o in _alle_logistieke_orders
+                    if o.get("contract_referentie") == h.get("contractnummer") and o.get("status") not in ("", "Order aangemaakt")
+                )
+                nog_te_leveren += max(0.0, contract_hoeveelheid - _al_gewogen)
             restant_jaarvolume = max(0.0, beschikbaar_jaar - ingekocht_dit_jaar)
             inkoop_voortgang_lijst.append({
                 "naam": mat_naam, "beschikbaar_jaar": beschikbaar_jaar,
