@@ -584,6 +584,7 @@ def logistieke_orders_pagina():
 
     inhoud = """
 <div class="page-title">Orders (logistiek)</div>
+""" + _operaties_tabbladen_html("logistieke_orders") + """
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Volgt de fysieke aflevering van inkomende vrachten van order tot Finance-overdracht.</p>
 
 <style>
@@ -926,6 +927,28 @@ def logistieke_order_status(order_id):
         bewaar_logistieke_orders(orders)
     return redirect(url_for("logistieke_orders.logistieke_order_detail", order_id=order_id))
 
+def _operaties_tabbladen_html(actief):
+    """Gedeelde tabbladen-navigatie bovenaan Live Operations/Orders/Afhandeling
+    — drie wezenlijk verschillende lenzen op (deels) dezelfde data (control
+    tower / order-beheer / laat-fase actiequeues), die elk hun eigen URL en
+    toegangscontrole BEHOUDEN (geen URL-wijziging, dus geen bestaande link
+    ergens in de app breekt), maar nu wel gemakkelijk naar elkaar doorklikken.
+    Toont alleen tabbladen waar de huidige gebruiker toegang toe heeft — een
+    accountmanager (wel Orders, geen Live Operations/Afhandeling) ziet dus een
+    kortere balk dan logistiek/weegbrug/backoffice."""
+    _tabblad_config = [
+        ("live_operations", "/live-operations", "Live Operations"),
+        ("logistieke_orders", "/logistiek/orders", "Orders"),
+        ("afhandeling", "/logistiek/afhandeling", "Afhandeling"),
+    ]
+    _toegestaan = [(pagina_key, url, titel) for pagina_key, url, titel in _tabblad_config if mag_pagina_zien(pagina_key)]
+    if len(_toegestaan) <= 1:
+        return ""  # geen zin in een navigatiebalk als er toch maar één tabblad te zien is
+    return '<div style="display:flex;gap:4px;border-bottom:1px solid var(--gray-200);margin-bottom:16px;">' + "".join(
+        f'<a href="{url}" style="padding:8px 16px;font-size:12.5px;font-weight:700;text-decoration:none;border-bottom:2px solid {"var(--brand-600)" if pagina_key == actief else "transparent"};color:{"var(--brand-600)" if pagina_key == actief else "var(--gray-400)"};">{titel}</a>'
+        for pagina_key, url, titel in _toegestaan
+    ) + '</div>'
+
 @logistieke_orders_bp.route("/logistiek/afhandeling")
 def afhandeling_pagina():
     _guard = vereist_afdeling_of_403("afhandeling")
@@ -946,6 +969,7 @@ def afhandeling_pagina():
 
     inhoud = """
 <div class="page-title">Afhandeling</div>
+""" + _operaties_tabbladen_html("afhandeling") + """
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Vrachten die fysiek zijn afgerond maar administratief nog verwerkt moeten worden — vóórdat ze naar Finance gaan.</p>
 
 <style>
@@ -1084,6 +1108,7 @@ def live_operations_pagina():
 
     inhoud = """
 <div class="page-title">Live Operations</div>
+""" + _operaties_tabbladen_html("live_operations") + """
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Control tower: alle inkomende vrachten in één overzicht — Weegbrug en Orders gecombineerd.</p>
 
 <style>
