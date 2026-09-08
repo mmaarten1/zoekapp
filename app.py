@@ -2659,6 +2659,38 @@ def containerbeheer_pagina():
                                     fabriek_namen_cont=fabriek_namen_cont, landen_herkomst=landen_herkomst,
                                     filter_land_cont=filter_land_cont, per_land=per_land)
 
+def _herstel_items_van_regels(regels):
+    """Draait de 'gefactureerd'-markering van de onderliggende ladingen/
+    transporten terug — nodig als een conceptfactuur wordt verwijderd, zodat
+    die ladingen weer gewoon selecteerbaar zijn op Peute/Inkoop/Verkoop/Export
+    (anders zouden ze voorgoed 'verdwenen' zijn zonder dat er ooit een echte
+    factuur voor bestond). Regels van verschillende bronnen hebben elk hun
+    eigen sleutel (logistieke_order_id, transport_id, of bron+item_id bij de
+    gecombineerde Inkoop-regels) — dit handelt alle drie de vormen af."""
+    lo_ids, tp_ids = set(), set()
+    for r in regels:
+        if "logistieke_order_id" in r:
+            lo_ids.add(r["logistieke_order_id"])
+        elif "transport_id" in r:
+            tp_ids.add(r["transport_id"])
+        elif r.get("bron") == "lo":
+            lo_ids.add(r["item_id"])
+        elif r.get("bron") == "tp":
+            tp_ids.add(r["item_id"])
+
+    if lo_ids:
+        alle_orders = laad_logistieke_orders()
+        for o in alle_orders:
+            if o["id"] in lo_ids and o.get("status") == "Gefactureerd":
+                o["status"] = "Klaar voor Finance"  # terug naar de stap vóór facturering
+        bewaar_logistieke_orders(alle_orders)
+    if tp_ids:
+        alle_transport = laad_transport_planning()
+        for t in alle_transport:
+            if t["id"] in tp_ids:
+                t["gefactureerd"] = False
+        bewaar_transport_planning(alle_transport)
+
 def _leverdatum_uit_regels(regels):
     """Bepaalt de leverings-/prestatiedatum voor op de factuur uit de datums
     van de losse regels — één datum als alles op dezelfde dag was, anders een
@@ -2688,8 +2720,13 @@ def _overzicht_factuur_inhoud():
             bewaar_facturen(alle_facturen)
         elif actie == "verwijderen":
             factuur_id = request.form.get("factuur_id", "")
-            alle_facturen = [f for f in alle_facturen if f.get("id") != factuur_id]
-            bewaar_facturen(alle_facturen)
+            factuur_te_verwijderen = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
+            # Alleen concepten mogen verwijderd worden (consistent met /facturen/<id>/verwijder-concept) —
+            # een definitieve factuur moet gecrediteerd worden voor correctie, niet verwijderd.
+            if factuur_te_verwijderen and factuur_te_verwijderen.get("workflow_status", "definitief") == "concept":
+                _herstel_items_van_regels(factuur_te_verwijderen.get("regels", []))
+                alle_facturen = [f for f in alle_facturen if f.get("id") != factuur_id]
+                bewaar_facturen(alle_facturen)
         return redirect(url_for("facturen_pagina", **{k: v for k, v in request.args.items()}))
 
     vooringevuld_bedrijf = request.args.get("bedrijf", "")
@@ -2842,7 +2879,9 @@ def _overzicht_factuur_inhoud():
     <div class="fact-rij fact-row">
         <span style="flex:1.4;"><a href="/bedrijf/{{ f.bedrijf|urlencode }}" style="color:var(--gray-800);font-weight:600;text-decoration:none;">{{ f.bedrijf }}</a></span>
         <span style="flex:1.2;color:var(--gray-600);">
-            <a href="/facturen/{{ f.id }}" style="color:var(--gray-600);text-decoration:none;">{{ f.referentie|default('—', true) }}{% if f.get('regels') %} ({{ f.regels|length }}){% endif %}</a>
+            {% if f.get('workflow_status') == 'concept' %}<span class="fact-badge" style="background:#fef3c7;color:#b45309;margin-right:4px;">Concept</span>{% endif %}
+            {% if f.get('is_creditnota') %}<span class="fact-badge" style="background:#fef2f2;color:#dc2626;margin-right:4px;">Credit</span>{% endif %}
+            <a href="/facturen/{{ f.id }}" style="color:var(--gray-600);text-decoration:none;">{{ f.factuurnummer or f.referentie|default('—', true) }}{% if f.get('regels') %} ({{ f.regels|length }}){% endif %}</a>
             {% if f.contract_referentie %}<br><a href="/handelsorders?zoekterm={{ f.contract_referentie|urlencode }}" style="font-size:10.5px;color:var(--brand-600);text-decoration:none;">↳ {{ f.contract_referentie }}</a>{% endif %}
         </span>
         <span style="width:100px;text-align:right;font-family:var(--font-mono);">€{{ f.bedrag }}</span>
@@ -2851,14 +2890,16 @@ def _overzicht_factuur_inhoud():
             <span class="fact-badge" style="background:{{ '#f0fdf4' if f.status=='Betaald' else ('#fef2f2' if f.status=='Te laat' else '#eff6ff') }};color:{{ '#16a34a' if f.status=='Betaald' else ('#dc2626' if f.status=='Te laat' else '#1d4ed8') }};">{{ f.status }}</span>
         </span>
         <span style="width:140px;text-align:right;display:flex;justify-content:flex-end;gap:6px;">
-            {% if f.status != "Betaald" %}
+            {% if f.get('workflow_status') != 'concept' and f.status != "Betaald" %}
             <form method="POST" style="margin:0;"><input type="hidden" name="actie" value="markeer_betaald"><input type="hidden" name="factuur_id" value="{{ f.id }}">
                 <button type="submit" style="background:#f0fdf4;color:#16a34a;border:none;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700;">✓ Betaald</button>
             </form>
             {% endif %}
-            <form method="POST" style="margin:0;" onsubmit="return confirm('Factuur verwijderen?');"><input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="factuur_id" value="{{ f.id }}">
+            {% if f.get('workflow_status') == 'concept' %}
+            <form method="POST" style="margin:0;" onsubmit="return confirm('Dit concept verwijderen? De onderliggende ladingen/transporten worden weer vrijgegeven.');"><input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="factuur_id" value="{{ f.id }}">
                 <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:0.95rem;">✕</button>
             </form>
+            {% endif %}
         </span>
     </div>
     {% endfor %}
@@ -3053,7 +3094,7 @@ def facturen_transport_genereer():
     factuur_type = "verkoop" if richting_van_factuur == "verkoop" else "inkoop"
     nieuwe_factuur = {
         "id": str(uuid.uuid4()),
-        "factuurnummer": genereer_factuurnummer(alle_facturen),
+        "factuurnummer": "", "workflow_status": "concept",
         "bedrijf": eerste_tegenpartij,
         "klant_gegevens": haal_factuurgegevens_bedrijf(eerste_tegenpartij),
         "type": factuur_type,
@@ -3199,7 +3240,7 @@ def facturen_verkoop_genereer():
     alle_facturen = laad_facturen()
     nieuwe_factuur = {
         "id": str(uuid.uuid4()),
-        "factuurnummer": genereer_factuurnummer(alle_facturen),
+        "factuurnummer": "", "workflow_status": "concept",
         "bedrijf": eerste_klant,
         "klant_gegevens": haal_factuurgegevens_bedrijf(eerste_klant),
         "type": "verkoop",
@@ -3444,7 +3485,7 @@ def facturen_inkoop_genereer():
     alle_facturen = laad_facturen()
     nieuwe_factuur = {
         "id": str(uuid.uuid4()),
-        "factuurnummer": genereer_factuurnummer(alle_facturen),
+        "factuurnummer": "", "workflow_status": "concept",
         "bedrijf": eerste_leverancier,
         "klant_gegevens": haal_factuurgegevens_bedrijf(eerste_leverancier),
         "type": "inkoop",
@@ -3612,7 +3653,7 @@ def facturen_peute_genereer():
     alle_facturen = laad_facturen()
     nieuwe_factuur = {
         "id": str(uuid.uuid4()),
-        "factuurnummer": genereer_factuurnummer(alle_facturen),
+        "factuurnummer": "", "workflow_status": "concept",
         "bedrijf": leverancier,
         "klant_gegevens": haal_factuurgegevens_bedrijf(leverancier),
         "type": "peute",
@@ -3655,7 +3696,7 @@ def facturen_nieuw():
         alle_facturen_voor_nummer = laad_facturen()
         nieuwe_factuur = {
             "id": str(uuid.uuid4()),
-            "factuurnummer": genereer_factuurnummer(alle_facturen_voor_nummer),
+            "factuurnummer": "", "workflow_status": "concept",
             "bedrijf": bedrijf_naam,
             "klant_gegevens": haal_factuurgegevens_bedrijf(bedrijf_naam),
             "referentie": request.form.get("referentie", "").strip(),
@@ -3777,7 +3818,10 @@ def facturen_pagina():
         modus = "overzicht"
 
     if modus == "overzicht":
-        _tab_inhoud, _tab_context = _overzicht_factuur_inhoud()
+        _resultaat = _overzicht_factuur_inhoud()
+        if isinstance(_resultaat, Response):
+            return _resultaat  # POST-verwerking (markeer_betaald/verwijderen/toevoegen) deed al een redirect
+        _tab_inhoud, _tab_context = _resultaat
     elif modus == "inkoop":
         _tab_inhoud, _tab_context = _inkoop_factuur_inhoud()
     elif modus == "verkoop":
@@ -3862,16 +3906,24 @@ def _genereer_factuur_pdf(factuur):
     elementen.append(Spacer(1, 22))
 
     # --- Titel + factuurgegevens ---
-    elementen.append(Paragraph("Factuur", titel_stijl))
+    is_concept = factuur.get("workflow_status", "definitief") == "concept"
+    is_credit = factuur.get("is_creditnota", False)
+    titel_tekst = "Creditfactuur" if is_credit else "Factuur"
+    if is_concept:
+        titel_tekst += " — CONCEPT (nog niet definitief)"
+    elementen.append(Paragraph(titel_tekst, titel_stijl))
     elementen.append(Spacer(1, 8))
 
     def factuurgegevens_rij(label, waarde):
         return [Paragraph(label, label_stijl), Paragraph(str(waarde) if waarde else "—", normaal_stijl)]
 
     factuurgegevens = [
-        factuurgegevens_rij("Factuurnummer", factuur.get("factuurnummer","")),
+        factuurgegevens_rij("Conceptreferentie (nog geen definitief factuurnummer)" if is_concept else "Factuurnummer",
+                              factuur.get("referentie","") if is_concept else factuur.get("factuurnummer","")),
         factuurgegevens_rij("Factuurdatum", factuur.get("factuurdatum","")),
     ]
+    if is_credit:
+        factuurgegevens.append(factuurgegevens_rij("Creditfactuur bij factuurnummer", factuur.get("credit_van_factuurnummer","")))
     if factuur.get("leverdatum") and factuur.get("leverdatum") != factuur.get("factuurdatum"):
         factuurgegevens.append(factuurgegevens_rij("Leverings-/prestatiedatum", factuur["leverdatum"]))
     factuurgegevens.append(factuurgegevens_rij("Uiterste betaaldatum", factuur.get("vervaldatum","")))
@@ -3980,6 +4032,122 @@ def factuur_pdf(factuur_id):
                      headers={"Content-Disposition": f'inline; filename="factuur_{bestandsnaam}.pdf"'})
 
 
+@app.route("/facturen/<factuur_id>/definitief-maken", methods=["POST"])
+def factuur_definitief_maken(factuur_id):
+    """Concept -> Definitief: kent nu pas het echte, doorlopende
+    factuurnummer toe (dat mag wettelijk geen gaten hebben, dus pas toekennen
+    zodra een factuur ook echt de deur uitgaat, niet al bij het concept — een
+    verwijderd concept zou anders een gat in de reeks achterlaten). Dit is
+    tegelijk het moment van 'verzenden' naar de leverancier/klant."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    alle_facturen = laad_facturen()
+    factuur = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
+    if not factuur or factuur.get("workflow_status") != "concept":
+        return redirect(url_for("factuur_detail", factuur_id=factuur_id))
+
+    factuur["factuurnummer"] = genereer_factuurnummer(alle_facturen)
+    factuur["workflow_status"] = "definitief"
+    factuur["definitief_op"] = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    factuur["definitief_door"] = session.get("gebruikersnaam", "")
+    bewaar_facturen(alle_facturen)
+    return redirect(url_for("factuur_detail", factuur_id=factuur_id))
+
+
+@app.route("/facturen/<factuur_id>/verwijder-concept", methods=["POST"])
+def factuur_verwijder_concept(factuur_id):
+    """Verwijdert een conceptfactuur (alleen conceptfacturen — een definitieve
+    factuur mag niet zomaar verdwijnen, wettelijk vereist een creditfactuur
+    voor correctie). Draait de 'gefactureerd'-markering van de onderliggende
+    ladingen/transporten terug, zodat die weer gewoon selecteerbaar zijn."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    alle_facturen = laad_facturen()
+    factuur = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
+    if not factuur or factuur.get("workflow_status") != "concept":
+        return redirect(url_for("factuur_detail", factuur_id=factuur_id))
+
+    _herstel_items_van_regels(factuur.get("regels", []))
+    alle_facturen = [f for f in alle_facturen if f.get("id") != factuur_id]
+    bewaar_facturen(alle_facturen)
+    return redirect(url_for("facturen_pagina", modus="overzicht"))
+
+
+@app.route("/facturen/<factuur_id>/boekhouding", methods=["POST"])
+def factuur_naar_boekhouding(factuur_id):
+    """Markeert een definitieve factuur als verstuurd naar het
+    boekhoudpakket — losstaand van het versturen naar de leverancier/klant
+    zelf (dat gebeurt al bij het definitief maken). Zoals elders in het
+    systeem: de boekhoudkoppeling zelf is nog niet actief, dit legt wel al
+    het moment en wie het deed vast, klaar voor als die koppeling er is."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    alle_facturen = laad_facturen()
+    factuur = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
+    if not factuur or factuur.get("workflow_status") != "definitief":
+        return redirect(url_for("factuur_detail", factuur_id=factuur_id))
+
+    factuur["verstuurd_naar_boekhouding_op"] = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    factuur["verstuurd_naar_boekhouding_door"] = session.get("gebruikersnaam", "")
+    bewaar_facturen(alle_facturen)
+    return redirect(url_for("factuur_detail", factuur_id=factuur_id))
+
+
+@app.route("/facturen/<factuur_id>/crediteren", methods=["POST"])
+def factuur_crediteren(factuur_id):
+    """Maakt een creditfactuur aan voor een definitieve factuur — zelfde
+    bedragen maar negatief, als concept (moet ook eerst akkoord/definitief
+    doorlopen). Alleen mogelijk voor een definitieve, niet-credit factuur die
+    nog niet eerder gecrediteerd is (anders zou je per ongeluk twee keer
+    kunnen crediteren)."""
+    _guard = vereist_afdeling_of_403("facturen")
+    if _guard: return _guard
+
+    alle_facturen = laad_facturen()
+    origineel = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
+    if not origineel or origineel.get("workflow_status") != "definitief" or origineel.get("is_creditnota"):
+        return redirect(url_for("factuur_detail", factuur_id=factuur_id))
+    if any(f.get("credit_van_factuur_id") == factuur_id for f in alle_facturen):
+        return redirect(url_for("factuur_detail", factuur_id=factuur_id))  # al gecrediteerd
+
+    nu = datetime.datetime.now()
+    negatieve_regels = []
+    for r in origineel.get("regels", []):
+        r_neg = dict(r)
+        r_neg["ton"] = -r_neg.get("ton", 0)
+        r_neg["bedrag"] = -r_neg.get("bedrag", 0)
+        negatieve_regels.append(r_neg)
+
+    creditnota = {
+        "id": str(uuid.uuid4()),
+        "factuurnummer": "", "workflow_status": "concept",
+        "bedrijf": origineel["bedrijf"],
+        "klant_gegevens": origineel.get("klant_gegevens", {}),
+        "type": origineel.get("type", ""),
+        "is_creditnota": True,
+        "credit_van_factuur_id": factuur_id,
+        "credit_van_factuurnummer": origineel.get("factuurnummer", ""),
+        "referentie": f"CREDIT-{origineel.get('factuurnummer','')}",
+        "omschrijving": f"Creditfactuur voor {origineel.get('factuurnummer','')}",
+        "regels": negatieve_regels,
+        "bedrag": str(-round(float(origineel.get("bedrag", 0)), 2)),
+        "btw_percentage": origineel.get("btw_percentage", "21"),
+        "factuurdatum": nu.date().isoformat(),
+        "leverdatum": origineel.get("leverdatum", ""),
+        "vervaldatum": nu.date().isoformat(),  # creditfacturen hebben geen betaaltermijn nodig
+        "betaalddatum": "",
+        "contract_referentie": origineel.get("contract_referentie", ""),
+        "gebruiker": session.get("gebruikersnaam", ""),
+        "aangemaakt": nu.strftime("%d-%m-%Y %H:%M"),
+    }
+    alle_facturen.append(creditnota)
+    bewaar_facturen(alle_facturen)
+    return redirect(url_for("factuur_detail", factuur_id=creditnota["id"]))
+
+
 @app.route("/facturen/<factuur_id>")
 def factuur_detail(factuur_id):
     """Detailweergave van één factuur — voor door de app zelf gegenereerde
@@ -4001,12 +4169,28 @@ def factuur_detail(factuur_id):
     bedragen = bereken_factuur_bedragen(factuur)
     klant = factuur.get("klant_gegevens") or {}
     valuta_weergave = regels[0].get("valuta", "EUR") if regels else "EUR"
+    workflow_status = factuur.get("workflow_status", "definitief")  # oudere facturen (van vóór dit systeem) tellen als al-definitief
+    heeft_creditnota = any(f.get("credit_van_factuur_id") == factuur_id for f in alle_facturen)
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/facturen" style="color:var(--gray-400);text-decoration:none;">Facturen</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ factuur.factuurnummer or factuur.referentie or factuur.id }}</span>
 </div>
 <div class="page-title">{{ factuur.bedrijf }} <span style="font-size:0.55em;font-weight:600;color:var(--gray-400);">{{ factuur.factuurnummer }}</span></div>
+
+<div style="margin-bottom:16px;">
+    {% if workflow_status == "concept" %}
+    <span style="display:inline-block;font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;background:#fef3c7;color:#b45309;text-transform:uppercase;letter-spacing:0.04em;">Concept — nog niet definitief</span>
+    {% else %}
+    <span style="display:inline-block;font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;background:#f0fdf4;color:#16a34a;text-transform:uppercase;letter-spacing:0.04em;">Definitief{% if factuur.definitief_op %} · verzonden {{ factuur.definitief_op }}{% endif %}</span>
+    {% endif %}
+    {% if factuur.is_creditnota %}
+    <span style="display:inline-block;font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;background:#fef2f2;color:#dc2626;text-transform:uppercase;letter-spacing:0.04em;margin-left:6px;">Creditfactuur — bij {{ factuur.credit_van_factuurnummer }}</span>
+    {% endif %}
+    {% if heeft_creditnota %}
+    <span style="display:inline-block;font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;background:var(--gray-100);color:var(--gray-500);margin-left:6px;">Gecrediteerd</span>
+    {% endif %}
+</div>
 
 <div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
     <div style="flex:1;min-width:140px;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;">
@@ -4101,20 +4285,43 @@ def factuur_detail(factuur_id):
     {% endif %}
 </div>
 
-<div style="display:flex;gap:8px;">
+<div style="display:flex;gap:8px;flex-wrap:wrap;">
     <a href="/facturen/{{ factuur.id }}/pdf" target="_blank" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:var(--brand-600);color:#fff;border-radius:6px;text-decoration:none;">PDF downloaden</a>
-    {% if factuur.status != "Betaald" %}
-    <form method="POST" action="/facturen" style="margin:0;">
-        <input type="hidden" name="actie" value="markeer_betaald">
-        <input type="hidden" name="factuur_id" value="{{ factuur.id }}">
-        <button type="submit" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:#f0fdf4;color:#16a34a;border:none;border-radius:6px;cursor:pointer;">✓ Markeer betaald</button>
+
+    {% if workflow_status == "concept" %}
+    <form method="POST" action="/facturen/{{ factuur.id }}/definitief-maken" style="margin:0;" onsubmit="return confirm('Definitief maken kent het echte factuurnummer toe en kan niet ongedaan worden gemaakt. Dit is ook het moment waarop de factuur naar {{ factuur.bedrijf }} wordt verstuurd. Doorgaan?');">
+        <button type="submit" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:#16a34a;color:#fff;border:none;border-radius:6px;cursor:pointer;">✓ Akkoord — definitief maken &amp; versturen</button>
     </form>
+    <form method="POST" action="/facturen/{{ factuur.id }}/verwijder-concept" style="margin:0;" onsubmit="return confirm('Dit concept verwijderen? De onderliggende ladingen/transporten worden weer vrijgegeven voor facturering.');">
+        <button type="submit" style="font-size:12.5px;font-weight:600;padding:8px 16px;background:none;border:1px solid var(--gray-200);border-radius:6px;color:#dc2626;cursor:pointer;">Concept verwijderen</button>
+    </form>
+    {% else %}
+        {% if factuur.status != "Betaald" %}
+        <form method="POST" action="/facturen" style="margin:0;">
+            <input type="hidden" name="actie" value="markeer_betaald">
+            <input type="hidden" name="factuur_id" value="{{ factuur.id }}">
+            <button type="submit" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:#f0fdf4;color:#16a34a;border:none;border-radius:6px;cursor:pointer;">✓ Markeer betaald</button>
+        </form>
+        {% endif %}
+        {% if factuur.verstuurd_naar_boekhouding_op %}
+        <span style="font-size:12.5px;color:var(--gray-400);padding:8px 4px;">Naar boekhouding: {{ factuur.verstuurd_naar_boekhouding_op }}</span>
+        {% else %}
+        <form method="POST" action="/facturen/{{ factuur.id }}/boekhouding" style="margin:0;">
+            <button type="submit" style="font-size:12.5px;font-weight:600;padding:8px 16px;background:none;border:1px solid var(--gray-200);border-radius:6px;color:var(--gray-600);cursor:pointer;">Naar boekhoudpakket versturen</button>
+        </form>
+        {% endif %}
+        {% if not factuur.is_creditnota and not heeft_creditnota %}
+        <form method="POST" action="/facturen/{{ factuur.id }}/crediteren" style="margin:0;" onsubmit="return confirm('Een creditfactuur aanmaken voor {{ factuur.factuurnummer }}? Deze moet zelf ook weer akkoord/definitief gemaakt worden.');">
+            <button type="submit" style="font-size:12.5px;font-weight:600;padding:8px 16px;background:none;border:1px solid var(--gray-200);border-radius:6px;color:#dc2626;cursor:pointer;">Crediteren</button>
+        </form>
+        {% endif %}
     {% endif %}
     <a href="/bedrijf/{{ factuur.bedrijf|urlencode }}" style="font-size:12.5px;font-weight:600;padding:8px 16px;border:1px solid var(--gray-200);border-radius:6px;color:var(--gray-600);text-decoration:none;">Naar bedrijfsprofiel</a>
 </div>
     """
     pagina = render_simple_page(factuur.get("factuurnummer") or factuur.get("referentie") or "Factuur", "facturen", inhoud)
-    return render_template_string(pagina, factuur=factuur, regels=regels, bedragen=bedragen, klant=klant, valuta_weergave=valuta_weergave)
+    return render_template_string(pagina, factuur=factuur, regels=regels, bedragen=bedragen, klant=klant,
+                                    valuta_weergave=valuta_weergave, workflow_status=workflow_status, heeft_creditnota=heeft_creditnota)
 
 @app.route("/facturen/logistieke-orders", methods=["GET", "POST"])
 def facturen_logistieke_orders():
