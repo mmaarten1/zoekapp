@@ -29,7 +29,7 @@ from core import (
     laad_bedrijfseenheden, laad_leverancier_instellingen, leverancier_instelling_voor,
     genereer_supplier_reference, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     parse_hoeveelheid_getal, AFDELINGEN, AFDELING_LABELS, haal_live_wisselkoers, laad_facturen,
-    laad_bedrijfslogo_instelling, LOGO_MAP,
+    laad_bedrijfslogo_instelling, LOGO_MAP, vertaal,
     bepaal_factuur_status, laad_marktprijzen, bewaar_marktprijzen, laad_documenten, laad_logistieke_orders,
 )
 
@@ -127,7 +127,7 @@ def handelsorders_pagina():
     kpi_verkoop = len([o for o in alle_orders if o.get("order_type") == "verkoop"])
 
     inhoud = """
-<div class="page-title">Handelsorders</div>
+<div class="page-title">{{ vertaal('Handelsorders') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Inkoop- en verkoopcontracten.</p>
 
 <style>
@@ -142,37 +142,37 @@ def handelsorders_pagina():
 </style>
 
 <div class="ho-grid">
-    <div class="ho-kaart"><div class="ho-getal">{{ kpi_concept }}</div><div class="ho-label">Concept</div></div>
-    <div class="ho-kaart"><div class="ho-getal">{{ kpi_definitief }}</div><div class="ho-label">Definitief</div></div>
-    <div class="ho-kaart"><div class="ho-getal">{{ kpi_inkoop }}</div><div class="ho-label">Inkooporders</div></div>
-    <div class="ho-kaart"><div class="ho-getal">{{ kpi_verkoop }}</div><div class="ho-label">Verkooporders</div></div>
+    <div class="ho-kaart"><div class="ho-getal">{{ kpi_concept }}</div><div class="ho-label">{{ vertaal('Concept') }}</div></div>
+    <div class="ho-kaart"><div class="ho-getal">{{ kpi_definitief }}</div><div class="ho-label">{{ vertaal('Definitief') }}</div></div>
+    <div class="ho-kaart"><div class="ho-getal">{{ kpi_inkoop }}</div><div class="ho-label">{{ vertaal('Inkooporders') }}</div></div>
+    <div class="ho-kaart"><div class="ho-getal">{{ kpi_verkoop }}</div><div class="ho-label">{{ vertaal('Verkooporders') }}</div></div>
 </div>
 
-<a href="/handelsorders/nieuw" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:9px 18px;border-radius:6px;">+ Nieuwe order</a>
+<a href="/handelsorders/nieuw" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:9px 18px;border-radius:6px;">+ {{ vertaal('Nieuwe order') }}</a>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
     <select name="type" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle typen</option>
-        <option value="inkoop" {% if filter_type == "inkoop" %}selected{% endif %}>Inkoop</option>
-        <option value="verkoop" {% if filter_type == "verkoop" %}selected{% endif %}>Verkoop</option>
+        <option value="">{{ vertaal('Alle typen') }}</option>
+        <option value="inkoop" {% if filter_type == "inkoop" %}selected{% endif %}>{{ vertaal('Inkoop') }}</option>
+        <option value="verkoop" {% if filter_type == "verkoop" %}selected{% endif %}>{{ vertaal('Verkoop') }}</option>
     </select>
     <select name="status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle statussen</option>
+        <option value="">{{ vertaal('Alle statussen') }}</option>
         {% for st in statussen %}<option value="{{ st }}" {% if filter_status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
     </select>
     <input type="text" name="zoekterm" value="{{ zoekterm }}" placeholder="Zoek op contractnummer of naam" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;width:240px;">
-    <button type="submit" style="padding:7px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;background:#fff;cursor:pointer;">Filteren</button>
+    <button type="submit" style="padding:7px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;background:#fff;cursor:pointer;">{{ vertaal('Filteren') }}</button>
 </form>
 
 {% if getoond %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="ho-tabel-kop">
-        <span style="width:150px;">Contractnummer</span>
-        <span style="width:70px;">Type</span>
-        <span style="flex:1;">Naam</span>
-        <span style="flex:1;">Materiaal</span>
-        <span style="width:90px;text-align:right;">Hoeveelheid</span>
-        <span style="width:100px;">Status</span>
+        <span style="width:150px;">{{ vertaal('Contractnummer') }}</span>
+        <span style="width:70px;">{{ vertaal('Type') }}</span>
+        <span style="flex:1;">{{ vertaal('Naam') }}</span>
+        <span style="flex:1;">{{ vertaal('Materiaal') }}</span>
+        <span style="width:90px;text-align:right;">{{ vertaal('Hoeveelheid') }}</span>
+        <span style="width:100px;">{{ vertaal('Status') }}</span>
     </div>
     {% for o in getoond %}
     <a href="/handelsorders/{{ o.id }}" class="ho-tabel-rij">
@@ -209,19 +209,19 @@ def handelsorders_nieuw_keuze():
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/handelsorders" style="color:var(--gray-400);text-decoration:none;">Handelsorders</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw</span>
+    <a href="/handelsorders" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Handelsorders') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Nieuw') }}</span>
 </div>
-<div class="page-title">Nieuwe order</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:24px;font-size:0.85rem;">Kies het type order.</p>
+<div class="page-title">{{ vertaal('Nieuwe order') }}</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:24px;font-size:0.85rem;">{{ vertaal('Kies het type order.') }}</p>
 
 <div style="display:flex;gap:16px;flex-wrap:wrap;max-width:640px;">
     <a href="/handelsorders/nieuw/inkoop" style="flex:1;min-width:260px;text-decoration:none;display:block;border:none;border-top:2px solid var(--gray-200);border-bottom:2px solid var(--gray-200);padding:24px 20px;">
-        <div style="font-size:15px;font-weight:800;color:var(--gray-800);margin-bottom:6px;">Inkooporder</div>
-        <div style="font-size:12.5px;color:var(--gray-500);">Materiaal inkopen bij een leverancier.</div>
+        <div style="font-size:15px;font-weight:800;color:var(--gray-800);margin-bottom:6px;">{{ vertaal('Inkooporder') }}</div>
+        <div style="font-size:12.5px;color:var(--gray-500);">{{ vertaal('Materiaal inkopen bij een leverancier.') }}</div>
     </a>
     <a href="/handelsorders/nieuw/verkoop" style="flex:1;min-width:260px;text-decoration:none;display:block;border:none;border-top:2px solid var(--gray-200);border-bottom:2px solid var(--gray-200);padding:24px 20px;">
-        <div style="font-size:15px;font-weight:800;color:var(--gray-800);margin-bottom:6px;">Verkooporder</div>
-        <div style="font-size:12.5px;color:var(--gray-500);">Materiaal verkopen aan een klant.</div>
+        <div style="font-size:15px;font-weight:800;color:var(--gray-800);margin-bottom:6px;">{{ vertaal('Verkooporder') }}</div>
+        <div style="font-size:12.5px;color:var(--gray-500);">{{ vertaal('Materiaal verkopen aan een klant.') }}</div>
     </a>
 </div>
     """
@@ -342,7 +342,7 @@ def _inkoop_formulier_html():
 {% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">{{ fout }}</div>{% endif %}
 
 <form method="POST" style="max-width:720px;">
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Basisinformatie</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Basisinformatie') }}</div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Leverancier *</label>
@@ -350,7 +350,7 @@ def _inkoop_formulier_html():
         <datalist id="leveranciers_datalist">{% for naam in leverancier_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
     </div>
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bedrijfseenheid</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Bedrijfseenheid') }}</label>
         <select name="bedrijfseenheid" id="bedrijfseenheid_select" onchange="toonPernIndienUK()" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for be in bedrijfseenheden %}<option value="{{ be }}" {% if bedrijfseenheid == be %}selected{% endif %}>{{ be }}</option>{% endfor %}
@@ -358,21 +358,21 @@ def _inkoop_formulier_html():
     </div>
 </div>
 <div style="margin-bottom:16px;max-width:240px;">
-    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Datum aangemaakt</label>
+    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Datum aangemaakt') }}</label>
     <input type="date" name="datum_aangemaakt" value="{{ vandaag }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Deal informatie</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Deal informatie') }}</div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Incoterm</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Incoterm') }}</label>
         <select name="incoterm" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for i in incoterms %}<option value="{{ i }}" {% if incoterm == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
         </select>
     </div>
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Betalingstermijn</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Betalingstermijn') }}</label>
         <select name="betalingstermijn" id="betalingstermijn_select" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for b in betalingstermijnen %}<option value="{{ b }}" {% if betalingstermijn == b %}selected{% endif %}>{{ b }}</option>{% endfor %}
@@ -395,17 +395,17 @@ def _inkoop_formulier_html():
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Startdatum order</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Startdatum order') }}</label>
         <input type="date" name="startdatum" value="{{ vandaag }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
     </div>
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Einddatum order</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Einddatum order') }}</label>
         <input type="date" name="einddatum" value="{{ einddatum|default('')}}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
     </div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Valuta</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Valuta') }}</label>
         <select name="valuta" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             {% for v in valuta_lijst %}<option value="{{ v }}" {% if valuta == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
         </select>
@@ -420,9 +420,9 @@ def _inkoop_formulier_html():
     </div>
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Afhaallocatie</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Afhaallocatie') }}</div>
 <div id="afhaal_keuze_blok" style="margin-bottom:10px;display:none;">
-    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Kies locatie</label>
+    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Kies locatie') }}</label>
     <select id="afhaal_locatie_select" onchange="vulAfhaallocatieIn()" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;"></select>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
@@ -435,7 +435,7 @@ def _inkoop_formulier_html():
     <input type="text" name="afhaal_land" id="afhaal_land" placeholder="Land" value="{{ afhaal_land|default('')}}" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Transport</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Transport') }}</div>
 <div style="display:flex;gap:12px;margin-bottom:16px;">
     {% for modus in transportmodi %}
     <label style="flex:1;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 16px;cursor:pointer;display:block;">
@@ -473,7 +473,7 @@ def _inkoop_formulier_html():
         <input type="text" name="berekende_verkoopprijs" value="{{ berekende_verkoopprijs|default('')}}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
     </div>
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Valuta</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Valuta') }}</label>
         <select name="verkoopprijs_valuta" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             {% for v in valuta_lijst %}<option value="{{ v }}" {% if verkoopprijs_valuta == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
         </select>
@@ -485,7 +485,7 @@ def _inkoop_formulier_html():
         <input type="text" name="berekende_transportkosten" value="{{ berekende_transportkosten|default('')}}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
     </div>
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Valuta</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Valuta') }}</label>
         <select name="transportkosten_valuta" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             {% for v in valuta_lijst %}<option value="{{ v }}" {% if transportkosten_valuta == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
         </select>
@@ -504,13 +504,13 @@ def _inkoop_formulier_html():
 </div>
 <div style="font-size:11px;color:var(--gray-300);margin-bottom:16px;">Kostprijs en winst (per MT en totaal) worden automatisch in euro berekend na opslaan — met de live wisselkoers van dit moment, die daarna vastligt voor deze order.</div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Opmerkingen</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Opmerkingen') }}</div>
 <div style="margin-bottom:16px;">
     <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Order remarks</label>
     <textarea name="opmerkingen" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">{{ opmerkingen|default('') }}</textarea>
 </div>
 <div style="margin-bottom:20px;">
-    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Notities per afdeling</label>
+    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Notities per afdeling') }}</label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
         {% for a in afdelingen %}
         <div>
@@ -521,8 +521,8 @@ def _inkoop_formulier_html():
     </div>
 </div>
 
-<button type="submit" style="padding:10px 24px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Opslaan als concept</button>
-<a href="/handelsorders" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+<button type="submit" style="padding:10px 24px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Opslaan als concept') }}</button>
+<a href="/handelsorders" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">{{ vertaal('Annuleren') }}</a>
 </form>
 
 <script>
@@ -669,7 +669,7 @@ def _verkoop_formulier_html():
 {% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">{{ fout }}</div>{% endif %}
 
 <form method="POST" style="max-width:720px;">
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Basisinformatie</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Basisinformatie') }}</div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
         <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Klant *</label>
@@ -677,7 +677,7 @@ def _verkoop_formulier_html():
         <datalist id="klanten_datalist">{% for naam in klant_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
     </div>
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bedrijfseenheid</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Bedrijfseenheid') }}</label>
         <select name="bedrijfseenheid" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for be in bedrijfseenheden %}<option value="{{ be }}" {% if bedrijfseenheid == be %}selected{% endif %}>{{ be }}</option>{% endfor %}
@@ -685,21 +685,21 @@ def _verkoop_formulier_html():
     </div>
 </div>
 <div style="margin-bottom:16px;max-width:240px;">
-    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Datum aangemaakt</label>
+    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Datum aangemaakt') }}</label>
     <input type="date" name="datum_aangemaakt" value="{{ vandaag }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Deal informatie</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Deal informatie') }}</div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Incoterm</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Incoterm') }}</label>
         <select name="incoterm" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for i in incoterms %}<option value="{{ i }}" {% if incoterm == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
         </select>
     </div>
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Betalingstermijn</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Betalingstermijn') }}</label>
         <select name="betalingstermijn" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">— kies —</option>
             {% for b in betalingstermijnen %}<option value="{{ b }}" {% if betalingstermijn == b %}selected{% endif %}>{{ b }}</option>{% endfor %}
@@ -721,17 +721,17 @@ def _verkoop_formulier_html():
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Startdatum order</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Startdatum order') }}</label>
         <input type="date" name="startdatum" value="{{ vandaag }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
     </div>
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Einddatum order</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Einddatum order') }}</label>
         <input type="date" name="einddatum" value="{{ einddatum|default('')}}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;">
     </div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
     <div>
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Valuta</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Valuta') }}</label>
         <select name="valuta" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             {% for v in valuta_lijst %}<option value="{{ v }}" {% if valuta == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
         </select>
@@ -746,7 +746,7 @@ def _verkoop_formulier_html():
     </div>
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Leverlocatie</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Leverlocatie') }}</div>
 <div style="margin-bottom:10px;">
     <input type="text" name="lever_adres" placeholder="Adres" value="{{ lever_adres|default('')}}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
 </div>
@@ -779,13 +779,13 @@ def _verkoop_formulier_html():
     </div>
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">Opmerkingen</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px 0;">{{ vertaal('Opmerkingen') }}</div>
 <div style="margin-bottom:16px;">
     <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Order remarks</label>
     <textarea name="opmerkingen" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">{{ opmerkingen|default('') }}</textarea>
 </div>
 <div style="margin-bottom:20px;">
-    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Notities per afdeling</label>
+    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Notities per afdeling') }}</label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
         {% for a in afdelingen %}
         <div>
@@ -796,8 +796,8 @@ def _verkoop_formulier_html():
     </div>
 </div>
 
-<button type="submit" style="padding:10px 24px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Opslaan als concept</button>
-<a href="/handelsorders" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+<button type="submit" style="padding:10px 24px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Opslaan als concept') }}</button>
+<a href="/handelsorders" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">{{ vertaal('Annuleren') }}</a>
 </form>
 
 <script>
@@ -876,7 +876,7 @@ def handelsorder_detail(order_id):
     orders = laad_handelsorders()
     order = next((o for o in orders if o["id"] == order_id), None)
     if not order:
-        pagina = render_simple_page("Niet gevonden", "handelsorders", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/handelsorders">Terug naar Handelsorders</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "handelsorders", '<div class="page-title">' + vertaal("Order niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze order bestaat niet (meer).") + ' <a href="/handelsorders">' + vertaal("Terug naar Handelsorders") + '</a></div>')
         return render_template_string(pagina), 404
 
     # Voor definitieve verkooporders: check of er al een factuur aan dit contract
@@ -993,10 +993,10 @@ def handelsorder_detail(order_id):
     {% if order.status == "Concept" %}
     <a href="/handelsorders/{{ order.id }}/bewerken" style="padding:9px 18px;background:#fff;color:var(--gray-700);border:1px solid var(--gray-200);text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Wijzigen</a>
     <form method="POST" action="/handelsorders/{{ order.id }}/goedkeuren" onsubmit="return confirm('Order goedkeuren en versturen? Dit maakt de order definitief en kan niet ongedaan gemaakt worden.');" style="margin:0;">
-        <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Goedkeuren en versturen</button>
+        <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Goedkeuren en versturen') }}</button>
     </form>
     <form method="POST" action="/handelsorders/{{ order.id }}/verwijderen" onsubmit="return confirm('Deze order definitief verwijderen? Dit kan niet ongedaan gemaakt worden.');" style="margin:0;">
-        <button type="submit" style="padding:9px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:13px;cursor:pointer;">Verwijderen</button>
+        <button type="submit" style="padding:9px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:13px;cursor:pointer;">{{ vertaal('Verwijderen') }}</button>
     </form>
     {% else %}
     <a href="/handelsorders/{{ order.id }}/pdf" target="_blank" style="padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Contract downloaden (PDF)</a>
@@ -1013,7 +1013,7 @@ def handelsorder_detail(order_id):
 
 {% if gekoppelde_documenten %}
 <div style="margin-top:24px;max-width:720px;">
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Gekoppelde documenten</div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ vertaal('Gekoppelde documenten') }}</div>
     <div style="border:none;border-top:1px solid var(--gray-200);">
         {% for doc in gekoppelde_documenten %}
         <a href="/documenten_uploads/{{ doc.bestandsnaam }}" target="_blank" style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid var(--gray-100);font-size:12.5px;color:var(--gray-700);text-decoration:none;">
@@ -1026,7 +1026,7 @@ def handelsorder_detail(order_id):
 {% endif %}
 
 <div style="margin-top:28px;max-width:720px;">
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Activiteitenlog</div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ vertaal('Activiteitenlog') }}</div>
     {% if order.activiteitenlog %}
     <div style="border:none;border-top:1px solid var(--gray-200);margin-bottom:14px;">
         {% for regel in order.activiteitenlog|reverse %}
@@ -1060,7 +1060,7 @@ def handelsorder_bewerken(order_id):
     orders = laad_handelsorders()
     order = next((o for o in orders if o["id"] == order_id), None)
     if not order:
-        pagina = render_simple_page("Niet gevonden", "handelsorders", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/handelsorders">Terug</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "handelsorders", '<div class="page-title">' + vertaal("Order niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze order bestaat niet (meer).") + ' <a href="/handelsorders">' + vertaal("Terug") + '</a></div>')
         return render_template_string(pagina), 404
     if order["status"] != "Concept":
         return redirect(url_for("handelsorders.handelsorder_detail", order_id=order_id))
@@ -1153,8 +1153,10 @@ def _stuur_naar_boekhoudpakket(order):
 def _stuur_contractmail_naar_tegenpartij(order, pdf_bytes):
     """Placeholder voor het automatisch e-mailen van de orderbevestiging naar de
     leverancier/klant. Nu nog geen daadwerkelijke verbinding, maar dit is het vaste
-    aanknopingspunt voor zodra er een e-mailaccount/SMTP-koppeling beschikbaar is."""
-    return {"verstuurd": False, "reden": "E-mailkoppeling nog niet actief."}
+    aanknopingspunt voor zodra er een e-mailaccount/SMTP-koppeling beschikbaar is —
+    het afzenderadres staat dan al klaar bij Instellingen > Documentopmaak > Contract."""
+    afzender_email = laad_bedrijfslogo_instelling("contract").get("afzender_email", "")
+    return {"verstuurd": False, "reden": "E-mailkoppeling nog niet actief.", "afzender_email": afzender_email}
 
 def _log_marktprijs_bij_definitief(order):
     """Legt automatisch een marktprijspunt vast zodra een order definitief wordt —
