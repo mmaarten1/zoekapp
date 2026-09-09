@@ -903,7 +903,7 @@ window.fetch = function(url, opties) {
 
     {% if bedrijven %}
     <!-- FILTERS -->
-    <form method="POST" id="filterForm" style="flex:0 0 0;width:0;margin:0;padding:0;overflow:visible;">
+    <form method="POST" id="filterForm" onsubmit="synchroniseerFilterForm()" style="flex:0 0 0;width:0;margin:0;padding:0;overflow:visible;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="zoekterm" value="{{ zoekterm }}">
         <input type="hidden" name="land" value="{{ land }}">
@@ -1170,6 +1170,22 @@ function updateRegio() {
             sel.appendChild(o);
         });
     }
+}
+
+function synchroniseerFilterForm() {
+    // #filterForm heeft eigen, verborgen zoekterm/land/regio-velden (los van de
+    // zoekbalk in #searchForm) — zonder deze synchronisatie zou een net-gekozen
+    // land of ingetypte zoekterm die nog niet via 'Search →' is verzonden,
+    // verloren gaan zodra je in plaats daarvan op 'Filters toepassen' drukt.
+    var zoekbalkTerm = document.querySelector('#searchForm input[name="zoekterm"]');
+    var zoekbalkLand = document.getElementById("landSelect");
+    var zoekbalkRegio = document.getElementById("regioSelect");
+    var filterTerm = document.querySelector('#filterForm input[name="zoekterm"]');
+    var filterLand = document.querySelector('#filterForm input[name="land"]');
+    var filterRegio = document.querySelector('#filterForm input[name="regio"]');
+    if (zoekbalkTerm && filterTerm) filterTerm.value = zoekbalkTerm.value;
+    if (zoekbalkLand && filterLand) filterLand.value = zoekbalkLand.value;
+    if (zoekbalkRegio && filterRegio) filterRegio.value = zoekbalkRegio.value;
 }
 
 {% if bedrijven %}
