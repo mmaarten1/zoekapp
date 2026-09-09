@@ -194,6 +194,24 @@ VERTALINGEN = {
     "Geen status":           {"en": "No status", "fr": "Aucun statut", "it": "Nessuno stato", "es": "Sin estado"},
     "Mijn leveranciers":     {"en": "My suppliers", "fr": "Mes fournisseurs", "it": "I miei fornitori", "es": "Mis proveedores"},
     "Hele bedrijf":          {"en": "Whole company", "fr": "Toute l'entreprise", "it": "Tutta l'azienda", "es": "Toda la empresa"},
+    # --- Drawer (bedrijfsprofiel-paneel) ---
+    "Geverifieerd":          {"en": "Verified", "fr": "Vérifié", "it": "Verificato", "es": "Verificado"},
+    "Geen status":           {"en": "No status", "fr": "Aucun statut", "it": "Nessuno stato", "es": "Sin estado"},
+    "Geen Interesse":        {"en": "Not interested", "fr": "Pas intéressé", "it": "Non interessato", "es": "No interesado"},
+    "Certificeringen":       {"en": "Certifications", "fr": "Certifications", "it": "Certificazioni", "es": "Certificaciones"},
+    "Laden...":              {"en": "Loading...", "fr": "Chargement...", "it": "Caricamento...", "es": "Cargando..."},
+    "Stuur melding naar:":   {"en": "Send notification to:", "fr": "Envoyer la notification à :", "it": "Invia notifica a:", "es": "Enviar notificación a:"},
+    "Kies persoon/team...":  {"en": "Choose person/team...", "fr": "Choisir personne/équipe...", "it": "Scegli persona/team...", "es": "Elegir persona/equipo..."},
+    "Melding...":            {"en": "Notification...", "fr": "Notification...", "it": "Notifica...", "es": "Notificación..."},
+    "Stuur":                 {"en": "Send", "fr": "Envoyer", "it": "Invia", "es": "Enviar"},
+    "AI Analyseren":         {"en": "AI Analyze", "fr": "Analyser par IA", "it": "Analizza con IA", "es": "Analizar con IA"},
+    "Schrijf een notitie...": {"en": "Write a note...", "fr": "Écrire une note...", "it": "Scrivi una nota...", "es": "Escribir una nota..."},
+    "Privé":                 {"en": "Private", "fr": "Privé", "it": "Privato", "es": "Privado"},
+    "Foto toevoegen":        {"en": "Add photo", "fr": "Ajouter une photo", "it": "Aggiungi foto", "es": "Añadir foto"},
+    "Website":               {"en": "Website", "fr": "Site web", "it": "Sito web", "es": "Sitio web"},
+    "Algemene informatie":   {"en": "General information", "fr": "Informations générales", "it": "Informazioni generali", "es": "Información general"},
+    "Medewerkers":           {"en": "Employees", "fr": "Employés", "it": "Dipendenti", "es": "Empleados"},
+    "Geen aanvullende details beschikbaar": {"en": "No additional details available", "fr": "Aucun détail supplémentaire disponible", "it": "Nessun dettaglio aggiuntivo disponibile", "es": "No hay detalles adicionales disponibles"},
 }
 
 def huidige_taal():

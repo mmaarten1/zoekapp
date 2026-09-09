@@ -1295,57 +1295,57 @@ function wisselDrawerTab(naam) {
 
 function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHTML) {
     const geverifieerd = (window.currentDrawerData && (window.currentDrawerData.adres || window.currentDrawerData.telefoon))
-        ? `<div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value" style="color:var(--green-600);font-weight:700;">✓ Geverifieerd</span></div>` : "";
+        ? `<div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value" style="color:var(--green-600);font-weight:700;">✓ {{ vertaal('Geverifieerd') }}</span></div>` : "";
 
     const algemeen = `
         ${geverifieerd}
         <div class="drawer-row"><span class="drawer-row-label">Status</span><span class="drawer-row-value">
     <select id="statusSelect" onchange="wijzigStatus()" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
-        <option value="">Geen status</option>
-        <option value="klant">🟢 Klant</option>
-        <option value="potentie">🟡 Potentie</option>
-        <option value="in_proces">🔵 In Proces</option>
-        <option value="geen_interesse">⚪ Geen Interesse</option>
+        <option value="">{{ vertaal('Geen status') }}</option>
+        <option value="klant">🟢 {{ vertaal('Klant') }}</option>
+        <option value="potentie">🟡 {{ vertaal('Potentie') }}</option>
+        <option value="in_proces">🔵 {{ vertaal('In Proces') }}</option>
+        <option value="geen_interesse">⚪ {{ vertaal('Geen Interesse') }}</option>
     </select>
 </span></div>
-        <div class="drawer-row"><span class="drawer-row-label">Accountmanager</span><span class="drawer-row-value" id="accountmanagerWaarde">—</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Accountmanager') }}</span><span class="drawer-row-value" id="accountmanagerWaarde">—</span></div>
         <div class="drawer-row"><span class="drawer-row-label">Customer Type</span><span class="drawer-row-value">${klanttype || "—"}</span></div>
         ${window.currentDrawerData && window.currentDrawerData.brontype ? `<div class="drawer-row"><span class="drawer-row-label">Type</span><span class="drawer-row-value">${window.currentDrawerData.brontype}</span></div>` : ""}
         <div class="drawer-row"><span class="drawer-row-label">Materials</span><span class="drawer-row-value">${materialen || "—"}</span></div>
-        ${window.currentDrawerData && window.currentDrawerData.kwaliteiten ? `<div class="drawer-row"><span class="drawer-row-label">Kwaliteiten</span><span class="drawer-row-value">${window.currentDrawerData.kwaliteiten}</span></div>` : ""}
+        ${window.currentDrawerData && window.currentDrawerData.kwaliteiten ? `<div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Kwaliteiten') }}</span><span class="drawer-row-value">${window.currentDrawerData.kwaliteiten}</span></div>` : ""}
         <div class="drawer-row"><span class="drawer-row-label">Annual Volume</span><span class="drawer-row-value">${volume ? volume + " t/y" : "—"}</span></div>
-        ${window.currentDrawerData && window.currentDrawerData.contactpersoon ? `<div class="drawer-row"><span class="drawer-row-label">Contactpersoon</span><span class="drawer-row-value">${window.currentDrawerData.contactpersoon}</span></div>` : ""}
-        ${window.currentDrawerData && window.currentDrawerData.certificeringen ? `<div class="drawer-row"><span class="drawer-row-label">Certificeringen</span><span class="drawer-row-value">🏅 ${window.currentDrawerData.certificeringen}</span></div>` : ""}`;
+        ${window.currentDrawerData && window.currentDrawerData.contactpersoon ? `<div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Contactpersoon') }}</span><span class="drawer-row-value">${window.currentDrawerData.contactpersoon}</span></div>` : ""}
+        ${window.currentDrawerData && window.currentDrawerData.certificeringen ? `<div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Certificeringen') }}</span><span class="drawer-row-value">🏅 ${window.currentDrawerData.certificeringen}</span></div>` : ""}`;
 
-    const logistiek = `<div id="transportInfo"><div style="color:var(--gray-400);font-size:var(--text-sm);">Laden...</div></div>`;
+    const logistiek = `<div id="transportInfo"><div style="color:var(--gray-400);font-size:var(--text-sm);">{{ vertaal('Laden...') }}</div></div>`;
 
     const commercieel = `
-        <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Stuur melding naar:</div>
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">{{ vertaal('Stuur melding naar:') }}</div>
         <select id="meldingOntvanger" style="width:100%;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:6px;">
-            <option value="">Kies persoon/team...</option>
+            <option value="">{{ vertaal('Kies persoon/team...') }}</option>
         </select>
         <div style="display:flex;gap:8px;">
-            <input type="text" id="meldingTekst" placeholder="Melding..." style="flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
-            <button onclick="stuurMelding()" style="padding:6px 14px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Stuur</button>
+            <input type="text" id="meldingTekst" placeholder="{{ vertaal('Melding...') }}" style="flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+            <button onclick="stuurMelding()" style="padding:6px 14px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">{{ vertaal('Stuur') }}</button>
         </div>`;
 
     const aiAnalyse = `
-        <button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;">AI Analyseren</button>
+        <button id="equipmentBtn" onclick="analyseUitrusting()" style="padding:8px 16px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;">{{ vertaal('AI Analyseren') }}</button>
         <div id="equipmentResults" style="margin-top:12px;"></div>`;
 
     const notities = `
         <div id="notitiesLijst" style="margin-bottom:14px;"></div>
-        <textarea id="notitieInput" placeholder="Schrijf een notitie..." style="width:100%;min-height:56px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-family:inherit;font-size:13px;color:var(--gray-700);resize:vertical;box-sizing:border-box;"></textarea>
+        <textarea id="notitieInput" placeholder="{{ vertaal('Schrijf een notitie...') }}" style="width:100%;min-height:56px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-family:inherit;font-size:13px;color:var(--gray-700);resize:vertical;box-sizing:border-box;"></textarea>
         <div style="display:flex;align-items:center;gap:16px;margin-top:10px;">
-            <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="team" checked> Team</label>
-            <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="prive"> Privé</label>
-            <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">Toevoegen</button>
+            <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="team" checked> {{ vertaal('Team') }}</label>
+            <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="prive"> {{ vertaal('Privé') }}</label>
+            <button onclick="voegNotitieToe()" style="margin-left:auto;padding:6px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">{{ vertaal('Toevoegen') }}</button>
         </div>`;
 
     const contactDetails = `
         <div id="fotosLijst" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
         <input type="file" id="fotoInput" accept="image/*" style="display:none;" onchange="uploadFoto()">
-        <button onclick="document.getElementById('fotoInput').click()" style="padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:12px;">📷 Foto toevoegen</button>
+        <button onclick="document.getElementById('fotoInput').click()" style="padding:6px 14px;background:var(--brand-600);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:12px;">📷 {{ vertaal('Foto toevoegen') }}</button>
         ${contactHTML}
         ${websiteBtnHTML}`;
 
@@ -1357,7 +1357,7 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
         </div>`;
 
     const paneelInfo = `<div class="drawer-tab-paneel actief" id="tabpaneel-info">` +
-        kaartHTML("kaartAlgemeen", "Algemene informatie", "ℹ️", algemeen, true) +
+        kaartHTML("kaartAlgemeen", "{{ vertaal('Algemene informatie') }}", "ℹ️", algemeen, true) +
         kaartHTML("kaartNotities", "Notities", "📝", notities, false) +
         `</div>`;
 
@@ -1412,13 +1412,13 @@ function openDrawer(naam, regio, land, url, klanttype, materialen, volume, lat, 
                 window.currentDrawerData.lon = data.lon_precies;
             }
             var contactHTML = "";
-            if (data.website) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Website</span><span class="drawer-row-value"><a href="${data.website}" target="_blank" style="color:var(--brand-600);font-weight:600;">${data.website.replace("https://","").replace("http://","").split("/")[0]}</a></span></div>`;
+            if (data.website) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Website') }}</span><span class="drawer-row-value"><a href="${data.website}" target="_blank" style="color:var(--brand-600);font-weight:600;">${data.website.replace("https://","").replace("http://","").split("/")[0]}</a></span></div>`;
             var telefoon = data.telefoon || window.currentDrawerData.telefoon;
             var adres = data.adres || window.currentDrawerData.adres;
-            if (telefoon) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Phone</span><span class="drawer-row-value">${telefoon}</span></div>`;
-            if (adres) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Address</span><span class="drawer-row-value">${adres}${data.stad?", "+data.stad:""}</span></div>`;
-            if (data.medewerkers) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">Employees</span><span class="drawer-row-value">${data.medewerkers}</span></div>`;
-            if (!contactHTML) contactHTML = `<div style="color:var(--gray-400);font-size:var(--text-sm);">No additional details available</div>`;
+            if (telefoon) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Telefoon') }}</span><span class="drawer-row-value">${telefoon}</span></div>`;
+            if (adres) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Adres') }}</span><span class="drawer-row-value">${adres}${data.stad?", "+data.stad:""}</span></div>`;
+            if (data.medewerkers) contactHTML += `<div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Medewerkers') }}</span><span class="drawer-row-value">${data.medewerkers}</span></div>`;
+            if (!contactHTML) contactHTML = `<div style="color:var(--gray-400);font-size:var(--text-sm);">{{ vertaal('Geen aanvullende details beschikbaar') }}</div>`;
             if (data.lat_precies && data.lon_precies) {
                 kaart.flyTo([data.lat_precies, data.lon_precies], 17);
                 L.marker([data.lat_precies, data.lon_precies]).addTo(kaart)
