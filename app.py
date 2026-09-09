@@ -58,6 +58,7 @@ from core import (
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
+app.jinja_env.globals["vertaal"] = vertaal
 
 def _bepaal_secret_key():
     """Gebruikt de SECRET_KEY-omgevingsvariabele als die is ingesteld (aanbevolen,

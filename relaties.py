@@ -114,11 +114,11 @@ def leveranciers_pagina():
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;flex-wrap:wrap;gap:12px;padding-left:20px;">
     <div>
-        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Leveranciers</div>
+        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">{{ vertaal('Leveranciers') }}</div>
     </div>
     <div style="display:flex;align-items:center;gap:22px;">
-        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ totaal_gevonden_lev }}</div></div>
-        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ alle_landen_lev|length }}</div></div>
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Resultaten') }}</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ totaal_gevonden_lev }}</div></div>
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Landen') }}</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ alle_landen_lev|length }}</div></div>
         <a href="/bedrijf-toevoegen?type=leverancier" id="toevoegLevBtn" style="align-self:center;padding:9px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;text-decoration:none;">+ Nieuwe leverancier</a>
     </div>
 </div>
@@ -134,23 +134,23 @@ def leveranciers_pagina():
     {% if filter_am_lev %}<input type="hidden" name="accountmanager" value="{{ filter_am_lev }}">{% endif %}
     <input type="text" name="zoekterm" value="{{ zoekterm_lev }}" placeholder="Leverancier of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
     <select name="land" onchange="this.form.submit()" style="width:150px;border:none;border-left:1px solid var(--gray-100);padding:0 14px;font-size:14px;cursor:pointer;">
-        <option value="">Alle landen</option>
+        <option value="">{{ vertaal('Alle landen') }}</option>
         {% for l in alle_landen_lev %}<option value="{{ l }}" {% if land_lev == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
     </select>
-    <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">Search →</button>
+    <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">{{ vertaal('Zoeken') }} →</button>
 </form>
 
 <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;margin-left:20px;">
-    <a href="/leveranciers" class="klant-status-tab {% if not filter_status_lev %}actief{% endif %}">Alle</a>
-    <a href="/leveranciers?filter_status=klant" class="klant-status-tab {% if filter_status_lev == 'klant' %}actief{% endif %}">🟢 Klant ({{ aantal_per_status_lev.klant }})</a>
-    <a href="/leveranciers?filter_status=in_proces" class="klant-status-tab {% if filter_status_lev == 'in_proces' %}actief{% endif %}">🔵 In Proces ({{ aantal_per_status_lev.in_proces }})</a>
-    <a href="/leveranciers?filter_status=potentie" class="klant-status-tab {% if filter_status_lev == 'potentie' %}actief{% endif %}">🟡 Potentie ({{ aantal_per_status_lev.potentie }})</a>
-    <a href="/leveranciers?filter_status=geen" class="klant-status-tab {% if filter_status_lev == 'geen' %}actief{% endif %}">⚪ Geen status</a>
+    <a href="/leveranciers" class="klant-status-tab {% if not filter_status_lev %}actief{% endif %}">{{ vertaal('Alle') }}</a>
+    <a href="/leveranciers?filter_status=klant" class="klant-status-tab {% if filter_status_lev == 'klant' %}actief{% endif %}">🟢 {{ vertaal('Klant') }} ({{ aantal_per_status_lev.klant }})</a>
+    <a href="/leveranciers?filter_status=in_proces" class="klant-status-tab {% if filter_status_lev == 'in_proces' %}actief{% endif %}">🔵 {{ vertaal('In Proces') }} ({{ aantal_per_status_lev.in_proces }})</a>
+    <a href="/leveranciers?filter_status=potentie" class="klant-status-tab {% if filter_status_lev == 'potentie' %}actief{% endif %}">🟡 {{ vertaal('Potentie') }} ({{ aantal_per_status_lev.potentie }})</a>
+    <a href="/leveranciers?filter_status=geen" class="klant-status-tab {% if filter_status_lev == 'geen' %}actief{% endif %}">⚪ {{ vertaal('Geen status') }}</a>
 </div>
 
 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;margin-left:20px;">
-    <a href="/leveranciers?accountmanager=__mij__{% if filter_status_lev %}&filter_status={{ filter_status_lev }}{% endif %}" class="klant-status-tab {% if filter_am_lev == '__mij__' %}actief{% endif %}">🙋 Mijn leveranciers</a>
-    <a href="/leveranciers{% if filter_status_lev %}?filter_status={{ filter_status_lev }}{% endif %}" class="klant-status-tab {% if not filter_am_lev %}actief{% endif %}">Hele bedrijf</a>
+    <a href="/leveranciers?accountmanager=__mij__{% if filter_status_lev %}&filter_status={{ filter_status_lev }}{% endif %}" class="klant-status-tab {% if filter_am_lev == '__mij__' %}actief{% endif %}">🙋 {{ vertaal('Mijn leveranciers') }}</a>
+    <a href="/leveranciers{% if filter_status_lev %}?filter_status={{ filter_status_lev }}{% endif %}" class="klant-status-tab {% if not filter_am_lev %}actief{% endif %}">{{ vertaal('Hele bedrijf') }}</a>
 </div>
 
 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:20px;margin-left:20px;">
@@ -163,10 +163,10 @@ def leveranciers_pagina():
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="results-list" id="leveranciersLijst">
         <div class="data-thead">
-            <span style="flex:1.4;" data-sort="naam">Leverancier</span>
-            <span style="flex:1;" data-sort="locatie">Locatie</span>
-            <span style="flex:1.2;" data-sort="materialen">Materialen</span>
-            <span style="width:110px;" data-sort="status">Status</span>
+            <span style="flex:1.4;" data-sort="naam">{{ vertaal('Leverancier') }}</span>
+            <span style="flex:1;" data-sort="locatie">{{ vertaal('Locatie') }}</span>
+            <span style="flex:1.2;" data-sort="materialen">{{ vertaal('Materialen') }}</span>
+            <span style="width:110px;" data-sort="status">{{ vertaal('Status') }}</span>
             <span style="width:110px;" data-sort="accountmanager">Accountmgr.</span>
             <span style="width:90px;text-align:right;"></span>
         </div>
@@ -311,11 +311,11 @@ def klanten_pagina():
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px;padding-left:20px;">
     <div>
-        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">Klanten</div>
+        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;color:var(--gray-900);">{{ vertaal('Klanten') }}</div>
     </div>
     <div style="display:flex;align-items:center;gap:22px;">
-        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Resultaten</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ klanten_lijst|length }}</div></div>
-        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Landen</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat_fab }}</div></div>
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Resultaten') }}</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ klanten_lijst|length }}</div></div>
+        <div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Landen') }}</div><div style="font-size:28px;font-weight:700;color:var(--gray-800);font-family:var(--font-mono);">{{ landen_in_resultaat_fab }}</div></div>
         <a href="/bedrijf-toevoegen?type=klant" id="toevoegKlantBtn" style="align-self:center;padding:9px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;text-decoration:none;">+ Nieuwe klant</a>
     </div>
 </div>
@@ -329,18 +329,18 @@ def klanten_pagina():
     {% if filter_status_klant %}<input type="hidden" name="filter_status" value="{{ filter_status_klant }}">{% endif %}
     <input type="text" name="zoekterm" value="{{ zoekterm_fab }}" placeholder="Klant of stad..." style="flex:1;min-width:140px;border:none;padding:0 14px;font-size:14px;outline:none;">
     <select name="land" onchange="this.form.submit()" style="width:150px;border:none;border-left:1px solid var(--gray-100);padding:0 14px;font-size:14px;cursor:pointer;">
-        <option value="">Alle landen</option>
+        <option value="">{{ vertaal('Alle landen') }}</option>
         {% for l in alle_landen_fab %}<option value="{{ l }}" {% if land_fab == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
     </select>
-    <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">Search →</button>
+    <button type="submit" style="background:var(--brand-600);color:#fff;border:none;padding:0 20px;font-weight:700;font-size:14px;cursor:pointer;">{{ vertaal('Zoeken') }} →</button>
 </form>
 
 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;margin-left:20px;">
-    <a href="/klanten" class="klant-status-tab {% if not filter_status_klant %}actief{% endif %}">Alle</a>
-    <a href="/klanten?filter_status=klant" class="klant-status-tab {% if filter_status_klant == 'klant' %}actief{% endif %}">🟢 Klant ({{ aantal_per_status.klant }})</a>
-    <a href="/klanten?filter_status=in_proces" class="klant-status-tab {% if filter_status_klant == 'in_proces' %}actief{% endif %}">🔵 In Proces ({{ aantal_per_status.in_proces }})</a>
-    <a href="/klanten?filter_status=potentie" class="klant-status-tab {% if filter_status_klant == 'potentie' %}actief{% endif %}">🟡 Potentie ({{ aantal_per_status.potentie }})</a>
-    <a href="/klanten?filter_status=geen" class="klant-status-tab {% if filter_status_klant == 'geen' %}actief{% endif %}">⚪ Geen status</a>
+    <a href="/klanten" class="klant-status-tab {% if not filter_status_klant %}actief{% endif %}">{{ vertaal('Alle') }}</a>
+    <a href="/klanten?filter_status=klant" class="klant-status-tab {% if filter_status_klant == 'klant' %}actief{% endif %}">🟢 {{ vertaal('Klant') }} ({{ aantal_per_status.klant }})</a>
+    <a href="/klanten?filter_status=in_proces" class="klant-status-tab {% if filter_status_klant == 'in_proces' %}actief{% endif %}">🔵 {{ vertaal('In Proces') }} ({{ aantal_per_status.in_proces }})</a>
+    <a href="/klanten?filter_status=potentie" class="klant-status-tab {% if filter_status_klant == 'potentie' %}actief{% endif %}">🟡 {{ vertaal('Potentie') }} ({{ aantal_per_status.potentie }})</a>
+    <a href="/klanten?filter_status=geen" class="klant-status-tab {% if filter_status_klant == 'geen' %}actief{% endif %}">⚪ {{ vertaal('Geen status') }}</a>
 </div>
 
 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px;margin-left:20px;">
@@ -353,10 +353,10 @@ def klanten_pagina():
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="results-list" id="klantenLijst">
         <div class="data-thead">
-            <span style="flex:1.6;" data-sort="naam">Klant</span>
-            <span style="flex:1;" data-sort="locatie">Locatie</span>
-            <span style="flex:1.4;" data-sort="materialen">Materialen</span>
-            <span style="width:120px;" data-sort="status">Status</span>
+            <span style="flex:1.6;" data-sort="naam">{{ vertaal('Klant') }}</span>
+            <span style="flex:1;" data-sort="locatie">{{ vertaal('Locatie') }}</span>
+            <span style="flex:1.4;" data-sort="materialen">{{ vertaal('Materialen') }}</span>
+            <span style="width:120px;" data-sort="status">{{ vertaal('Status') }}</span>
             <span style="width:100px;text-align:right;"></span>
         </div>
         {% for f in klanten_lijst %}

@@ -101,32 +101,32 @@ def contacten():
 .data-row .zacht { color: #4b5563; font-size: 12px; }
 </style>
 
-<div class="page-title">Contacten</div>
+<div class="page-title">{{ vertaal('Contacten') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Contactpersonen bij bedrijven, met rol en laatste contactmoment</p>
 
 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
     <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <input type="text" name="zoekterm" value="{{ zoekterm }}" placeholder="Naam, bedrijf of e-mail" style="flex:1;max-width:280px;padding:7px 10px;border:1px solid var(--gray-200);background:#fff;border-radius:6px;font-size:12.5px;font-family:inherit;">
         <select name="accountmanager" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);background:#fff;border-radius:6px;font-size:12.5px;">
-            <option value="">Alle accountmanagers</option>
+            <option value="">{{ vertaal('Alle accountmanagers') }}</option>
             {% for a in alle_accountmanagers %}<option value="{{ a }}" {% if gekozen_am == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
         </select>
-        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">Zoeken</button>
+        <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">{{ vertaal('Zoeken') }}</button>
         {% if zoekterm or gekozen_am %}<a href="/contacten" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
     </form>
-    <a href="/contacten/nieuw" style="display:inline-block;padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap;">+ Contact toevoegen</a>
+    <a href="/contacten/nieuw" style="display:inline-block;padding:9px 18px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap;">+ {{ vertaal('Contactpersoon toevoegen') }}</a>
 </div>
 
 {% if contacten_lijst %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
 <div class="data-thead">
-    <span style="flex:1.2;" data-sort="naam">Contactpersoon</span>
-    <span style="flex:1.4;" data-sort="bedrijf">Bedrijf</span>
-    <span style="flex:1;" data-sort="rol">Rol</span>
+    <span style="flex:1.2;" data-sort="naam">{{ vertaal('Contactpersoon') }}</span>
+    <span style="flex:1.4;" data-sort="bedrijf">{{ vertaal('Bedrijf') }}</span>
+    <span style="flex:1;" data-sort="rol">{{ vertaal('Rol') }}</span>
     <span style="flex:1.2;" data-sort="email">E-mail</span>
-    <span style="width:130px;" data-sort="telefoon">Telefoon</span>
+    <span style="width:130px;" data-sort="telefoon">{{ vertaal('Telefoon') }}</span>
     <span style="width:110px;" data-sort="accountmanager">Accountmgr.</span>
-    <span style="width:90px;text-align:right;" data-sort="laatst">Contact</span>
+    <span style="width:90px;text-align:right;" data-sort="laatst">{{ vertaal('Contact') }}</span>
     <span style="width:60px;"></span>
 </div>
 <div id="contactenLijst">

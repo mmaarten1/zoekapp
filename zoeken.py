@@ -920,7 +920,7 @@ window.fetch = function(url, opties) {
                 </div>
             </div>
 
-            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:var(--space-2);">Bedrijfsprofiel</div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:var(--space-2);">{{ vertaal('Bedrijfsprofiel') }}</div>
 
             <div class="filter-group">
                 <label class="filter-label">Customer Type</label>
@@ -933,9 +933,9 @@ window.fetch = function(url, opties) {
             </div>
 
             <div class="filter-group">
-                <label class="filter-label">Bedrijfstype</label>
+                <label class="filter-label">{{ vertaal('Bedrijfstype') }}</label>
                 <select class="filter-select" name="brontype">
-                    <option value="">Alle types</option>
+                    <option value="">{{ vertaal('Alle types') }}</option>
                     <option value="Schroothandel" {% if brontype == "Schroothandel" %}selected{% endif %}>Schroothandel</option>
                     <option value="Recyclingcentrum" {% if brontype == "Recyclingcentrum" %}selected{% endif %}>Recyclingcentrum</option>
                     <option value="Papierfabriek" {% if brontype == "Papierfabriek" %}selected{% endif %}>Papierfabriek</option>
@@ -944,7 +944,7 @@ window.fetch = function(url, opties) {
                 </select>
             </div>
 
-            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin:var(--space-4) 0 var(--space-2);">Materiaal</div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin:var(--space-4) 0 var(--space-2);">{{ vertaal('Materiaal') }}</div>
 
             <div class="filter-group">
                 <label class="filter-label">Material</label>
@@ -962,7 +962,7 @@ window.fetch = function(url, opties) {
             </div>
 
             <div class="filter-group">
-                <label class="filter-label">Kwaliteiten</label>
+                <label class="filter-label">{{ vertaal('Kwaliteiten') }}</label>
                 <input type="text" class="filter-select" name="kwaliteiten" value="{{ kwaliteiten }}" placeholder="bv. OCC, HDPE...">
             </div>
 
@@ -976,12 +976,12 @@ window.fetch = function(url, opties) {
                 </select>
             </div>
 
-            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin:var(--space-4) 0 var(--space-2);">Team</div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.6px;margin:var(--space-4) 0 var(--space-2);">{{ vertaal('Team') }}</div>
 
             <div class="filter-group">
-                <label class="filter-label">Accountmanager</label>
+                <label class="filter-label">{{ vertaal('Accountmanager') }}</label>
                 <select class="filter-select" name="accountmanager">
-                    <option value="">Alle bedrijven</option>
+                    <option value="">{{ vertaal('Alle bedrijven') }}</option>
                     <option value="__mij__" {% if accountmanager == "__mij__" %}selected{% endif %}>🙋 Alleen mijn bedrijven</option>
                     {% for gebruikersnaam in alle_gebruikersnamen %}
                     <option value="{{ gebruikersnaam }}" {% if accountmanager == gebruikersnaam %}selected{% endif %}>{{ gebruikersnaam }}</option>
@@ -990,7 +990,7 @@ window.fetch = function(url, opties) {
             </div>
 
             <hr class="filter-divider">
-            <button type="submit" class="btn-apply">Filters toepassen</button>
+            <button type="submit" class="btn-apply">{{ vertaal('Filters toepassen') }}</button>
         </aside>
     </form>
 
@@ -1034,14 +1034,14 @@ window.fetch = function(url, opties) {
             <div class="results-list" id="resultatenLijst">
                 <div class="data-thead">
                     <span style="width:26px;"></span>
-                    <span style="flex:1.5;" data-sort="naam">Bedrijf</span>
-                    <span style="flex:1;" data-sort="brontype">Bedrijfstype</span>
-                <span style="flex:1.2;" data-sort="materialen">Materialen</span>
-                <span style="flex:1.2;" data-sort="kwaliteiten">Kwaliteiten</span>
-                <span style="flex:1;" data-sort="klanttype">Klanttype</span>
+                    <span style="flex:1.5;" data-sort="naam">{{ vertaal('Bedrijf') }}</span>
+                    <span style="flex:1;" data-sort="brontype">{{ vertaal('Bedrijfstype') }}</span>
+                <span style="flex:1.2;" data-sort="materialen">{{ vertaal('Materialen') }}</span>
+                <span style="flex:1.2;" data-sort="kwaliteiten">{{ vertaal('Kwaliteiten') }}</span>
+                <span style="flex:1;" data-sort="klanttype">{{ vertaal('Klanttype') }}</span>
                 <span style="width:90px;text-align:right;" data-sort="volume">Volume t/j</span>
                 <span style="width:110px;" data-sort="accountmanager">Accountmgr.</span>
-                <span style="width:90px;text-align:right;" data-sort="laatst_contact">Contact</span>
+                <span style="width:90px;text-align:right;" data-sort="laatst_contact">{{ vertaal('Contact') }}</span>
                 <span style="width:28px;"></span>
             </div>
             {% for bedrijf in bedrijven %}
@@ -1095,7 +1095,7 @@ window.fetch = function(url, opties) {
     <div class="welcome-state">
         <div class="welcome-icon">🔍</div>
         {% if er_is_gefilterd %}
-        <div class="welcome-title">Geen bedrijven gevonden voor deze filters</div>
+        <div class="welcome-title">{{ vertaal('Geen bedrijven gevonden voor deze filters') }}</div>
         <div class="welcome-sub">Probeer een andere combinatie, of klik op "Wis filters" om opnieuw te beginnen</div>
         {% else %}
         <div class="welcome-title">Search for recycling companies</div>
@@ -1351,9 +1351,9 @@ function bouwDrawerBody(klanttype, materialen, volume, contactHTML, websiteBtnHT
 
     const tabbalk = `
         <div class="drawer-tabs">
-            <button class="drawer-tab actief" id="tabknop-info" onclick="wisselDrawerTab('info')">Info</button>
-            <button class="drawer-tab" id="tabknop-logistiek" onclick="wisselDrawerTab('logistiek')">Logistiek</button>
-            <button class="drawer-tab" id="tabknop-commercieel" onclick="wisselDrawerTab('commercieel')">Commercieel</button>
+            <button class="drawer-tab actief" id="tabknop-info" onclick="wisselDrawerTab('info')">{{ vertaal('Info') }}</button>
+            <button class="drawer-tab" id="tabknop-logistiek" onclick="wisselDrawerTab('logistiek')">{{ vertaal('Logistiek') }}</button>
+            <button class="drawer-tab" id="tabknop-commercieel" onclick="wisselDrawerTab('commercieel')">{{ vertaal('Commercieel') }}</button>
         </div>`;
 
     const paneelInfo = `<div class="drawer-tab-paneel actief" id="tabpaneel-info">` +
