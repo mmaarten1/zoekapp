@@ -46,7 +46,7 @@ from core import (
     PAGINA_HOOFD, sidebar_html, render_simple_page, is_huidige_gebruiker_admin, vereist_admin_of_403,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken,
     TRANSPORT_DATA, vind_transport_tarieven_dichtbij, ORDER_KLEUREN, SHIPMENT_STATUSSEN, LANDEN,
-    bewaar_users, AFDELINGEN, AFDELING_LABELS, ROLLEN, ROL_LABELS,
+    bewaar_users, AFDELINGEN, AFDELING_LABELS, ROLLEN, ROL_LABELS, TALEN, TAAL_LABELS, vertaal, huidige_taal,
     mag_pagina_zien, vereist_afdeling_of_403, PAGINA_AFDELINGEN,
     laad_containers, bewaar_containers, CONTAINER_TYPES, CONTAINER_STATUSSEN,
     laad_logistieke_orders, bewaar_logistieke_orders, laad_weegbrug, laad_documenten,
@@ -2130,6 +2130,7 @@ def login():
                 session["team"] = users[gebruikersnaam].get("team", "")
                 session["afdeling"] = users[gebruikersnaam].get("afdeling", "")
                 session["rol"] = users[gebruikersnaam].get("rol", "")
+                session["taal"] = users[gebruikersnaam].get("taal", "nl")
                 return redirect(url_for("zoeken.index"))
             else:
                 registreer_mislukte_inlogpoging(gebruikersnaam)
@@ -5311,6 +5312,12 @@ def _persoonlijke_informatie_inhoud():
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">E-mailadres</label>
             <input type="email" name="email" value="{{ eigen_gegevens.email or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:18px;margin-top:4px;box-sizing:border-box;">
 
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Interfacetaal</label>
+            <select name="taal" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:6px;margin-top:4px;box-sizing:border-box;">
+                {% for code, label in taal_labels.items() %}<option value="{{ code }}" {% if (eigen_gegevens.taal or 'nl') == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <div style="font-size:11px;color:var(--gray-400);margin-bottom:14px;">De navigatie en de meest gedeelde teksten zijn nu vertaald — de rest van de app volgt geleidelijk.</div>
+
             <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Opslaan</button>
         </form>
     </div>
@@ -5354,7 +5361,7 @@ def _persoonlijke_informatie_inhoud():
     return inhoud, dict(gebruikersnaam=gebruikersnaam, eigen_gegevens=eigen_gegevens, opgeslagen=opgeslagen,
                           team=session.get("team",""), AFDELING_LABELS=AFDELING_LABELS,
                           wachtwoord_gewijzigd=wachtwoord_gewijzigd, wachtwoord_fout=wachtwoord_fout,
-                          wachtwoord_foutmeldingen=WACHTWOORD_FOUTMELDINGEN)
+                          wachtwoord_foutmeldingen=WACHTWOORD_FOUTMELDINGEN, taal_labels=TAAL_LABELS)
 
 
 def _beheer_inhoud():
@@ -5446,6 +5453,10 @@ def instellingen():
         if gebruikersnaam in users:
             users[gebruikersnaam]["weergavenaam"] = request.form.get("weergavenaam", "").strip()
             users[gebruikersnaam]["email"] = request.form.get("email", "").strip()
+            ingevoerde_taal = request.form.get("taal", "nl")
+            if ingevoerde_taal in TALEN:
+                users[gebruikersnaam]["taal"] = ingevoerde_taal
+                session["taal"] = ingevoerde_taal
             bestand = request.files.get("profielfoto")
             if bestand and bestand.filename:
                 extensie = bestand.filename.rsplit(".", 1)[-1].lower() if "." in bestand.filename else ""
@@ -5508,6 +5519,9 @@ def instellingen_documenten():
         ingevoerde_kleur = request.form.get("accentkleur", "").strip()
         if re.match(r"^#[0-9a-fA-F]{6}$", ingevoerde_kleur):
             instelling["accentkleur"] = ingevoerde_kleur
+        ingevoerd_email = request.form.get("afzender_email", "").strip()
+        if not ingevoerd_email or re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", ingevoerd_email):
+            instelling["afzender_email"] = ingevoerd_email
         bewaar_bedrijfslogo_instelling(instelling, document_type)
         return redirect(url_for("instellingen_documenten", type=document_type, opgeslagen="1"))
 
@@ -5549,6 +5563,10 @@ def instellingen_documenten():
                 <input type="color" name="accentkleur" value="{{ instelling.accentkleur }}" style="width:44px;height:32px;border:1px solid var(--gray-200);border-radius:6px;padding:2px;cursor:pointer;">
                 <span style="font-size:12px;color:var(--gray-400);font-family:var(--font-mono);">{{ instelling.accentkleur }}</span>
             </div>
+
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Afzender-e-mailadres</label>
+            <input type="email" name="afzender_email" value="{{ instelling.afzender_email }}" placeholder="bv. facturatie@peute.nl" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:6px;margin-top:4px;box-sizing:border-box;">
+            <div style="font-size:11px;color:var(--gray-400);margin-bottom:14px;">Wordt vastgelegd voor als de e-mailkoppeling actief wordt — er wordt nu nog niets automatisch verstuurd.</div>
 
             <button type="submit" style="padding:7px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Opslaan</button>
         </form>

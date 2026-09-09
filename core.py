@@ -83,6 +83,86 @@ def haal_weergavenaam(gebruikersnaam):
     return gebruiker.get("weergavenaam", "").strip() or gebruikersnaam
 
 # ============================================================
+# Vertaalsysteem — per gebruiker instelbare interfacetaal.
+# Nederlands blijft de brontaal en de fallback: een ontbrekende vertaling
+# toont gewoon de Nederlandse tekst, nooit een lege of kapotte pagina.
+# Dit dekt nu de navigatie (zijbalk) en de meest gedeelde, overal
+# terugkerende UI-teksten (Opslaan/Annuleren/Zoeken/enz.) — dat is de laag
+# die op vrijwel elke pagina zichtbaar is. Pagina-specifieke teksten (elk van
+# de tientallen aparte schermen) worden in aparte, latere stappen vertaald;
+# dat is te omvangrijk om in één keer betrouwbaar te doen.
+# ============================================================
+TALEN = ["nl", "en", "fr", "it", "es"]
+TAAL_LABELS = {"nl": "Nederlands", "en": "English", "fr": "Français", "it": "Italiano", "es": "Español"}
+
+VERTALINGEN = {
+    # --- Zijbalk / navigatie ---
+    "Weegbrug":              {"en": "Weighbridge", "fr": "Pont-bascule", "it": "Pesa", "es": "Báscula"},
+    "Live Operaties":        {"en": "Live Operations", "fr": "Opérations en direct", "it": "Operazioni live", "es": "Operaciones en vivo"},
+    "Planning":              {"en": "Planning", "fr": "Planification", "it": "Pianificazione", "es": "Planificación"},
+    "Afhandeling":           {"en": "Handling", "fr": "Traitement", "it": "Gestione", "es": "Gestión"},
+    "Dashboard":             {"en": "Dashboard", "fr": "Tableau de bord", "it": "Cruscotto", "es": "Panel"},
+    "Orders logistiek":      {"en": "Logistics orders", "fr": "Commandes logistiques", "it": "Ordini logistici", "es": "Pedidos logísticos"},
+    "Notities":              {"en": "Notes", "fr": "Notes", "it": "Note", "es": "Notas"},
+    "Takenlijst":            {"en": "Task list", "fr": "Liste de tâches", "it": "Elenco attività", "es": "Lista de tareas"},
+    "Logistieke Inzichten":  {"en": "Logistics Insights", "fr": "Analyses logistiques", "it": "Analisi logistiche", "es": "Análisis logísticos"},
+    "Zoeken":                {"en": "Search", "fr": "Recherche", "it": "Cerca", "es": "Buscar"},
+    "World Map":             {"en": "World Map", "fr": "Carte du monde", "it": "Mappa del mondo", "es": "Mapa mundial"},
+    "Inzichten":             {"en": "Insights", "fr": "Analyses", "it": "Analisi", "es": "Análisis"},
+    "Klanten":               {"en": "Customers", "fr": "Clients", "it": "Clienti", "es": "Clientes"},
+    "Leveranciers":          {"en": "Suppliers", "fr": "Fournisseurs", "it": "Fornitori", "es": "Proveedores"},
+    "Certifications":        {"en": "Certifications", "fr": "Certifications", "it": "Certificazioni", "es": "Certificaciones"},
+    "Contacten":             {"en": "Contacts", "fr": "Contacts", "it": "Contatti", "es": "Contactos"},
+    "Handelsorders":         {"en": "Trade orders", "fr": "Contrats commerciaux", "it": "Contratti commerciali", "es": "Contratos comerciales"},
+    "Logistiek":             {"en": "Logistics", "fr": "Logistique", "it": "Logistica", "es": "Logística"},
+    "Transport Overview":    {"en": "Transport Overview", "fr": "Aperçu du transport", "it": "Panoramica trasporti", "es": "Resumen de transporte"},
+    "Transport Planning":    {"en": "Transport Planning", "fr": "Planification du transport", "it": "Pianificazione trasporti", "es": "Planificación de transporte"},
+    "Transport Rates":       {"en": "Transport Rates", "fr": "Tarifs de transport", "it": "Tariffe di trasporto", "es": "Tarifas de transporte"},
+    "Facturen":              {"en": "Invoices", "fr": "Factures", "it": "Fatture", "es": "Facturas"},
+    "Financiële Inzichten":  {"en": "Financial Insights", "fr": "Analyses financières", "it": "Analisi finanziarie", "es": "Análisis financieros"},
+    "Marktprijzen":          {"en": "Market Prices", "fr": "Prix du marché", "it": "Prezzi di mercato", "es": "Precios de mercado"},
+    "Voorraad":              {"en": "Inventory", "fr": "Stock", "it": "Magazzino", "es": "Inventario"},
+    "Instellingen":          {"en": "Settings", "fr": "Paramètres", "it": "Impostazioni", "es": "Configuración"},
+    # --- Gedeelde, overal terugkerende UI-teksten ---
+    "Opslaan":               {"en": "Save", "fr": "Enregistrer", "it": "Salva", "es": "Guardar"},
+    "Annuleren":             {"en": "Cancel", "fr": "Annuler", "it": "Annulla", "es": "Cancelar"},
+    "Toevoegen":             {"en": "Add", "fr": "Ajouter", "it": "Aggiungi", "es": "Añadir"},
+    "Verwijderen":           {"en": "Delete", "fr": "Supprimer", "it": "Elimina", "es": "Eliminar"},
+    "Bewerken":              {"en": "Edit", "fr": "Modifier", "it": "Modifica", "es": "Editar"},
+    "Terug":                 {"en": "Back", "fr": "Retour", "it": "Indietro", "es": "Volver"},
+    "Sluiten":               {"en": "Close", "fr": "Fermer", "it": "Chiudi", "es": "Cerrar"},
+    "Uitloggen":             {"en": "Log out", "fr": "Déconnexion", "it": "Esci", "es": "Cerrar sesión"},
+    "Ingelogd als":          {"en": "Logged in as", "fr": "Connecté en tant que", "it": "Accesso come", "es": "Conectado como"},
+    "Status":                {"en": "Status", "fr": "Statut", "it": "Stato", "es": "Estado"},
+    "Datum":                 {"en": "Date", "fr": "Date", "it": "Data", "es": "Fecha"},
+    "Bedrijf":               {"en": "Company", "fr": "Entreprise", "it": "Azienda", "es": "Empresa"},
+    "Materiaal":             {"en": "Material", "fr": "Matériau", "it": "Materiale", "es": "Material"},
+    "Bedrag":                {"en": "Amount", "fr": "Montant", "it": "Importo", "es": "Importe"},
+    "Zoeken...":             {"en": "Search...", "fr": "Rechercher...", "it": "Cerca...", "es": "Buscar..."},
+}
+
+def huidige_taal():
+    """De interfacetaal van de ingelogde gebruiker — hun eigen, opgeslagen
+    voorkeur (ingesteld bij Persoonlijke informatie), met Nederlands als
+    standaard voor wie nog niets heeft ingesteld."""
+    _taal = session.get("taal", "")
+    if _taal in TALEN:
+        return _taal
+    return "nl"
+
+def vertaal(tekst, taal=None):
+    """Vertaalt een stuk Nederlandse UI-tekst naar de opgegeven (of de huidige
+    gebruikers-)taal. Onbekende taal, of een tekst die nog niet in de
+    vertaaltabel staat: geeft gewoon de originele, Nederlandse tekst terug —
+    nooit een foutmelding of lege string, zodat een ontbrekende vertaling
+    hoogstens onvertaald blijft i.p.v. de pagina te breken."""
+    if taal is None:
+        taal = huidige_taal()
+    if taal == "nl":
+        return tekst
+    return VERTALINGEN.get(tekst, {}).get(taal, tekst)
+
+# ============================================================
 # Rechtensysteem — Fase 1: datamodel (afdeling + rol per gebruiker).
 # Nog GEEN afscherming van schermen o.b.v. deze velden — dat komt in een
 # latere fase. Dit legt alleen de basis vast.
@@ -1951,7 +2031,7 @@ def sidebar_html(actief):
         if key in _verborgen and key != actief:
             continue
         cls = "sidebar-link active" if key == actief else "sidebar-link"
-        links += "<a href=\"" + href + "\" class=\"" + cls + "\" style=\"display:flex;align-items:center;\"><span class=\"icoon\">" + icoon + "</span> " + label + "</a>\n        "
+        links += "<a href=\"" + href + "\" class=\"" + cls + "\" style=\"display:flex;align-items:center;\"><span class=\"icoon\">" + icoon + "</span> " + vertaal(label) + "</a>\n        "
 
     weergave_balk = ""
     if is_huidige_gebruiker_admin() or session.get("rol", "") == "directeur":
@@ -1982,7 +2062,7 @@ def sidebar_html(actief):
             <div class="sidebar-me-rol">TEAM_HIER</div>
         </div>
         <a class="sidebar-me-uit" href="/instellingen/layout" title="Mijn zijbalk aanpassen" style="margin-right:4px;">⚙</a>
-        <a class="sidebar-me-uit" href="/logout" title="Uitloggen">⏻</a>
+        <a class="sidebar-me-uit" href="/logout" title="UITLOGGEN_LABEL_HIER">⏻</a>
     </div>
 </aside>
 <script>
@@ -1994,7 +2074,8 @@ function toggleMobielMenu() {
              .replace("WEERGAVE_BALK_HIER", weergave_balk) \
              .replace("GEBRUIKERSNAAM_HIER", haal_weergavenaam(session.get("gebruikersnaam", ""))) \
              .replace("GEBRUIKERSNAAM_INITIALEN", (haal_weergavenaam(session.get("gebruikersnaam", "??"))[:2]).upper()) \
-             .replace("TEAM_HIER", session.get("team", "") or "Teamlid")
+             .replace("TEAM_HIER", session.get("team", "") or "Teamlid") \
+             .replace("UITLOGGEN_LABEL_HIER", vertaal("Uitloggen"))
 
 def render_simple_page(titel, actief, inhoud_html):
     _csrf_token = haal_of_maak_csrf_token()
@@ -2140,7 +2221,7 @@ def laad_bedrijfslogo_instelling(document_type=None):
     instelling kende). Met document_type: geeft de instelling voor dát
     specifieke document terug, met een schone standaard als er nog niets is
     ingesteld — zodat elk document een eigen logo/positie/kleur kan hebben."""
-    standaard = {"bestandsnaam": "", "positie": "links", "accentkleur": STANDAARD_ACCENTKLEUR}
+    standaard = {"bestandsnaam": "", "positie": "links", "accentkleur": STANDAARD_ACCENTKLEUR, "afzender_email": ""}
     try:
         with open(LOGO_INSTELLING_FILE, "r", encoding="utf-8") as f:
             opgeslagen = json.load(f)
