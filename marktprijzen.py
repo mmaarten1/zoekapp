@@ -101,7 +101,7 @@ def marktprijzen_pagina():
 .mp-rij { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--gray-50); font-size:12.5px; }
 .form-voorraad input, .form-voorraad select, .form-voorraad textarea { width:100%; padding:8px 10px; border:1px solid var(--gray-200); border-radius:6px; font-size:13px; margin-bottom:10px; font-family:inherit; box-sizing:border-box; }
 </style>
-<div class="page-title">Marktprijzen</div>
+<div class="page-title">{{ vertaal('Marktprijzen') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Prijs per ton, per materiaal/kwaliteit. Wordt automatisch aangevuld zodra je een order op "Gewonnen" zet.</p>
 
 <div class="mp-grid">
@@ -120,15 +120,15 @@ def marktprijzen_pagina():
 
 <div class="mp-kaart" style="max-width:520px;margin-bottom:20px;">
     <div id="prijspuntKnopRij">
-        <button type="button" onclick="document.getElementById('prijspuntKnopRij').style.display='none'; document.getElementById('prijspuntFormulier').style.display='block';" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">+ Prijspunt toevoegen</button>
+        <button type="button" onclick="document.getElementById('prijspuntKnopRij').style.display='none'; document.getElementById('prijspuntFormulier').style.display='block';" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;">+ {{ vertaal('Prijspunt toevoegen') }}</button>
     </div>
     <div id="prijspuntFormulier" style="display:none;">
-        <div class="dg-kaart-titel">Prijspunt toevoegen</div>
+        <div class="dg-kaart-titel">{{ vertaal('Prijspunt toevoegen') }}</div>
         <form method="POST" class="form-voorraad">
             <input type="hidden" name="actie" value="toevoegen">
             <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                 <select name="materiaal" required>
-                    <option value="">Materiaal kiezen...</option>
+                    <option value="">{{ vertaal('Materiaal kiezen...') }}</option>
                     {% for categorie, kwaliteiten_lijst in materiaal_taxonomie.items() %}
                     <optgroup label="{{ categorie }}">
                         <option value="{{ categorie }}">{{ categorie }} (algemeen)</option>
@@ -140,10 +140,10 @@ def marktprijzen_pagina():
             </div>
             <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                 <select name="bron">
-                    <option value="handmatig">Handmatig ingevoerd</option>
-                    <option value="marktbericht">Marktbericht</option>
-                    <option value="leverancier_offerte">Leverancier offerte</option>
-                    <option value="klant_offerte">Klant offerte</option>
+                    <option value="handmatig">{{ vertaal('Handmatig ingevoerd') }}</option>
+                    <option value="marktbericht">{{ vertaal('Marktbericht') }}</option>
+                    <option value="leverancier_offerte">{{ vertaal('Leverancier offerte') }}</option>
+                    <option value="klant_offerte">{{ vertaal('Klant offerte') }}</option>
                 </select>
                 <input type="date" name="datum" value="{{ vandaag }}">
             </div>
@@ -152,15 +152,15 @@ def marktprijzen_pagina():
                 {% for naam in alle_bedrijfsnamen_mp %}<option value="{{ naam }}">{% endfor %}
             </datalist>
             <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
-            <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ Prijspunt toevoegen</button>
-            <button type="button" onclick="document.getElementById('prijspuntFormulier').style.display='none'; document.getElementById('prijspuntKnopRij').style.display='block';" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:12.5px;width:100%;text-align:center;margin-top:6px;padding:4px;">Annuleren</button>
+            <button type="submit" class="btn-nav btn-nav-primary" style="border:none;cursor:pointer;width:100%;">+ {{ vertaal('Prijspunt toevoegen') }}</button>
+            <button type="button" onclick="document.getElementById('prijspuntFormulier').style.display='none'; document.getElementById('prijspuntKnopRij').style.display='block';" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:12.5px;width:100%;text-align:center;margin-top:6px;padding:4px;">{{ vertaal('Annuleren') }}</button>
         </form>
     </div>
 </div>
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
     <select name="filter_materiaal" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle materialen</option>
+        <option value="">{{ vertaal('Alle materialen') }}</option>
         {% for m in materiaal_overzicht %}<option value="{{ m.naam }}" {% if filter_materiaal_prijs == m.naam %}selected{% endif %}>{{ m.naam }}</option>{% endfor %}
     </select>
     {% if filter_materiaal_prijs %}<a href="/marktprijzen" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filter</a>{% endif %}
@@ -184,7 +184,7 @@ def marktprijzen_pagina():
         </form>
     </div>
     {% else %}
-    <div class="lege-staat">Geen prijspunten gevonden.</div>
+    <div class="lege-staat">{{ vertaal('Geen prijspunten gevonden.') }}</div>
     {% endfor %}
 </div>
     """

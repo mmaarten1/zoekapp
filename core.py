@@ -212,6 +212,28 @@ VERTALINGEN = {
     "Algemene informatie":   {"en": "General information", "fr": "Informations générales", "it": "Informazioni generali", "es": "Información general"},
     "Medewerkers":           {"en": "Employees", "fr": "Employés", "it": "Dipendenti", "es": "Empleados"},
     "Geen aanvullende details beschikbaar": {"en": "No additional details available", "fr": "Aucun détail supplémentaire disponible", "it": "Nessun dettaglio aggiuntivo disponibile", "es": "No hay detalles adicionales disponibles"},
+    # --- Bedrijfsprofiel-pagina ---
+    "Dit bedrijf bestaat niet (meer).": {"en": "This company no longer exists.", "fr": "Cette entreprise n'existe plus.", "it": "Questa azienda non esiste più.", "es": "Esta empresa ya no existe."},
+    "Notitie":               {"en": "Note", "fr": "Note", "it": "Nota", "es": "Nota"},
+    "Export":                {"en": "Export", "fr": "Exporter", "it": "Esporta", "es": "Exportar"},
+    "Order aanmaken":        {"en": "Create order", "fr": "Créer une commande", "it": "Crea ordine", "es": "Crear pedido"},
+    "Volume totaal":         {"en": "Total volume", "fr": "Volume total", "it": "Volume totale", "es": "Volumen total"},
+    "Open orders":           {"en": "Open orders", "fr": "Commandes ouvertes", "it": "Ordini aperti", "es": "Pedidos abiertos"},
+    "Laatste contact":       {"en": "Last contact", "fr": "Dernier contact", "it": "Ultimo contatto", "es": "Último contacto"},
+    "Inkoop dit jaar":       {"en": "Purchases this year", "fr": "Achats cette année", "it": "Acquisti quest'anno", "es": "Compras este año"},
+    "Afstand tot Alblasserdam": {"en": "Distance to Alblasserdam", "fr": "Distance jusqu'à Alblasserdam", "it": "Distanza da Alblasserdam", "es": "Distancia a Alblasserdam"},
+    "Materialen en volume":  {"en": "Materials and volume", "fr": "Matériaux et volume", "it": "Materiali e volume", "es": "Materiales y volumen"},
+    "Aandeel":                {"en": "Share", "fr": "Part", "it": "Quota", "es": "Cuota"},
+    "nog geen definitieve contracten": {"en": "no definitive contracts yet", "fr": "pas encore de contrats définitifs", "it": "ancora nessun contratto definitivo", "es": "aún sin contratos definitivos"},
+    # --- Marktprijzen ---
+    "Marktprijzen":          {"en": "Market Prices", "fr": "Prix du marché", "it": "Prezzi di mercato", "es": "Precios de mercado"},
+    "Prijspunt toevoegen":   {"en": "Add price point", "fr": "Ajouter un point de prix", "it": "Aggiungi punto prezzo", "es": "Añadir punto de precio"},
+    "Materiaal kiezen...":   {"en": "Choose material...", "fr": "Choisir un matériau...", "it": "Scegli materiale...", "es": "Elegir material..."},
+    "Handmatig ingevoerd":   {"en": "Manually entered", "fr": "Saisi manuellement", "it": "Inserito manualmente", "es": "Introducido manualmente"},
+    "Marktbericht":          {"en": "Market report", "fr": "Rapport de marché", "it": "Rapporto di mercato", "es": "Informe de mercado"},
+    "Leverancier offerte":   {"en": "Supplier quote", "fr": "Devis fournisseur", "it": "Preventivo fornitore", "es": "Cotización de proveedor"},
+    "Klant offerte":         {"en": "Customer quote", "fr": "Devis client", "it": "Preventivo cliente", "es": "Cotización de cliente"},
+    "Geen prijspunten gevonden.": {"en": "No price points found.", "fr": "Aucun point de prix trouvé.", "it": "Nessun punto prezzo trovato.", "es": "No se encontraron puntos de precio."},
 }
 
 def huidige_taal():
