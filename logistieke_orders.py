@@ -2043,7 +2043,7 @@ def logistieke_order_koppel_contract(order_id):
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/logistiek/orders/{{ order.id }}" style="color:var(--gray-400);text-decoration:none;">{{ order.ordernummer }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Contract koppelen</span>
 </div>
-<div class="page-title">Contract koppelen — {{ order.ordernummer }}</div>
+<div class="page-title">{{ vertaal('Contract koppelen') }} — {{ order.ordernummer }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">{{ order.leverancier }} — {{ order.materiaal }} ({{ order.kwaliteit }}). Koppel een goedgekeurd inkoopcontract (prijs komt automatisch mee) of markeer als spot-transactie (dagprijs). Oudste contract staat bovenaan (FIFO).</p>
 
 <form method="POST" style="max-width:600px;" onsubmit="return bevestigVolleWaarschuwing();">

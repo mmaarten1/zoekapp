@@ -16,7 +16,7 @@ from core import (
     laad_users, render_simple_page, vereist_afdeling_of_403,
     laad_leverancier_instellingen, bewaar_leverancier_instellingen, leverancier_instelling_voor,
     laad_betalingstermijnen, geocode_adres, laad_handelsorders, laad_logistieke_orders,
-    parse_hoeveelheid_getal, parse_ton_intern,
+    parse_hoeveelheid_getal, parse_ton_intern, vertaal,
 )
 
 relaties_bp = Blueprint("relaties", __name__)
@@ -431,7 +431,7 @@ def leverancier_commercieel_instellingen(naam):
 
     bedrijf = next((b for b in ENF_BEDRIJVEN if b["naam"] == naam), None)
     if not bedrijf:
-        inhoud = '<div class="page-title">Niet gevonden</div><div class="lege-staat">Deze leverancier bestaat niet (meer).</div>'
+        inhoud = '<div class="page-title">' + vertaal("Niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze leverancier bestaat niet (meer).") + '</div>'
         pagina = render_simple_page("Niet gevonden", "leveranciers", inhoud)
         return render_template_string(pagina), 404
 

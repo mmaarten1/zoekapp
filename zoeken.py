@@ -2444,7 +2444,7 @@ def wereldkaart():
 .wk-legenda span.stip { width:9px; height:9px; border-radius:50%; display:inline-block; }
 </style>
 
-<div class="page-title">World Map</div>
+<div class="page-title">{{ vertaal('World Map') }}</div>
 
 <div class="wk-layout">
     <aside class="wk-filters">

@@ -495,6 +495,28 @@ VERTALINGEN = {
     "Verwacht":              {"en": "Expected", "fr": "Prévu", "it": "Previsto", "es": "Previsto"},
     "Verantw.":              {"en": "Owner", "fr": "Responsable", "it": "Responsabile", "es": "Responsable"},
     "Zichtbaar op kaart":    {"en": "Visible on map", "fr": "Visible sur la carte", "it": "Visibile sulla mappa", "es": "Visible en el mapa"},
+    # --- Overige gemiste page-titles en meldingen ---
+    "Geen toegang":          {"en": "No access", "fr": "Accès refusé", "it": "Accesso negato", "es": "Sin acceso"},
+    "Sessie verlopen":       {"en": "Session expired", "fr": "Session expirée", "it": "Sessione scaduta", "es": "Sesión caducada"},
+    "Je sessie is verlopen of het formulier was verouderd. Herlaad de pagina en probeer het opnieuw.": {"en": "Your session has expired or the form was outdated. Reload the page and try again.", "fr": "Votre session a expiré ou le formulaire était obsolète. Rechargez la page et réessayez.", "it": "La tua sessione è scaduta o il modulo era obsoleto. Ricarica la pagina e riprova.", "es": "Tu sesión ha caducado o el formulario estaba desactualizado. Recarga la página e inténtalo de nuevo."},
+    "Containerbeheer":       {"en": "Container management", "fr": "Gestion des conteneurs", "it": "Gestione container", "es": "Gestión de contenedores"},
+    "Factuur niet gevonden": {"en": "Invoice not found", "fr": "Facture introuvable", "it": "Fattura non trovata", "es": "Factura no encontrada"},
+    "Deze factuur bestaat niet (meer).": {"en": "This invoice no longer exists.", "fr": "Cette facture n'existe plus.", "it": "Questa fattura non esiste più.", "es": "Esta factura ya no existe."},
+    "Terug naar Facturen":   {"en": "Back to Invoices", "fr": "Retour aux factures", "it": "Torna alle fatture", "es": "Volver a facturas"},
+    "Logistieke orders — Finance-verwerking": {"en": "Logistics orders — Finance processing", "fr": "Commandes logistiques — traitement Finance", "it": "Ordini logistici — elaborazione Finance", "es": "Pedidos logísticos — procesamiento de Finanzas"},
+    "Alleen admins kunnen de organisatiestructuur beheren.": {"en": "Only admins can manage the organizational structure.", "fr": "Seuls les administrateurs peuvent gérer la structure organisationnelle.", "it": "Solo gli amministratori possono gestire la struttura organizzativa.", "es": "Solo los administradores pueden gestionar la estructura organizativa."},
+    "Afdelingen & Teams":    {"en": "Departments & Teams", "fr": "Départements et équipes", "it": "Reparti e team", "es": "Departamentos y equipos"},
+    "Mijn zijbalk":          {"en": "My sidebar", "fr": "Ma barre latérale", "it": "La mia barra laterale", "es": "Mi barra lateral"},
+    "Nieuw bedrijf + contactpersoon": {"en": "New company + contact person", "fr": "Nouvelle entreprise + personne de contact", "it": "Nuova azienda + persona di contatto", "es": "Nueva empresa + persona de contacto"},
+    "Contactpersoon bij een bestaand bedrijf": {"en": "Contact person at an existing company", "fr": "Personne de contact chez une entreprise existante", "it": "Persona di contatto presso un'azienda esistente", "es": "Persona de contacto en una empresa existente"},
+    "Deze contactpersoon bestaat niet (meer).": {"en": "This contact person no longer exists.", "fr": "Cette personne de contact n'existe plus.", "it": "Questa persona di contatto non esiste più.", "es": "Esta persona de contacto ya no existe."},
+    "Je kunt alleen contactpersonen bewerken die je zelf hebt toegevoegd.": {"en": "You can only edit contact persons that you added yourself.", "fr": "Vous ne pouvez modifier que les personnes de contact que vous avez ajoutées vous-même.", "it": "Puoi modificare solo le persone di contatto che hai aggiunto tu stesso.", "es": "Solo puedes editar las personas de contacto que tú mismo has añadido."},
+    "Contract nog niet beschikbaar": {"en": "Contract not yet available", "fr": "Contrat pas encore disponible", "it": "Contratto non ancora disponibile", "es": "Contrato aún no disponible"},
+    "Het contract kan pas gedownload worden zodra de order goedgekeurd en verstuurd is.": {"en": "The contract can only be downloaded once the order has been approved and sent.", "fr": "Le contrat ne peut être téléchargé qu'une fois la commande approuvée et envoyée.", "it": "Il contratto può essere scaricato solo dopo che l'ordine è stato approvato e inviato.", "es": "El contrato solo se puede descargar una vez que el pedido haya sido aprobado y enviado."},
+    "Contract koppelen":     {"en": "Link contract", "fr": "Lier le contrat", "it": "Collega contratto", "es": "Vincular contrato"},
+    "Deze leverancier bestaat niet (meer).": {"en": "This supplier no longer exists.", "fr": "Ce fournisseur n'existe plus.", "it": "Questo fornitore non esiste più.", "es": "Este proveedor ya no existe."},
+    "Dit onderdeel is niet beschikbaar voor jouw afdeling. Vraag een admin of directeur om je afdeling aan te passen als dit niet klopt.": {"en": "This section is not available for your department. Ask an admin or director to adjust your department if this is incorrect.", "fr": "Cette section n'est pas disponible pour votre département. Demandez à un administrateur ou directeur d'ajuster votre département si cela est incorrect.", "it": "Questa sezione non è disponibile per il tuo reparto. Chiedi a un amministratore o direttore di modificare il tuo reparto se questo non è corretto.", "es": "Esta sección no está disponible para tu departamento. Pide a un administrador o director que ajuste tu departamento si esto es incorrecto."},
+    "Deze functie is alleen voor admins. Vraag een admin om je rechten aan te passen.": {"en": "This feature is for admins only. Ask an admin to adjust your permissions.", "fr": "Cette fonctionnalité est réservée aux administrateurs. Demandez à un administrateur d'ajuster vos droits.", "it": "Questa funzione è solo per gli amministratori. Chiedi a un amministratore di modificare i tuoi permessi.", "es": "Esta función es solo para administradores. Pide a un administrador que ajuste tus permisos."},
 }
 
 def huidige_taal():
@@ -639,7 +661,7 @@ def vereist_afdeling_of_403(pagina_key):
     if mag_pagina_zien(pagina_key):
         return None
     pagina = render_simple_page("Geen toegang", pagina_key,
-        '<div class="page-title">Geen toegang</div><div class="lege-staat">Dit onderdeel is niet beschikbaar voor jouw afdeling. Vraag een admin of directeur om je afdeling aan te passen als dit niet klopt.</div>')
+        '<div class="page-title">' + vertaal("Geen toegang") + '</div><div class="lege-staat">' + vertaal("Dit onderdeel is niet beschikbaar voor jouw afdeling. Vraag een admin of directeur om je afdeling aan te passen als dit niet klopt.") + '</div>')
     return render_template_string(pagina), 403
 
 STATUS_FILE = datapad("status.json")
@@ -2492,7 +2514,7 @@ def is_huidige_gebruiker_admin():
 def vereist_admin_of_403():
     """Geef een 403-response terug als de ingelogde gebruiker geen admin is, anders None."""
     if not is_huidige_gebruiker_admin():
-        pagina = render_simple_page("Geen toegang", "instellingen", '<div class="page-title">Geen toegang</div><div class="lege-staat">Deze functie is alleen voor admins. Vraag een admin om je rechten aan te passen.</div>')
+        pagina = render_simple_page(vertaal("Geen toegang"), "instellingen", '<div class="page-title">' + vertaal("Geen toegang") + '</div><div class="lege-staat">' + vertaal("Deze functie is alleen voor admins. Vraag een admin om je rechten aan te passen.") + '</div>')
         return render_template_string(pagina), 403
     return None
 

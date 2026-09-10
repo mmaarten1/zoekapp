@@ -17,7 +17,7 @@ import pandas as pd
 from core import (
     laad_contactpersonen, bewaar_contactpersonen, laad_accountmanagers, bewaar_accountmanagers,
     is_huidige_gebruiker_admin, ENF_BEDRIJVEN, render_simple_page, vereist_afdeling_of_403,
-    bewaar_bedrijven, PAPIERFABRIEKEN, laad_status, bewaar_status, laad_users, geocode_adres,
+    bewaar_bedrijven, PAPIERFABRIEKEN, laad_status, bewaar_status, laad_users, geocode_adres, vertaal,
 )
 
 contacten_bp = Blueprint("contacten", __name__)
@@ -424,7 +424,7 @@ def contact_detail(persoon_id):
     alle = laad_contactpersonen()
     persoon = next((p for p in alle if p["id"] == persoon_id), None)
     if not persoon:
-        pagina = render_simple_page("Niet gevonden", "contacten", '<div class="page-title">Niet gevonden</div><div class="lege-staat">Deze contactpersoon bestaat niet (meer). <a href="/contacten">Terug</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "contacten", '<div class="page-title">' + vertaal("Niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze contactpersoon bestaat niet (meer).") + ' <a href="/contacten">' + vertaal("Terug") + '</a></div>')
         return render_template_string(pagina), 404
 
     mag_bewerken = persoon.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()
@@ -465,10 +465,10 @@ def contact_bewerken(persoon_id):
     alle = laad_contactpersonen()
     persoon = next((p for p in alle if p["id"] == persoon_id), None)
     if not persoon:
-        pagina = render_simple_page("Niet gevonden", "contacten", '<div class="page-title">Niet gevonden</div><div class="lege-staat">Deze contactpersoon bestaat niet (meer). <a href="/contacten">Terug</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "contacten", '<div class="page-title">' + vertaal("Niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze contactpersoon bestaat niet (meer).") + ' <a href="/contacten">' + vertaal("Terug") + '</a></div>')
         return render_template_string(pagina), 404
     if not (persoon.get("gebruiker") == session.get("gebruikersnaam","") or is_huidige_gebruiker_admin()):
-        pagina = render_simple_page("Geen toegang", "contacten", '<div class="page-title">Geen toegang</div><div class="lege-staat">Je kunt alleen contactpersonen bewerken die je zelf hebt toegevoegd. <a href="/contacten">Terug</a></div>')
+        pagina = render_simple_page(vertaal("Geen toegang"), "contacten", '<div class="page-title">' + vertaal("Geen toegang") + '</div><div class="lege-staat">' + vertaal("Je kunt alleen contactpersonen bewerken die je zelf hebt toegevoegd.") + ' <a href="/contacten">' + vertaal("Terug") + '</a></div>')
         return render_template_string(pagina), 403
 
     terug_naar = request.values.get("terug_naar", "/contacten")
@@ -488,7 +488,7 @@ def contact_bewerken(persoon_id):
 
     inhoud = """
     <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;"><a href="{{ terug_naar }}" style="color:var(--gray-400);text-decoration:none;">← Terug</a></div>
-    <div class="page-title">Contactpersoon bewerken</div>
+    <div class="page-title">{{ vertaal('Contactpersoon bewerken') }}</div>
     <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:480px;margin-top:16px;">
         <form method="POST">
             <input type="hidden" name="terug_naar" value="{{ terug_naar }}">
@@ -530,7 +530,7 @@ def contacten_nieuw_keuze():
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/contacten" style="color:var(--gray-400);text-decoration:none;">Contacten</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw</span>
 </div>
-<div class="page-title">Contactpersoon toevoegen</div>
+<div class="page-title">{{ vertaal('Contactpersoon toevoegen') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:24px;font-size:0.85rem;">Hoort deze persoon bij een bedrijf dat al in het systeem staat, of bij een nieuw bedrijf?</p>
 
 <div style="display:flex;gap:16px;max-width:600px;">
@@ -601,7 +601,7 @@ def contacten_nieuw_bedrijf():
     <a href="/contacten" style="color:var(--gray-400);text-decoration:none;">Contacten</a> &nbsp;/&nbsp;
     <a href="/contacten/nieuw" style="color:var(--gray-400);text-decoration:none;">Nieuw</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw bedrijf</span>
 </div>
-<div class="page-title">Nieuw bedrijf + contactpersoon</div>
+<div class="page-title">{{ vertaal('Nieuw bedrijf + contactpersoon') }}</div>
 {% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">{{ fout }}</div>{% endif %}
 
 <form method="POST" style="max-width:520px;">
@@ -688,7 +688,7 @@ def contacten_nieuw_bestaand():
     <a href="/contacten" style="color:var(--gray-400);text-decoration:none;">Contacten</a> &nbsp;/&nbsp;
     <a href="/contacten/nieuw" style="color:var(--gray-400);text-decoration:none;">Nieuw</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Bestaand bedrijf</span>
 </div>
-<div class="page-title">Contactpersoon bij een bestaand bedrijf</div>
+<div class="page-title">{{ vertaal('Contactpersoon bij een bestaand bedrijf') }}</div>
 {% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">{{ fout }}</div>{% endif %}
 
 <form method="GET" style="max-width:520px;margin-bottom:24px;">

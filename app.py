@@ -590,7 +590,7 @@ def valideer_csrf_token():
         if not verstuurd or not verwacht or not secrets.compare_digest(verstuurd, verwacht):
             if request.path.startswith("/api/"):
                 return jsonify({"error": "Ongeldige sessie (CSRF-token ontbreekt of is verlopen). Herlaad de pagina en probeer opnieuw."}), 400
-            pagina = render_simple_page("Sessie verlopen", "", '<div class="page-title">Sessie verlopen</div><div class="lege-staat">Je sessie is verlopen of het formulier was verouderd. Herlaad de pagina en probeer het opnieuw.</div>')
+            pagina = render_simple_page(vertaal("Sessie verlopen"), "", '<div class="page-title">' + vertaal("Sessie verlopen") + '</div><div class="lege-staat">' + vertaal("Je sessie is verlopen of het formulier was verouderd. Herlaad de pagina en probeer het opnieuw.") + '</div>')
             return render_template_string(pagina), 400
 
 @app.before_request
@@ -2429,7 +2429,7 @@ def logistiek_pagina():
     kaarten = [k for k in kaarten if mag_pagina_zien(k["pagina_key"])]
 
     inhoud = """
-<div class="page-title">Logistiek</div>
+<div class="page-title">{{ vertaal('Logistiek') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Overzicht van de logistieke pagina's — klik door naar waar je moet zijn.</p>
 
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
@@ -2545,7 +2545,7 @@ def containerbeheer_pagina():
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/logistiek" style="color:var(--gray-400);text-decoration:none;">Logistiek</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Containerbeheer</span>
 </div>
-<div class="page-title">Containerbeheer</div>
+<div class="page-title">{{ vertaal('Containerbeheer') }}</div>
 
 <div class="info-kaart" style="max-width:560px;margin-bottom:20px;background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);border-radius:0;box-shadow:none;padding:16px 4px;">
     <div class="dg-kaart-titel">Container toevoegen</div>
@@ -3755,7 +3755,7 @@ def facturen_nieuw():
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/facturen" style="color:var(--gray-400);text-decoration:none;">Facturen</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuwe factuur</span>
 </div>
-<div class="page-title">Factuur toevoegen</div>
+<div class="page-title">{{ vertaal('Factuur toevoegen') }}</div>
 
 <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px 22px;max-width:600px;">
     {% if vi_contract %}
@@ -3853,12 +3853,12 @@ def facturen_pagina():
         for sleutel, titel in _tabbladen
     )
 
-    inhoud = f"""
-<div class="page-title">Facturen</div>
+    inhoud = """
+<div class="page-title">{{ vertaal('Facturen') }}</div>
 <div style="display:flex;gap:4px;border-bottom:1px solid var(--gray-200);margin-bottom:16px;">
-    {_tabbladen_html}
+    """ + _tabbladen_html + """
 </div>
-{_tab_inhoud}
+""" + _tab_inhoud + """
     """
     pagina = render_simple_page("Facturen", "facturen", inhoud)
     return render_template_string(pagina, **_tab_context)
@@ -4057,7 +4057,7 @@ def factuur_pdf(factuur_id):
     alle_facturen = laad_facturen()
     factuur = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
     if not factuur:
-        pagina = render_simple_page("Niet gevonden", "facturen", '<div class="page-title">Factuur niet gevonden</div><div class="lege-staat">Deze factuur bestaat niet (meer). <a href="/facturen">Terug naar Facturen</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "facturen", '<div class="page-title">' + vertaal("Factuur niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze factuur bestaat niet (meer).") + ' <a href="/facturen">' + vertaal("Terug naar Facturen") + '</a></div>')
         return render_template_string(pagina), 404
 
     pdf_bytes = _genereer_factuur_pdf(factuur)
@@ -4195,7 +4195,7 @@ def factuur_detail(factuur_id):
     alle_facturen = laad_facturen()
     factuur = next((f for f in alle_facturen if f.get("id") == factuur_id), None)
     if not factuur:
-        pagina = render_simple_page("Niet gevonden", "facturen", '<div class="page-title">Factuur niet gevonden</div><div class="lege-staat">Deze factuur bestaat niet (meer). <a href="/facturen">Terug naar Facturen</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "facturen", '<div class="page-title">' + vertaal("Factuur niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze factuur bestaat niet (meer).") + ' <a href="/facturen">' + vertaal("Terug naar Facturen") + '</a></div>')
         return render_template_string(pagina), 404
 
     factuur["status"] = bepaal_factuur_status(factuur)
@@ -4388,7 +4388,7 @@ def facturen_logistieke_orders():
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/facturen" style="color:var(--gray-400);text-decoration:none;">Facturen</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Logistieke orders</span>
 </div>
-<div class="page-title">Logistieke orders — Finance-verwerking</div>
+<div class="page-title">{{ vertaal('Logistieke orders — Finance-verwerking') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Orders die logistiek heeft vrijgegeven, met alle gegevens die Finance nodig heeft voor de (inkoop)factuur.</p>
 
 <style>
@@ -4685,7 +4685,7 @@ def organisatie_beheer():
     (accountmanager/backoffice/logistiek/weegbrug/finance), die bepaalt welke
     pagina's iemand mag zien en apart blijft bij het aanmaken van een gebruiker."""
     if not is_huidige_gebruiker_admin():
-        pagina = render_simple_page("Geen toegang", "instellingen", '<div class="page-title">Geen toegang</div><div class="lege-staat">Alleen admins kunnen de organisatiestructuur beheren.</div>')
+        pagina = render_simple_page(vertaal("Geen toegang"), "instellingen", '<div class="page-title">' + vertaal("Geen toegang") + '</div><div class="lege-staat">' + vertaal("Alleen admins kunnen de organisatiestructuur beheren.") + '</div>')
         return render_template_string(pagina), 403
 
     if request.method == "POST":
@@ -4743,7 +4743,7 @@ def organisatie_beheer():
             leden_per_team.setdefault(sleutel, []).append(gebruikersnaam_u)
 
     inhoud = """
-<div class="page-title">Afdelingen & Teams</div>
+<div class="page-title">{{ vertaal('Afdelingen & Teams') }}</div>
 <a href="/gebruikers-beheer" style="display:inline-block;margin-bottom:16px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">← Gebruikers beheren</a>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Organisatorische indeling — wie hoort bij welk team. Los van de toegangsrol (die regel je bij Gebruikers beheren).</p>
 
@@ -4914,7 +4914,7 @@ def layout_instellingen():
     widget_verborgen_set = set(mijn_voorkeur.get("dashboard_widget_verborgen", []))
 
     inhoud = """
-<div class="page-title">Mijn zijbalk</div>
+<div class="page-title">{{ vertaal('Mijn zijbalk') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Zet de volgorde die voor jou het handigst werkt, en verberg wat je niet gebruikt.</p>
 
 <div style="border:none;border-top:1px solid var(--gray-200);max-width:420px;">

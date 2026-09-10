@@ -338,7 +338,7 @@ def _inkoop_formulier_html():
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/handelsorders" style="color:var(--gray-400);text-decoration:none;">Handelsorders</a> &nbsp;/&nbsp; <a href="/handelsorders/nieuw" style="color:var(--gray-400);text-decoration:none;">Nieuw</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Inkoop</span>
 </div>
-<div class="page-title">Nieuwe inkooporder</div>
+<div class="page-title">{{ vertaal('Nieuwe inkooporder') }}</div>
 {% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">{{ fout }}</div>{% endif %}
 
 <form method="POST" style="max-width:720px;">
@@ -665,7 +665,7 @@ def _verkoop_formulier_html():
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/handelsorders" style="color:var(--gray-400);text-decoration:none;">Handelsorders</a> &nbsp;/&nbsp; <a href="/handelsorders/nieuw" style="color:var(--gray-400);text-decoration:none;">Nieuw</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Verkoop</span>
 </div>
-<div class="page-title">Nieuwe verkooporder</div>
+<div class="page-title">{{ vertaal('Nieuwe verkooporder') }}</div>
 {% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">{{ fout }}</div>{% endif %}
 
 <form method="POST" style="max-width:720px;">
@@ -1302,7 +1302,7 @@ def handelsorder_pdf(order_id):
     orders = laad_handelsorders()
     order = next((o for o in orders if o["id"] == order_id), None)
     if not order or order["status"] != "Definitief":
-        pagina = render_simple_page("PDF niet beschikbaar", "handelsorders", '<div class="page-title">Contract nog niet beschikbaar</div><div class="lege-staat">Het contract kan pas gedownload worden zodra de order goedgekeurd en verstuurd is. <a href="/handelsorders">Terug</a></div>')
+        pagina = render_simple_page(vertaal("Contract nog niet beschikbaar"), "handelsorders", '<div class="page-title">' + vertaal("Contract nog niet beschikbaar") + '</div><div class="lege-staat">' + vertaal("Het contract kan pas gedownload worden zodra de order goedgekeurd en verstuurd is.") + ' <a href="/handelsorders">' + vertaal("Terug") + '</a></div>')
         return render_template_string(pagina), 404
 
     pdf_bytes = _genereer_contract_pdf(order)

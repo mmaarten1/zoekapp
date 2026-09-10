@@ -429,7 +429,7 @@ def weegbrug_inwegen(record_id):
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/weegbrug" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Weegbrug') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Inwegen') }}</span>
 </div>
-<div class="page-title">Inwegen — {{ record.weegnummer }}</div>
+<div class="page-title">{{ vertaal('Inwegen') }} — {{ record.weegnummer }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Stap 2 van 2.</p>
 
 <div style="background:var(--gray-50);border-radius:8px;padding:14px 16px;margin-bottom:20px;font-size:12.5px;color:var(--gray-600);max-width:480px;">
@@ -509,7 +509,7 @@ def weegbrug_uitwegen(record_id):
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/weegbrug" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Weegbrug') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Uitwegen') }}</span>
 </div>
-<div class="page-title">Uitwegen — {{ record.weegnummer }}</div>
+<div class="page-title">{{ vertaal('Uitwegen') }} — {{ record.weegnummer }}</div>
 
 <div style="background:var(--gray-50);border-radius:8px;padding:14px 16px;margin-bottom:20px;font-size:12.5px;color:var(--gray-600);max-width:480px;">
     <div><b>Kenteken:</b> {{ record.kenteken }}</div>
