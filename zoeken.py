@@ -25,7 +25,7 @@ from core import (
     laad_materiaal_taxonomie, laad_orders, laad_users, laad_notities, laad_meldingen,
     bewaar_meldingen, vereist_admin_of_403, render_simple_page, geocode_adres,
     bereken_afstand_km, vind_transport_tarieven_dichtbij, sync_contactpersoon_naar_contacten, laad_contactpersonen,
-    laad_handelsorders, laad_logistieke_orders, parse_ton_intern,
+    laad_handelsorders, laad_logistieke_orders, parse_ton_intern, vertaal,
     parse_hoeveelheid_getal, voldoet_aan_materiaal_min_volume, is_huidige_gebruiker_admin,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, bewaar_bedrijven, bewaar_papierfabrieken, LANDEN,
     laad_shipments, shipment_hoeveelheid, ORDER_KLEUREN, mag_pagina_zien, vereist_afdeling_of_403,
@@ -2563,7 +2563,7 @@ def bedrijf_profiel(naam):
             bedrijf.setdefault("regio", bedrijf.get("stad", ""))
             bedrijf.setdefault("brontype", "Papierfabriek")
     if not bedrijf:
-        inhoud = '<div class="page-title">Niet gevonden</div><div class="lege-staat">Dit bedrijf bestaat niet (meer).</div>'
+        inhoud = '<div class="page-title">' + vertaal("Niet gevonden") + '</div><div class="lege-staat">' + vertaal("Dit bedrijf bestaat niet (meer).") + '</div>'
         pagina = render_simple_page("Niet gevonden", "zoeken", inhoud)
         return render_template_string(pagina), 404
 
@@ -2624,12 +2624,12 @@ select.klik-bewerken-veld { cursor:pointer; }
     <a href="/" style="color:var(--gray-400);text-decoration:none;">Zoeken</a> &nbsp;/&nbsp; {{ bedrijf.land }} &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ bedrijf.naam }}</span>
 </div>
 <div class="profiel-header">
-    <div class="profiel-naam">{{ bedrijf.naam }}{% if geverifieerd %}<span class="verificatie-badge" style="margin-left:10px;">✓ Geverifieerd</span>{% endif %}</div>
+    <div class="profiel-naam">{{ bedrijf.naam }}{% if geverifieerd %}<span class="verificatie-badge" style="margin-left:10px;">✓ {{ vertaal('Geverifieerd') }}</span>{% endif %}</div>
     <div style="display:flex;align-items:center;gap:8px;">
         <span class="star-btn {% if opgeslagen %}opgeslagen{% endif %}" id="profielSterBtn" onclick="toggleOpslaanProfiel(this)" style="font-size:1.3rem;margin-right:4px;">{% if opgeslagen %}★{% else %}☆{% endif %}</span>
-        <a href="#notitiesSectie" onclick="document.getElementById('nieuweNotitieTekst').focus();" style="font-size:13px;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);padding:8px 14px;border-radius:6px;text-decoration:none;">Notitie</a>
-        <a href="/export-csv?zoekterm={{ bedrijf.naam|urlencode }}" style="font-size:13px;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);padding:8px 14px;border-radius:6px;text-decoration:none;">Export</a>
-        <a href="/handelsorders/nieuw" style="font-size:13px;font-weight:600;color:#fff;background:var(--brand-600);padding:8px 14px;border-radius:6px;text-decoration:none;">Order aanmaken</a>
+        <a href="#notitiesSectie" onclick="document.getElementById('nieuweNotitieTekst').focus();" style="font-size:13px;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);padding:8px 14px;border-radius:6px;text-decoration:none;">{{ vertaal('Notitie') }}</a>
+        <a href="/export-csv?zoekterm={{ bedrijf.naam|urlencode }}" style="font-size:13px;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);padding:8px 14px;border-radius:6px;text-decoration:none;">{{ vertaal('Export') }}</a>
+        <a href="/handelsorders/nieuw" style="font-size:13px;font-weight:600;color:#fff;background:var(--brand-600);padding:8px 14px;border-radius:6px;text-decoration:none;">{{ vertaal('Order aanmaken') }}</a>
     </div>
 </div>
 <div style="display:flex;align-items:center;gap:10px;margin-top:-14px;margin-bottom:20px;font-size:13px;color:var(--gray-500);">
@@ -2640,22 +2640,22 @@ select.klik-bewerken-veld { cursor:pointer; }
 {% if is_fabriek_profiel %}
 <div style="display:flex;border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:20px;overflow:hidden;">
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Volume totaal</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Volume totaal') }}</div>
         <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ bedrijf.volume|default('—',true) }}</div>
         <div style="font-size:11px;color:var(--gray-400);">t/jaar{% if bedrijf.materiaal_volumes %}, {{ bedrijf.materiaal_volumes|length }} materialen{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Open orders</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Open orders') }}</div>
         <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ open_orders_aantal }}</div>
         <div style="font-size:11px;color:var(--gray-400);">{% if open_orders_ton %}{{ open_orders_ton }} t deze periode{% else %}&nbsp;{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-100);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Laatste contact</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Laatste contact') }}</div>
         <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ laatst_contact_profiel|default('—',true) }}</div>
         <div style="font-size:11px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ bedrijf.accountmanager|default('',true) }}{% if bedrijf.telefoon %}, telefoon{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Afstand tot Alblasserdam</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Afstand tot Alblasserdam') }}</div>
         <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{% if afstand_alblasserdam %}{{ afstand_alblasserdam }} km{% else %}—{% endif %}</div>
         <div style="font-size:11px;color:var(--gray-400);">{{ bedrijf.regio }}, {{ bedrijf.land }}</div>
     </div>
@@ -2663,24 +2663,24 @@ select.klik-bewerken-veld { cursor:pointer; }
 {% else %}
 <div style="display:flex;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:20px;">
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-200);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Inkoop dit jaar</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Inkoop dit jaar') }}</div>
         <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{% if totaal_ingekocht_dit_jaar %}{{ "{:,.0f}".format(totaal_ingekocht_dit_jaar) }}t{% else %}—{% endif %}</div>
-        <div style="font-size:11px;color:var(--gray-400);">{% if inkoop_voortgang_lijst %}{{ inkoop_voortgang_lijst|length }} materia{{ 'al' if inkoop_voortgang_lijst|length == 1 else 'len' }}{% else %}nog geen definitieve contracten{% endif %}</div>
+        <div style="font-size:11px;color:var(--gray-400);">{% if inkoop_voortgang_lijst %}{{ inkoop_voortgang_lijst|length }} materia{{ 'al' if inkoop_voortgang_lijst|length == 1 else 'len' }}{% else %}{{ vertaal('nog geen definitieve contracten') }}{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-200);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Open orders</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Open orders') }}</div>
         <a href="/logistiek?bedrijf={{ bedrijf.naam|urlencode }}" style="text-decoration:none;">
             <div style="font-size:1.2rem;font-weight:700;color:var(--brand-600);">{{ open_orders_aantal }} →</div>
         </a>
         <div style="font-size:11px;color:var(--gray-400);">{% if open_orders_ton %}{{ open_orders_ton }} t deze periode{% else %}&nbsp;{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;border-right:1px solid var(--gray-200);">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Laatste contact</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Laatste contact') }}</div>
         <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{{ laatst_contact_profiel|default('—',true) }}</div>
         <div style="font-size:11px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ bedrijf.accountmanager|default('',true) }}{% if bedrijf.telefoon %}, telefoon{% endif %}</div>
     </div>
     <div style="flex:1;padding:14px 20px;">
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">Afstand tot Alblasserdam</div>
+        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gray-400);">{{ vertaal('Afstand tot Alblasserdam') }}</div>
         <div style="font-size:1.2rem;font-weight:700;color:var(--gray-800);">{% if afstand_alblasserdam %}{{ afstand_alblasserdam }} km{% else %}—{% endif %}</div>
         <div style="font-size:11px;color:var(--gray-400);">{{ bedrijf.regio }}, {{ bedrijf.land }}</div>
     </div>
@@ -2689,11 +2689,11 @@ select.klik-bewerken-veld { cursor:pointer; }
 
 {% if materialen_volume_lijst %}
 <div class="info-kaart" style="margin-bottom:16px;">
-    <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:12px;">Materialen en volume</div>
+    <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:12px;">{{ vertaal('Materialen en volume') }}</div>
     <div style="display:flex;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gray-400);padding-bottom:8px;border-bottom:1px solid var(--gray-100);">
-        <span style="flex:1.4;">Materiaal</span>
+        <span style="flex:1.4;">{{ vertaal('Materiaal') }}</span>
         <span style="width:100px;text-align:right;">T/jaar</span>
-        <span style="width:160px;padding-left:16px;">Aandeel</span>
+        <span style="width:160px;padding-left:16px;">{{ vertaal('Aandeel') }}</span>
     </div>
     {% for m in materialen_volume_lijst %}
     <div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--gray-50);font-size:13px;">
