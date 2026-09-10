@@ -328,7 +328,7 @@ def materialen():
         <span style="width:80px;text-align:right;" class="zacht">{{ m.landen|default('—',true) }}</span>
     </a>
     {% else %}
-    <div class="lege-staat">Nog geen grondstofgroepen. Ga naar Instellingen → Materialen beheren.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen grondstofgroepen. Ga naar Instellingen → Materialen beheren.') }}</div>
     {% endfor %}
 </div>
 <div style="display:flex;justify-content:space-between;padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">

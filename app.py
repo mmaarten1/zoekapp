@@ -2665,7 +2665,7 @@ def containerbeheer_pagina():
 </div>
 <div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoonde_containers|length }} containers</div>
 {% else %}
-<div class="lege-staat">Nog geen containers geregistreerd.</div>
+<div class="lege-staat">{{ vertaal('Nog geen containers geregistreerd.') }}</div>
 {% endif %}
     """
     pagina = render_simple_page("Containerbeheer", "logistiek", inhoud)
@@ -3038,7 +3038,7 @@ def _export_factuur_inhoud():
 </form>
 {% endfor %}
 {% else %}
-<div class="lege-staat">Niets te factureren — alle afgeleverde scheepvaart is al gefactureerd.</div>
+<div class="lege-staat">{{ vertaal('Niets te factureren — alle afgeleverde scheepvaart is al gefactureerd.') }}</div>
 {% endif %}
     """
     return inhoud, {"groepen": groepen}
@@ -3196,7 +3196,7 @@ def _verkoop_factuur_inhoud():
 </form>
 {% endfor %}
 {% else %}
-<div class="lege-staat">Niets te factureren — alle verkoop is al gefactureerd.</div>
+<div class="lege-staat">{{ vertaal('Niets te factureren — alle verkoop is al gefactureerd.') }}</div>
 {% endif %}
     """
     return inhoud, {"groepen": groepen}
@@ -3415,7 +3415,7 @@ def _inkoop_factuur_inhoud():
 </form>
 {% endfor %}
 {% else %}
-<div class="lege-staat">Niets te factureren — alle inkoop is al gefactureerd.</div>
+<div class="lege-staat">{{ vertaal('Niets te factureren — alle inkoop is al gefactureerd.') }}</div>
 {% endif %}
     """
     return inhoud, {"groepen": groepen}
@@ -3608,7 +3608,7 @@ def _peute_factuur_inhoud():
 </form>
 {% endfor %}
 {% else %}
-<div class="lege-staat">Niets te factureren — alle gewogen, gekoppelde ladingen zijn al gefactureerd.</div>
+<div class="lege-staat">{{ vertaal('Niets te factureren — alle gewogen, gekoppelde ladingen zijn al gefactureerd.') }}</div>
 {% endif %}
     """
     return inhoud, {"leverancier_groepen": leverancier_groepen}
@@ -4810,7 +4810,7 @@ def organisatie_beheer():
     </form>
 </div>
 {% else %}
-<div class="lege-staat">Nog geen afdelingen. Begin hierboven met de eerste.</div>
+<div class="lege-staat">{{ vertaal('Nog geen afdelingen. Begin hierboven met de eerste.') }}</div>
 {% endfor %}
     """
     pagina = render_simple_page("Afdelingen & Teams", "instellingen", inhoud)

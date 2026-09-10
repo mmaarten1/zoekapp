@@ -187,7 +187,7 @@ def contacten():
 })();
 </script>
 {% else %}
-<div class="lege-staat">Geen contactpersonen gevonden.</div>
+<div class="lege-staat">{{ vertaal('Geen contactpersonen gevonden.') }}</div>
 {% endif %}
     """
     pagina = render_simple_page("Contacten", "contacten", inhoud)

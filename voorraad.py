@@ -1329,7 +1329,7 @@ function voorraadStatusSubmit(form, isInbound) {
         {% endfor %}
     </div>
     {% else %}
-    <div class="lege-staat">Nog geen verkoopcontracten met een fabriek/klant.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen verkoopcontracten met een fabriek/klant.') }}</div>
     {% endfor %}
 </div>
 
@@ -1353,7 +1353,7 @@ function voorraadStatusSubmit(form, isInbound) {
         <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">{{ c.percentage }}% vervuld</div>
     </a>
     {% else %}
-    <div class="lege-staat">Nog geen definitieve contracten via Handelsorders.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen definitieve contracten via Handelsorders.') }}</div>
     {% endfor %}
 </div>
 
@@ -1377,7 +1377,7 @@ function voorraadStatusSubmit(form, isInbound) {
         <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">{{ c.percentage }}% vervuld</div>
     </div>
     {% else %}
-    <div class="lege-staat">Nog geen contracten.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen contracten.') }}</div>
     {% endfor %}
 </div>
 {% endif %}
@@ -1517,7 +1517,7 @@ function toggleTransactieVelden() {
         </div>
         {% endfor %}
     {% else %}
-    <div class="lege-staat">Geen transacties gevonden.</div>
+    <div class="lege-staat">{{ vertaal('Geen transacties gevonden.') }}</div>
     {% endif %}
 </div>
 
@@ -1572,7 +1572,7 @@ function toggleTransactieVelden() {
         </div>
         {% endfor %}
     {% else %}
-    <div class="lege-staat">Nog geen voorraadmomenten vastgelegd.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen voorraadmomenten vastgelegd.') }}</div>
     {% endif %}
 </div>
     """

@@ -355,7 +355,7 @@ function wisselIndeling(welke) {
     {% endfor %}
 </div>
 {% else %}
-<div class="lege-staat">Geen pipeline-orders gevonden.</div>
+<div class="lege-staat">{{ vertaal('Geen pipeline-orders gevonden.') }}</div>
 {% endif %}
     """
     pagina = render_simple_page("Orders", "orders", inhoud)

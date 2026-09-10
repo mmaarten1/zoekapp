@@ -205,7 +205,7 @@ def leveranciers_pagina():
 </div>
 {% endif %}
 {% else %}
-<div class="lege-staat">Nog geen leveranciers met een status of accountmanager. Ken een status toe via Zoeken, of voeg er hierboven een handmatig toe.</div>
+<div class="lege-staat">{{ vertaal('Nog geen leveranciers met een status of accountmanager. Ken een status toe via Zoeken, of voeg er hierboven een handmatig toe.') }}</div>
 {% endif %}
 
 <script>
@@ -384,7 +384,7 @@ def klanten_pagina():
     </div>
 </div>
 {% else %}
-<div class="lege-staat">Geen klanten gevonden voor deze filters.</div>
+<div class="lege-staat">{{ vertaal('Geen klanten gevonden voor deze filters.') }}</div>
 {% endif %}
 
 <script>
@@ -563,7 +563,7 @@ def leverancier_commercieel_instellingen(naam):
         {% endfor %}
     </div>
     {% else %}
-    <div class="lege-staat">Nog geen goedgekeurde inkoopcontracten voor deze leverancier.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen goedgekeurde inkoopcontracten voor deze leverancier.') }}</div>
     {% endif %}
 </div>
     """

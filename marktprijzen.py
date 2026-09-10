@@ -12,7 +12,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 
 from core import (
     laad_marktprijzen, bewaar_marktprijzen, laad_status, laad_accountmanagers,
-    laad_materiaal_taxonomie, render_simple_page, is_huidige_gebruiker_admin, vereist_afdeling_of_403,
+    laad_materiaal_taxonomie, render_simple_page, is_huidige_gebruiker_admin, vereist_afdeling_of_403, vertaal,
 )
 
 marktprijzen_bp = Blueprint("marktprijzen", __name__)
@@ -114,7 +114,7 @@ def marktprijzen_pagina():
         <div style="font-size:0.72rem;color:var(--gray-300);margin-top:4px;">{{ m.laatste_datum }} · {{ m.aantal_punten }} prijspunt{{ "en" if m.aantal_punten != 1 else "" }}</div>
     </div>
     {% else %}
-    <div class="lege-staat">Nog geen marktprijzen. Voeg er handmatig een toe, of win een order met prijs + hoeveelheid.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen marktprijzen. Voeg er handmatig een toe, of win een order met prijs + hoeveelheid.') }}</div>
     {% endfor %}
 </div>
 

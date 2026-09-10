@@ -140,7 +140,7 @@ def _inkoop_planning_inhoud():
 {% endfor %}
 {% endfor %}
 {% else %}
-<div class="lege-staat">Geen openstaande inkoopcontracten — alles is ingepland of geleverd.</div>
+<div class="lege-staat">{{ vertaal('Geen openstaande inkoopcontracten — alles is ingepland of geleverd.') }}</div>
 {% endif %}
     """
     return inhoud, {"markt_overzicht": markt_overzicht}
@@ -494,7 +494,7 @@ def _verkoop_planning_inhoud():
 {% endfor %}
 {% endfor %}
 {% else %}
-<div class="lege-staat">Geen openstaande verkoopcontracten — alles is ingepland of geleverd.</div>
+<div class="lege-staat">{{ vertaal('Geen openstaande verkoopcontracten — alles is ingepland of geleverd.') }}</div>
 {% endif %}
     """
     return inhoud, {"markt_overzicht_vp": markt_overzicht_vp}
@@ -642,7 +642,7 @@ def logistieke_orders_pagina():
 </div>
 <div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoond|length }} orders</div>
 {% else %}
-<div class="lege-staat">Nog geen logistieke orders aangemaakt.</div>
+<div class="lege-staat">{{ vertaal('Nog geen logistieke orders aangemaakt.') }}</div>
 {% endif %}
     """
     pagina = render_simple_page("Orders (logistiek)", "logistieke_orders", inhoud)
@@ -1179,7 +1179,7 @@ def live_operations_pagina():
 </div>
 <div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoond|length }} vrachten</div>
 {% else %}
-<div class="lege-staat">Geen vrachten gevonden voor deze filters.</div>
+<div class="lege-staat">{{ vertaal('Geen vrachten gevonden voor deze filters.') }}</div>
 {% endif %}
 
 <div id="koppelModalOverlay" onclick="if(event.target===this) sluitKoppelModal();" style="display:none;position:fixed;inset:0;background:rgba(15,23,32,0.4);z-index:1000;align-items:center;justify-content:center;">

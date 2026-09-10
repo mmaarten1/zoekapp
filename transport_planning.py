@@ -800,7 +800,7 @@ def transport_rates_pagina():
 <div class="lege-staat">{{ vertaal('Kies hierboven een transporteur om de tarieven te bekijken.') }}</div>
 {% endif %}
 {% else %}
-<div class="lege-staat">Nog geen tarieven geüpload. Transporteurs kunnen dit zelf doen via <a href="/forwarder-upload" style="color:var(--brand-600);">de forwarder-portal</a>.</div>
+<div class="lege-staat">{{ vertaal('Nog geen tarieven geüpload. Transporteurs kunnen dit zelf doen via') }} <a href="/forwarder-upload" style="color:var(--brand-600);">{{ vertaal('de forwarder-portal') }}</a>.</div>
 {% endif %}
     """
     steden_van_forwarder = TRANSPORT_DATA.get(filter_forwarder, []) if filter_forwarder else []
@@ -924,7 +924,7 @@ def transport_overview_pagina():
     {% endfor %}
 </div>
 {% else %}
-<div class="lege-staat">Nog geen transporten met een gekoppelde fabriek (land onbekend).</div>
+<div class="lege-staat">{{ vertaal('Nog geen transporten met een gekoppelde fabriek (land onbekend).') }}</div>
 {% endif %}
     """
     pagina = render_simple_page("Transport Overview", "transport_overview", inhoud)

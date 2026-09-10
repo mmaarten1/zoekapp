@@ -193,7 +193,7 @@ def handelsorders_pagina():
 </div>
 <div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoond|length }} orders</div>
 {% else %}
-<div class="lege-staat">Nog geen handelsorders. Maak je eerste order aan.</div>
+<div class="lege-staat">{{ vertaal('Nog geen handelsorders. Maak je eerste order aan.') }}</div>
 {% endif %}
     """
     pagina = render_simple_page("Handelsorders", "handelsorders", inhoud)
