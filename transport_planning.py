@@ -18,7 +18,7 @@ from core import (
     TRANSPORT_PLANNING_STATUSSEN, PAPIERFABRIEKEN, ENF_BEDRIJVEN, is_huidige_gebruiker_admin,
     toegewezen_klant_fabrieken, laad_pod_havens, laad_handelsorders, parse_hoeveelheid_getal,
     vereist_afdeling_of_403, render_simple_page, TRANSPORT_DATA,
-    vind_transport_tarieven_dichtbij, laad_documenten, leverancier_instelling_voor,
+    vind_transport_tarieven_dichtbij, laad_documenten, leverancier_instelling_voor, vertaal,
 )
 
 transport_planning_bp = Blueprint("transport_planning", __name__)
@@ -72,7 +72,7 @@ def transport_planning_pagina():
     per_fabriek.sort(key=lambda f: f["totaal"], reverse=True)
 
     inhoud = """
-<div class="page-title">Transport Planning</div>
+<div class="page-title">{{ vertaal('Transport Planning') }}</div>
 {% if aangemaakt %}
 <div style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">
     {{ aangemaakt }} trucks aangemaakt en klaargezet als 'Te plannen'.
@@ -89,7 +89,7 @@ def transport_planning_pagina():
 </style>
 
 {% if per_fabriek %}
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Per fabriek</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">{{ vertaal('Per fabriek') }}</div>
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
     {% for f in per_fabriek %}
     <a href="/transport-planning?fabriek={{ f.naam|urlencode }}" class="tp-fabriek-kaart" style="text-decoration:none;">
@@ -107,11 +107,11 @@ def transport_planning_pagina():
 
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;">
     <select name="fabriek" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle fabrieken</option>
+        <option value="">{{ vertaal('Alle fabrieken') }}</option>
         {% for naam in fabriek_namen %}<option value="{{ naam }}" {% if filter_fabriek == naam %}selected{% endif %}>{{ naam }}</option>{% endfor %}
     </select>
     <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle statussen</option>
+        <option value="">{{ vertaal('Alle statussen') }}</option>
         {% for st in statussen %}<option value="{{ st }}" {% if filter_status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
     </select>
 </form>
@@ -119,9 +119,9 @@ def transport_planning_pagina():
 {% if getoond %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="tp-tabel-kop">
-        <span style="width:120px;">Referentie</span>
-        <span style="flex:1;">Fabriek</span>
-        <span style="width:100px;">Laaddatum</span>
+        <span style="width:120px;">{{ vertaal('Referentie') }}</span>
+        <span style="flex:1;">{{ vertaal('Fabriek') }}</span>
+        <span style="width:100px;">{{ vertaal('Laaddatum') }}</span>
         <span style="flex:1;">Materiaal</span>
         <span style="width:80px;text-align:right;">Ton</span>
         <span style="width:100px;">Trucks</span>
@@ -141,7 +141,7 @@ def transport_planning_pagina():
 </div>
 <div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoond|length }} transporten</div>
 {% else %}
-<div class="lege-staat">Nog geen transporten gepland.</div>
+<div class="lege-staat">{{ vertaal('Nog geen transporten gepland.') }}</div>
 {% endif %}
     """
     pagina = render_simple_page("Transport Planning", "transport_planning", inhoud)
@@ -285,9 +285,9 @@ def transport_planning_nieuw():
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/transport-planning" style="color:var(--gray-400);text-decoration:none;">Transport Planning</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw</span>
+    <a href="/transport-planning" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Transport Planning') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Nieuw') }}</span>
 </div>
-<div class="page-title">Transport plannen</div>
+<div class="page-title">{{ vertaal('Transport plannen') }}</div>
 {% if vi_contract %}
 <div style="background:#eff6ff;color:#1d4ed8;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">
     Wordt gekoppeld aan contract <b>{{ vi_contract }}</b>{% if vi_leverancier %} (leverancier: {{ vi_leverancier }}){% endif %}.
@@ -297,7 +297,7 @@ def transport_planning_nieuw():
 <form method="POST" style="max-width:680px;">
     <input type="hidden" name="contract_referentie" value="{{ vi_contract }}">
     <div style="margin-bottom:10px;">
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Transportmodus</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Transportmodus') }}</label>
         <select name="transportmodus" id="transportmodus_select" onchange="wisselTransportmodus()" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="Vrachtwagen" {% if vi_transportmodus == "Vrachtwagen" %}selected{% endif %}>Vrachtwagen</option>
             <option value="Schip" {% if vi_transportmodus == "Schip" %}selected{% endif %}>Schip (zeevaart)</option>
@@ -310,7 +310,7 @@ def transport_planning_nieuw():
             <datalist id="leveranciers_tp_lijst">{% for naam in leverancier_namen_tp %}<option value="{{ naam }}">{% endfor %}</datalist>
         </div>
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Fabriek</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Fabriek') }}</label>
             <input type="text" name="fabriek" value="{{ vi_fabriek }}" list="fabrieken_lijst" onchange="vulLoslocatieIn(this.value); toonTariefSuggestie(this.value);" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
             <datalist id="fabrieken_lijst">{% for naam in fabriek_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
             <div id="tarief_suggestie" style="margin-top:6px;font-size:11.5px;"></div>
@@ -318,12 +318,12 @@ def transport_planning_nieuw():
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Laadlocatie</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Laadlocatie') }}</label>
             <input type="text" name="laadlocatie" id="laadlocatie_veld" value="{{ vi_laadlocatie }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
             <div id="afhaallocaties_suggestie" style="margin-top:6px;font-size:11.5px;"></div>
         </div>
         <div id="loslocatie_veld">
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Loslocatie</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Loslocatie') }}</label>
             <input type="text" name="loslocatie" id="loslocatie_invoer" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
     </div>
@@ -336,7 +336,7 @@ def transport_planning_nieuw():
                 <datalist id="pod_havens_lijst">{% for h in pod_havens %}<option value="{{ h }}">{% endfor %}</datalist>
             </div>
             <div>
-                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Forwarder</label>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Forwarder') }}</label>
                 <input type="text" name="forwarder" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
             </div>
         </div>
@@ -347,25 +347,25 @@ def transport_planning_nieuw():
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Laaddatum</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Laaddatum') }}</label>
             <input type="date" name="laaddatum" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Laadtijd</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Laadtijd') }}</label>
             <input type="time" name="laadtijd" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Losdatum</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Losdatum') }}</label>
             <input type="date" name="losdatum" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Lostijd</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Lostijd') }}</label>
             <input type="time" name="lostijd" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
     </div>
     <div id="schip_materiaal_velden" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Materiaal</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Materiaal') }}</label>
             <input type="text" name="materiaal" value="{{ vi_materiaal }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
@@ -396,7 +396,7 @@ def transport_planning_nieuw():
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Transporteur</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Leverancier') }}</label>
             <input type="text" name="transporteur" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
@@ -405,11 +405,11 @@ def transport_planning_nieuw():
         </div>
     </div>
     <div style="margin-bottom:16px;">
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Opmerkingen</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Opmerkingen') }}</label>
         <textarea name="opmerkingen" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;"></textarea>
     </div>
-    <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Transport aanmaken</button>
-    <a href="/transport-planning" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+    <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Transport aanmaken') }}</button>
+    <a href="/transport-planning" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">{{ vertaal('Annuleren') }}</a>
 </form>
 
 <script>
@@ -611,7 +611,7 @@ def transport_planning_detail(transport_id):
     transporten = laad_transport_planning()
     transport = next((t for t in transporten if t["id"] == transport_id), None)
     if not transport:
-        pagina = render_simple_page("Niet gevonden", "transport_planning", '<div class="page-title">Transport niet gevonden</div><div class="lege-staat">Dit transport bestaat niet (meer). <a href="/transport-planning">Terug naar Transport Planning</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "transport_planning", '<div class="page-title">' + vertaal("Transport niet gevonden") + '</div><div class="lege-staat">' + vertaal("Dit transport bestaat niet (meer).") + ' <a href="/transport-planning">' + vertaal("Terug naar Transport Planning") + '</a></div>')
         return render_template_string(pagina), 404
 
     verkoopcontract_opties = []
@@ -626,12 +626,12 @@ def transport_planning_detail(transport_id):
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/transport-planning" style="color:var(--gray-400);text-decoration:none;">Transport Planning</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ transport.referentienummer }}</span>
 </div>
-<div class="page-title">{{ transport.referentienummer }} — {{ transport.fabriek or 'Geen fabriek' }}</div>
+<div class="page-title">{{ transport.referentienummer }} — {{ transport.fabriek or vertaal('Geen fabriek') }}</div>
 
 <div style="display:flex;gap:24px;flex-wrap:wrap;">
 <div style="flex:1;min-width:340px;">
     <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:16px 4px;margin-bottom:16px;">
-        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Status</div>
+        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ vertaal('Status') }}</div>
         <form method="POST" action="/transport-planning/{{ transport.id }}/status">
             <select name="nieuwe_status" onchange="this.form.submit()" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-weight:600;">
                 {% for st in statussen %}<option value="{{ st }}" {% if transport.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
@@ -679,7 +679,7 @@ def transport_planning_detail(transport_id):
         </div>
         <form method="POST" action="/transport-planning/{{ transport.id }}/koppel-verkoop" style="margin-top:8px;">
             <input type="hidden" name="verkoopcontract" value="">
-            <button type="submit" style="font-size:11.5px;color:var(--gray-400);background:none;border:none;cursor:pointer;padding:0;">Ontkoppelen</button>
+            <button type="submit" style="font-size:11.5px;color:var(--gray-400);background:none;border:none;cursor:pointer;padding:0;">{{ vertaal('Ontkoppelen') }}</button>
         </form>
         {% else %}
         <form method="POST" action="/transport-planning/{{ transport.id }}/koppel-verkoop">
@@ -687,7 +687,7 @@ def transport_planning_detail(transport_id):
                 <option value="">— kies een verkoopcontract —</option>
                 {% for v in verkoopcontract_opties %}<option value="{{ v.contractnummer }}">{{ v.contractnummer }} — {{ v.tegenpartij_naam }} ({{ v.resterend }}t open)</option>{% endfor %}
             </select>
-            <button type="submit" style="padding:7px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Koppelen</button>
+            <button type="submit" style="padding:7px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">{{ vertaal('Koppelen') }}</button>
         </form>
         {% if not verkoopcontract_opties %}<div style="font-size:11.5px;color:var(--gray-300);margin-top:6px;">Geen open verkoopcontracten gevonden voor {{ transport.materiaal or 'dit materiaal' }}.</div>{% endif %}
         {% endif %}
@@ -698,9 +698,9 @@ def transport_planning_detail(transport_id):
 <div style="flex:1;min-width:300px;">
     <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:16px 4px;">
         <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Documenten (CMR, POD, etc.)</div>
-        <div id="docslijst" style="margin-bottom:8px;font-size:12.5px;color:var(--gray-400);">Laden...</div>
+        <div id="docslijst" style="margin-bottom:8px;font-size:12.5px;color:var(--gray-400);">{{ vertaal('Laden...') }}</div>
         <input type="file" id="docupload" accept=".pdf,.doc,.docx" style="font-size:12px;">
-        <button type="button" onclick="uploadTransportDoc()" style="font-size:11.5px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;margin-left:6px;">Uploaden</button>
+        <button type="button" onclick="uploadTransportDoc()" style="font-size:11.5px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;margin-left:6px;">{{ vertaal('Uploaden') }}</button>
     </div>
 </div>
 </div>
@@ -761,7 +761,7 @@ def transport_rates_pagina():
     forwarder_namen = sorted(TRANSPORT_DATA.keys())
 
     inhoud = """
-<div class="page-title">Transport Rates</div>
+<div class="page-title">{{ vertaal('Transport Rates') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">
     Tarieven zoals geüpload door transporteurs zelf via de forwarder-portal.
     {% if not forwarder_namen %}Nog geen tarieven geüpload.{% endif %}
@@ -775,7 +775,7 @@ def transport_rates_pagina():
 {% if forwarder_namen %}
 <form method="GET" style="margin-bottom:16px;">
     <select name="forwarder" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Kies een transporteur</option>
+        <option value="">{{ vertaal('Kies een transporteur') }}</option>
         {% for naam in forwarder_namen %}<option value="{{ naam }}" {% if filter_forwarder == naam %}selected{% endif %}>{{ naam }}</option>{% endfor %}
     </select>
 </form>
@@ -783,8 +783,8 @@ def transport_rates_pagina():
 {% if filter_forwarder %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="tr-tabel-kop">
-        <span style="width:160px;">Stad</span>
-        <span style="flex:1;">Tarieven</span>
+        <span style="width:160px;">{{ vertaal('Stad') }}</span>
+        <span style="flex:1;">{{ vertaal('Tarieven') }}</span>
     </div>
     {% for record in steden_van_forwarder %}
     <div class="tr-tabel-rij">
@@ -797,7 +797,7 @@ def transport_rates_pagina():
 </div>
 <div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ steden_van_forwarder|length }} steden</div>
 {% else %}
-<div class="lege-staat">Kies hierboven een transporteur om de tarieven te bekijken.</div>
+<div class="lege-staat">{{ vertaal('Kies hierboven een transporteur om de tarieven te bekijken.') }}</div>
 {% endif %}
 {% else %}
 <div class="lege-staat">Nog geen tarieven geüpload. Transporteurs kunnen dit zelf doen via <a href="/forwarder-upload" style="color:var(--brand-600);">de forwarder-portal</a>.</div>
@@ -871,7 +871,7 @@ def transport_overview_pagina():
     per_land.sort(key=lambda l: l["aantal"], reverse=True)
 
     inhoud = """
-<div class="page-title">Transport Overview</div>
+<div class="page-title">{{ vertaal('Transport Overview') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Control tower voor alle uitgaande transporten.</p>
 
 <style>
@@ -905,11 +905,11 @@ def transport_overview_pagina():
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Per land/regio</div>
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:24px;">
     <div class="tov-tabel-kop">
-        <span style="flex:1;">Land</span>
-        <span style="width:70px;text-align:right;">Aantal</span>
+        <span style="flex:1;">{{ vertaal('Land') }}</span>
+        <span style="width:70px;text-align:right;">{{ vertaal('Aantal') }}</span>
         <span style="width:90px;text-align:right;">Volume (ton)</span>
-        <span style="width:110px;text-align:right;">Gem. kosten</span>
-        <span style="width:100px;text-align:right;">Transporteurs</span>
+        <span style="width:110px;text-align:right;">{{ vertaal('Gem. kosten') }}</span>
+        <span style="width:100px;text-align:right;">{{ vertaal('Transporteurs') }}</span>
         <span style="width:90px;text-align:right;">Openstaand</span>
     </div>
     {% for l in per_land %}
