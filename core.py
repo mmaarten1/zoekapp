@@ -466,6 +466,27 @@ VERTALINGEN = {
     "Nieuwe gebruiker toevoegen": {"en": "Add new user", "fr": "Ajouter un nouvel utilisateur", "it": "Aggiungi nuovo utente", "es": "Añadir nuevo usuario"},
     "Geen team":             {"en": "No team", "fr": "Aucune équipe", "it": "Nessun team", "es": "Sin equipo"},
     "Geen toegangsrol":      {"en": "No access role", "fr": "Aucun rôle d'accès", "it": "Nessun ruolo di accesso", "es": "Sin rol de acceso"},
+    # --- Instellingen ---
+    "Persoonlijke informatie": {"en": "Personal information", "fr": "Informations personnelles", "it": "Informazioni personali", "es": "Información personal"},
+    "Opgeslagen.":           {"en": "Saved.", "fr": "Enregistré.", "it": "Salvato.", "es": "Guardado."},
+    "Inlognaam:":            {"en": "Login name:", "fr": "Nom de connexion :", "it": "Nome utente:", "es": "Nombre de usuario:"},
+    "Naam (zichtbaar in de app)": {"en": "Name (visible in the app)", "fr": "Nom (visible dans l'application)", "it": "Nome (visibile nell'app)", "es": "Nombre (visible en la aplicación)"},
+    "Interfacetaal":         {"en": "Interface language", "fr": "Langue de l'interface", "it": "Lingua dell'interfaccia", "es": "Idioma de la interfaz"},
+    "Wachtwoord wijzigen":   {"en": "Change password", "fr": "Changer le mot de passe", "it": "Cambia password", "es": "Cambiar contraseña"},
+    "Huidig wachtwoord":     {"en": "Current password", "fr": "Mot de passe actuel", "it": "Password attuale", "es": "Contraseña actual"},
+    "Nieuw wachtwoord":      {"en": "New password", "fr": "Nouveau mot de passe", "it": "Nuova password", "es": "Nueva contraseña"},
+    "Nieuw wachtwoord bevestigen": {"en": "Confirm new password", "fr": "Confirmer le nouveau mot de passe", "it": "Conferma nuova password", "es": "Confirmar nueva contraseña"},
+    "Beheer":                {"en": "Management", "fr": "Gestion", "it": "Gestione", "es": "Gestión"},
+    "Alleen zichtbaar voor beheerders.": {"en": "Only visible to administrators.", "fr": "Visible uniquement par les administrateurs.", "it": "Visibile solo agli amministratori.", "es": "Visible solo para administradores."},
+    "Je huidige wachtwoord klopt niet.": {"en": "Your current password is incorrect.", "fr": "Votre mot de passe actuel est incorrect.", "it": "La tua password attuale non è corretta.", "es": "Tu contraseña actual es incorrecta."},
+    "Nieuw wachtwoord moet minstens 6 tekens zijn.": {"en": "New password must be at least 6 characters.", "fr": "Le nouveau mot de passe doit comporter au moins 6 caractères.", "it": "La nuova password deve contenere almeno 6 caratteri.", "es": "La nueva contraseña debe tener al menos 6 caracteres."},
+    "De bevestiging komt niet overeen met het nieuwe wachtwoord.": {"en": "The confirmation does not match the new password.", "fr": "La confirmation ne correspond pas au nouveau mot de passe.", "it": "La conferma non corrisponde alla nuova password.", "es": "La confirmación no coincide con la nueva contraseña."},
+    "Documentopmaak":        {"en": "Document layout", "fr": "Mise en page des documents", "it": "Layout dei documenti", "es": "Diseño de documentos"},
+    "Logo":                  {"en": "Logo", "fr": "Logo", "it": "Logo", "es": "Logo"},
+    "Positie":               {"en": "Position", "fr": "Position", "it": "Posizione", "es": "Posición"},
+    "Commerciële instellingen": {"en": "Commercial settings", "fr": "Paramètres commerciaux", "it": "Impostazioni commerciali", "es": "Configuración comercial"},
+    "Nog niets toegevoegd.": {"en": "Nothing added yet.", "fr": "Rien n'a encore été ajouté.", "it": "Non è stato ancora aggiunto nulla.", "es": "Aún no se ha añadido nada."},
+    "Eigen bedrijfsgegevens": {"en": "Own company details", "fr": "Coordonnées de l'entreprise", "it": "Dati aziendali propri", "es": "Datos propios de la empresa"},
 }
 
 def huidige_taal():

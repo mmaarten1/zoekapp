@@ -5194,7 +5194,7 @@ def instellingen_eigen_bedrijfsgegevens():
     ] if not waarden.get(veld)]
 
     inhoud = """
-<div class="page-title">Eigen bedrijfsgegevens</div>
+<div class="page-title">{{ vertaal('Eigen bedrijfsgegevens') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Deze gegevens verschijnen als afzender op elke factuur die het systeem genereert — verplicht voor een geldige Nederlandse factuur.</p>
 
 {% if opgeslagen %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;">Opgeslagen.</div>{% endif %}
@@ -5214,15 +5214,15 @@ def instellingen_eigen_bedrijfsgegevens():
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
             <div>
-                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Postcode</label>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Postcode') }}</label>
                 <input type="text" name="postcode" value="{{ waarden.postcode }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
             </div>
             <div>
-                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Stad</label>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Stad') }}</label>
                 <input type="text" name="stad" value="{{ waarden.stad }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
             </div>
             <div>
-                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Land</label>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Land') }}</label>
                 <input type="text" name="land" value="{{ waarden.land }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;">
             </div>
         </div>
@@ -5254,7 +5254,7 @@ def instellingen_eigen_bedrijfsgegevens():
         </div>
         <div style="font-size:11px;color:var(--gray-400);margin-bottom:16px;">EORI alleen nodig bij internationale handel buiten de EU.</div>
 
-        <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Opslaan</button>
+        <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">{{ vertaal('Opslaan') }}</button>
     </form>
 </div>
     """
@@ -5274,14 +5274,14 @@ def _persoonlijke_informatie_inhoud():
     wachtwoord_gewijzigd = request.args.get("wachtwoord_gewijzigd") == "1"
     wachtwoord_fout = request.args.get("wachtwoord_fout", "")
     WACHTWOORD_FOUTMELDINGEN = {
-        "wachtwoord_onjuist": "Je huidige wachtwoord klopt niet.",
-        "wachtwoord_te_kort": "Nieuw wachtwoord moet minstens 6 tekens zijn.",
-        "wachtwoord_komt_niet_overeen": "De bevestiging komt niet overeen met het nieuwe wachtwoord.",
+        "wachtwoord_onjuist": vertaal("Je huidige wachtwoord klopt niet."),
+        "wachtwoord_te_kort": vertaal("Nieuw wachtwoord moet minstens 6 tekens zijn."),
+        "wachtwoord_komt_niet_overeen": vertaal("De bevestiging komt niet overeen met het nieuwe wachtwoord."),
     }
 
     inhoud = """
-    <div class="page-title">Persoonlijke informatie</div>
-    {% if opgeslagen %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;max-width:420px;">Opgeslagen.</div>{% endif %}
+    <div class="page-title">{{ vertaal('Persoonlijke informatie') }}</div>
+    {% if opgeslagen %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;max-width:420px;">{{ vertaal('Opgeslagen.') }}</div>{% endif %}
 
     <style>
         .profielfoto-cirkel { position:relative; width:64px; height:64px; flex-shrink:0; }
@@ -5303,45 +5303,45 @@ def _persoonlijke_informatie_inhoud():
                 </label>
                 <div>
                     <div style="font-weight:700;color:var(--gray-800);">{{ eigen_gegevens.weergavenaam or gebruikersnaam }}</div>
-                    <div style="font-size:11.5px;color:var(--gray-400);">Inlognaam: {{ gebruikersnaam }}</div>
+                    <div style="font-size:11.5px;color:var(--gray-400);">{{ vertaal('Inlognaam:') }} {{ gebruikersnaam }}</div>
                 </div>
             </div>
 
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Naam (zichtbaar in de app)</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Naam (zichtbaar in de app)') }}</label>
             <input type="text" name="weergavenaam" value="{{ eigen_gegevens.weergavenaam or '' }}" placeholder="{{ gebruikersnaam }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:4px;box-sizing:border-box;">
 
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">E-mailadres</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('E-mailadres') }}</label>
             <input type="email" name="email" value="{{ eigen_gegevens.email or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:18px;margin-top:4px;box-sizing:border-box;">
 
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Interfacetaal</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Interfacetaal') }}</label>
             <select name="taal" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:6px;margin-top:4px;box-sizing:border-box;">
                 {% for code, label in taal_labels.items() %}<option value="{{ code }}" {% if (eigen_gegevens.taal or 'nl') == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
             <div style="font-size:11px;color:var(--gray-400);margin-bottom:14px;">De navigatie en de meest gedeelde teksten zijn nu vertaald — de rest van de app volgt geleidelijk.</div>
 
-            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Opslaan</button>
+            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">{{ vertaal('Opslaan') }}</button>
         </form>
     </div>
 
     <div class="info-kaart" style="max-width:420px;">
-        <div class="drawer-row"><span class="drawer-row-label">Team</span><span class="drawer-row-value">{{ team or "—" }}</span></div>
-        <div class="drawer-row"><span class="drawer-row-label">Afdeling</span><span class="drawer-row-value">{{ AFDELING_LABELS.get(eigen_gegevens.get("afdeling",""), eigen_gegevens.get("afdeling","") or "—") }}</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Team') }}</span><span class="drawer-row-value">{{ team or "—" }}</span></div>
+        <div class="drawer-row"><span class="drawer-row-label">{{ vertaal('Afdeling') }}</span><span class="drawer-row-value">{{ AFDELING_LABELS.get(eigen_gegevens.get("afdeling",""), eigen_gegevens.get("afdeling","") or "—") }}</span></div>
         <hr class="drawer-divider">
-        <a href="/logout" class="btn-nav btn-nav-primary" style="display:inline-block;">Uitloggen</a>
+        <a href="/logout" class="btn-nav btn-nav-primary" style="display:inline-block;">{{ vertaal('Uitloggen') }}</a>
     </div>
 
     <div class="info-kaart" style="max-width:420px;margin-top:16px;">
-        <div class="dg-kaart-titel">Wachtwoord wijzigen</div>
+        <div class="dg-kaart-titel">{{ vertaal('Wachtwoord wijzigen') }}</div>
         {% if wachtwoord_gewijzigd %}<div style="background:#f0fdf4;color:#16a34a;padding:9px 12px;border-radius:7px;margin-bottom:12px;font-size:12px;">Wachtwoord gewijzigd.</div>{% endif %}
         {% if wachtwoord_fout %}<div style="background:#fef2f2;color:#dc2626;padding:9px 12px;border-radius:7px;margin-bottom:12px;font-size:12px;">{{ wachtwoord_foutmeldingen.get(wachtwoord_fout, "Er ging iets mis.") }}</div>{% endif %}
         <form method="POST" action="/instellingen/wachtwoord">
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Huidig wachtwoord</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Huidig wachtwoord') }}</label>
             <input type="password" name="huidig_wachtwoord" required style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:12px;margin-top:4px;box-sizing:border-box;">
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Nieuw wachtwoord</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Nieuw wachtwoord') }}</label>
             <input type="password" name="nieuw_wachtwoord" required minlength="6" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:12px;margin-top:4px;box-sizing:border-box;">
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Nieuw wachtwoord bevestigen</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Nieuw wachtwoord bevestigen') }}</label>
             <input type="password" name="nieuw_wachtwoord_bevestig" required minlength="6" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:16px;margin-top:4px;box-sizing:border-box;">
-            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Wachtwoord wijzigen</button>
+            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">{{ vertaal('Wachtwoord wijzigen') }}</button>
         </form>
     </div>
 
@@ -5393,8 +5393,8 @@ def _beheer_inhoud():
     ]
 
     inhoud = """
-    <div class="page-title">Beheer</div>
-    <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Alleen zichtbaar voor beheerders.</p>
+    <div class="page-title">{{ vertaal('Beheer') }}</div>
+    <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">{{ vertaal('Alleen zichtbaar voor beheerders.') }}</p>
 
     {% for categorie_titel, kaarten in categorieen %}
     <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">{{ categorie_titel }}</div>
@@ -5534,8 +5534,8 @@ def instellingen_documenten():
     )
 
     inhoud = """
-    <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;"><a href="/instellingen?modus=beheer" style="color:var(--gray-400);text-decoration:none;">Beheer</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Documentopmaak</span></div>
-    <div class="page-title">Documentopmaak</div>
+    <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;"><a href="/instellingen?modus=beheer" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Beheer') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Documentopmaak') }}</span></div>
+    <div class="page-title">{{ vertaal('Documentopmaak') }}</div>
     <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Logo, positie en accentkleur — apart in te stellen per document.</p>
 
     <div style="display:flex;gap:4px;border-bottom:1px solid var(--gray-200);margin-bottom:20px;">
@@ -5551,10 +5551,10 @@ def instellingen_documenten():
         <div style="font-size:12.5px;color:var(--gray-400);margin-bottom:10px;">Nog geen logo geüpload voor {{ document_type_label }}.</div>
         {% endif %}
         <form method="POST" enctype="multipart/form-data">
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Logo</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Logo') }}</label>
             <input type="file" name="logo" accept="image/*" style="font-size:12px;margin-bottom:14px;margin-top:2px;display:block;">
 
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Positie</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Positie') }}</label>
             <select name="positie" style="width:100%;padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:14px;margin-top:2px;">
                 {% for p in logo_posities %}<option value="{{ p }}" {% if instelling.positie == p %}selected{% endif %}>{{ p|capitalize }}</option>{% endfor %}
             </select>
@@ -5569,7 +5569,7 @@ def instellingen_documenten():
             <input type="email" name="afzender_email" value="{{ instelling.afzender_email }}" placeholder="bv. facturatie@peute.nl" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:6px;margin-top:4px;box-sizing:border-box;">
             <div style="font-size:11px;color:var(--gray-400);margin-bottom:14px;">Wordt vastgelegd voor als de e-mailkoppeling actief wordt — er wordt nu nog niets automatisch verstuurd.</div>
 
-            <button type="submit" style="padding:7px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Opslaan</button>
+            <button type="submit" style="padding:7px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">{{ vertaal('Opslaan') }}</button>
         </form>
     </div>
     """

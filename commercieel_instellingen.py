@@ -13,7 +13,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 from core import (
     laad_incoterms, bewaar_incoterms, laad_betalingstermijnen, bewaar_betalingstermijnen,
     laad_valuta, bewaar_valuta, laad_pod_havens, bewaar_pod_havens,
-    laad_bedrijfseenheden, bewaar_bedrijfseenheden, vereist_admin_of_403, render_simple_page,
+    laad_bedrijfseenheden, bewaar_bedrijfseenheden, vereist_admin_of_403, render_simple_page, vertaal,
 )
 
 commercieel_instellingen_bp = Blueprint("commercieel_instellingen", __name__)
@@ -56,7 +56,7 @@ def commerciele_instellingen_pagina():
                     bericht = f"'{waarde}' verwijderd uit {config['titel']}."
 
     inhoud = """
-<div class="page-title">Commerciële instellingen</div>
+<div class="page-title">{{ vertaal('Commerciële instellingen') }}</div>
 <p style="color:var(--gray-400);font-size:0.85rem;margin-top:0;margin-bottom:20px;max-width:600px;">
     Deze lijsten worden gebruikt bij het aanmaken van inkoop- en verkooporders. Pas je hier iets aan, dan zie je dat direct terug in die formulieren.
 </p>
@@ -84,7 +84,7 @@ def commerciele_instellingen_pagina():
                 </form>
             </div>
             {% else %}
-            <div style="padding:10px 4px;color:var(--gray-300);font-size:12px;">Nog niets toegevoegd.</div>
+            <div style="padding:10px 4px;color:var(--gray-300);font-size:12px;">{{ vertaal('Nog niets toegevoegd.') }}</div>
             {% endfor %}
         </div>
     </div>
