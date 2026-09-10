@@ -449,7 +449,7 @@ def weegbrug_inwegen(record_id):
     </div>
     <input type="hidden" name="herkomst_bron" id="herkomst_veld" value="handmatig">
     <button type="submit" style="padding:10px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Inwegen registreren') }}</button>
-    <a href="/weegbrug" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+    <a href="/weegbrug" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">{{ vertaal('Annuleren') }}</a>
 </form>
     """
     pagina = render_simple_page("Inwegen", "weegbrug", inhoud)
@@ -525,7 +525,7 @@ def weegbrug_uitwegen(record_id):
     </div>
     <input type="hidden" name="herkomst_bron" id="herkomst_veld_uit" value="handmatig">
     <button type="submit" style="padding:10px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Uitwegen registreren') }}</button>
-    <a href="/weegbrug" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+    <a href="/weegbrug" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">{{ vertaal('Annuleren') }}</a>
 </form>
     """
     pagina = render_simple_page("Uitwegen", "weegbrug", inhoud)

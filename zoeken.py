@@ -2865,7 +2865,7 @@ select.klik-bewerken-veld { cursor:pointer; }
                 <input type="text" name="postcode" placeholder="Postcode" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
                 <input type="text" name="stad" placeholder="Stad *" required style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
             </div>
-            <button type="submit" style="padding:6px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Toevoegen</button>
+            <button type="submit" style="padding:6px 14px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">{{ vertaal('Toevoegen') }}</button>
         </form>
     </div>
     {% endif %}
@@ -2959,7 +2959,7 @@ select.klik-bewerken-veld { cursor:pointer; }
 <div class="info-kaart" style="margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
         <div class="dg-kaart-titel" style="color:var(--gray-400);margin-bottom:0;">Materialen &amp; Kwaliteiten</div>
-        <button type="button" onclick="toggleMaterialenBewerken()" id="materialenToggleBtn" style="font-size:12px;font-weight:600;color:var(--brand-600);background:none;border:none;cursor:pointer;">Bewerken</button>
+        <button type="button" onclick="toggleMaterialenBewerken()" id="materialenToggleBtn" style="font-size:12px;font-weight:600;color:var(--brand-600);background:none;border:none;cursor:pointer;">{{ vertaal('Bewerken') }}</button>
     </div>
     <div id="materialenBewerkenPaneel" style="display:none;margin-top:12px;">
             {% set gekozen_materialen = (bedrijf.materialen or "").split(",") | map("trim") | list %}
@@ -3101,7 +3101,7 @@ select.klik-bewerken-veld { cursor:pointer; }
             <div style="display:flex;align-items:center;gap:16px;margin-top:10px;">
                 <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="team" checked> Team</label>
                 <label style="font-size:12.5px;color:var(--gray-600);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="notitieType" value="prive"> Privé</label>
-                <button onclick="voegNotitieToeProfiel()" style="margin-left:auto;padding:6px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">Toevoegen</button>
+                <button onclick="voegNotitieToeProfiel()" style="margin-left:auto;padding:6px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;">{{ vertaal('Toevoegen') }}</button>
             </div>
         </div>
     </div>

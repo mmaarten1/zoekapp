@@ -546,7 +546,7 @@ def voorraad_locaties_pagina():
         <input type="hidden" name="materiaal" value="{{ m.materiaal }}">
         <input type="text" name="locatienaam" placeholder="Locatie (bv. Hal A)" style="flex:1;padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;">
         <input type="text" name="hoeveelheid" placeholder="ton" style="width:80px;padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;">
-        <button type="submit" style="padding:5px 12px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;">Opslaan</button>
+        <button type="submit" style="padding:5px 12px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;">{{ vertaal('Opslaan') }}</button>
     </form>
 </div>
 {% else %}

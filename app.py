@@ -3805,7 +3805,7 @@ def facturen_nieuw():
         </div>
         <div style="margin-top:20px;display:flex;gap:8px;">
             <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">+ Factuur toevoegen</button>
-            <a href="/facturen" style="padding:9px 20px;color:var(--gray-400);text-decoration:none;font-size:13px;">Annuleren</a>
+            <a href="/facturen" style="padding:9px 20px;color:var(--gray-400);text-decoration:none;font-size:13px;">{{ vertaal('Annuleren') }}</a>
         </div>
     </form>
 </div>
@@ -4762,7 +4762,7 @@ def organisatie_beheer():
         <form method="POST" onsubmit="return confirm('Afdeling {{ afdeling_naam }} verwijderen? Bestaande gebruikers behouden hun huidige team-waarde, maar die is dan niet meer aan een afdeling gekoppeld.');" style="margin:0;">
             <input type="hidden" name="actie" value="afdeling_verwijderen">
             <input type="hidden" name="afdeling_naam" value="{{ afdeling_naam }}">
-            <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:12px;">Verwijderen</button>
+            <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:12px;">{{ vertaal('Verwijderen') }}</button>
         </form>
     </div>
     {% for team_naam in teams %}

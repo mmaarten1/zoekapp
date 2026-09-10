@@ -345,7 +345,7 @@ def contacten_importeren():
 <form method="POST" action="/contacten/importeren/bevestigen">
     <input type="hidden" name="import_data" value='{{ te_importeren|tojson }}'>
     <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Importeer {{ aantal_ok }} bedrijven</button>
-    <a href="/contacten/importeren" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+    <a href="/contacten/importeren" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">{{ vertaal('Annuleren') }}</a>
 </form>
 {% else %}
 <a href="/contacten/importeren" style="font-size:12.5px;color:var(--gray-400);text-decoration:none;">← Opnieuw proberen</a>
@@ -446,10 +446,10 @@ def contact_detail(persoon_id):
 
     {% if mag_bewerken %}
     <div style="margin-top:16px;display:flex;gap:8px;">
-        <a href="/contacten/{{ persoon.id }}/bewerken?terug_naar=/contacten/{{ persoon.id }}" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:var(--brand-600);color:#fff;border-radius:6px;text-decoration:none;">Bewerken</a>
+        <a href="/contacten/{{ persoon.id }}/bewerken?terug_naar=/contacten/{{ persoon.id }}" style="font-size:12.5px;font-weight:700;padding:8px 16px;background:var(--brand-600);color:#fff;border-radius:6px;text-decoration:none;">{{ vertaal('Bewerken') }}</a>
         <form method="POST" action="/contacten" onsubmit="return confirm('Contactpersoon verwijderen?');" style="margin:0;">
             <input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="persoon_id" value="{{ persoon.id }}">
-            <button type="submit" style="font-size:12.5px;font-weight:600;padding:8px 16px;background:none;border:1px solid var(--gray-200);border-radius:6px;color:#dc2626;cursor:pointer;">Verwijderen</button>
+            <button type="submit" style="font-size:12.5px;font-weight:600;padding:8px 16px;background:none;border:1px solid var(--gray-200);border-radius:6px;color:#dc2626;cursor:pointer;">{{ vertaal('Verwijderen') }}</button>
         </form>
     </div>
     {% endif %}
@@ -509,8 +509,8 @@ def contact_bewerken(persoon_id):
                 <input type="date" name="laatst" value="{{ persoon.laatst or '' }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-top:4px;box-sizing:border-box;"></div>
             </div>
 
-            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">Opslaan</button>
-            <a href="{{ terug_naar }}" style="padding:9px 16px;color:var(--gray-400);text-decoration:none;font-size:13px;">Annuleren</a>
+            <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">{{ vertaal('Opslaan') }}</button>
+            <a href="{{ terug_naar }}" style="padding:9px 16px;color:var(--gray-400);text-decoration:none;font-size:13px;">{{ vertaal('Annuleren') }}</a>
         </form>
     </div>
     """
@@ -735,7 +735,7 @@ def contacten_nieuw_bestaand():
         <input type="email" name="email" placeholder="E-mail (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
         <input type="text" name="telefoon" placeholder="Telefoon (optioneel)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
     </div>
-    <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Opslaan</button>
+    <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Opslaan') }}</button>
 </form>
 {% endif %}
     """

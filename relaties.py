@@ -513,7 +513,7 @@ def leverancier_commercieel_instellingen(naam):
             <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Leverancier-code (voor referentienummers, bv. 'ACME')</label>
             <input type="text" name="leverancier_code" value="{{ instelling.leverancier_code }}" placeholder="Automatisch als leeg" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
-        <button type="submit" style="padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">Opslaan</button>
+        <button type="submit" style="padding:8px 16px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;">{{ vertaal('Opslaan') }}</button>
     </form>
 </div>
 
