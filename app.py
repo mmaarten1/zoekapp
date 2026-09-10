@@ -2827,15 +2827,15 @@ def _overzicht_factuur_inhoud():
 <div class="kpi-mini" style="display:flex;gap:16px;margin-bottom:20px;">
     <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;flex:1;">
         <div style="font-size:1.4rem;font-weight:800;color:var(--brand-600);">{{ openstaande_facturen|length }}</div>
-        <div style="font-size:0.75rem;color:var(--gray-400);">Openstaand</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">{{ vertaal('Openstaand') }}</div>
     </div>
     <div style="background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:14px 4px;flex:1;">
         <div style="font-size:1.4rem;font-weight:800;color:var(--gray-800);">€{{ "{:,.0f}".format(totaal_openstaand).replace(",", ".") }}</div>
-        <div style="font-size:0.75rem;color:var(--gray-400);">Totaal openstaand bedrag</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">{{ vertaal('Totaal openstaand bedrag') }}</div>
     </div>
     <div style="background:transparent;border:none;border-top:1px solid {{ '#fecaca' if te_laat_facturen else 'var(--gray-200)' }};border-bottom:1px solid {{ '#fecaca' if te_laat_facturen else 'var(--gray-200)' }};padding:14px 4px;flex:1;">
         <div style="font-size:1.4rem;font-weight:800;color:{{ '#dc2626' if te_laat_facturen else 'var(--gray-800)' }};">{{ te_laat_facturen|length }}</div>
-        <div style="font-size:0.75rem;color:var(--gray-400);">Te laat</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);">{{ vertaal('Te laat') }}</div>
     </div>
 </div>
 
@@ -2851,7 +2851,7 @@ def _overzicht_factuur_inhoud():
         <form method="POST" style="margin:0;">
             <input type="hidden" name="actie" value="markeer_betaald">
             <input type="hidden" name="factuur_id" value="{{ f.id }}">
-            <button type="submit" style="font-size:11px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;">Markeer betaald</button>
+            <button type="submit" style="font-size:11px;padding:4px 10px;background:var(--brand-600);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;">{{ vertaal('Markeer betaald') }}</button>
         </form>
     </div>
     {% endfor %}
@@ -2870,26 +2870,26 @@ def _overzicht_factuur_inhoud():
     <input type="hidden" name="modus" value="overzicht">
     {% if vooringevuld_bedrijf %}<input type="hidden" name="bedrijf" value="{{ vooringevuld_bedrijf }}">{% endif %}
     <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle statussen</option>
+        <option value="">{{ vertaal('Alle statussen') }}</option>
         <option value="Open" {% if filter_status_fact == "Open" %}selected{% endif %}>Open</option>
-        <option value="Te laat" {% if filter_status_fact == "Te laat" %}selected{% endif %}>Te laat</option>
+        <option value="Te laat" {% if filter_status_fact == "Te laat" %}selected{% endif %}>{{ vertaal('Te laat') }}</option>
         <option value="Betaald" {% if filter_status_fact == "Betaald" %}selected{% endif %}>Betaald</option>
     </select>
     {% if vooringevuld_bedrijf %}<a href="/facturen?modus=overzicht" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Alle bedrijven tonen</a>{% endif %}
     <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">{{ getoonde_facturen|length }} van {{ alle_facturen|length }}</span>
 </form>
 
-<a href="/facturen/nieuw{% if vooringevuld_bedrijf %}?bedrijf={{ vooringevuld_bedrijf|urlencode }}{% endif %}" style="display:inline-block;margin-bottom:20px;padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;text-decoration:none;font-size:13px;">+ Factuur toevoegen</a>
+<a href="/facturen/nieuw{% if vooringevuld_bedrijf %}?bedrijf={{ vooringevuld_bedrijf|urlencode }}{% endif %}" style="display:inline-block;margin-bottom:20px;padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-weight:700;text-decoration:none;font-size:13px;">+ {{ vertaal('Factuur toevoegen') }}</a>
 
 {% if getoonde_facturen %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="fact-rij fact-thead">
-        <span style="flex:1.4;">Bedrijf</span>
-        <span style="flex:1.2;">Referentie</span>
-        <span style="width:100px;text-align:right;">Bedrag</span>
-        <span style="width:100px;">Vervaldatum</span>
-        <span style="width:100px;">Status</span>
-        <span style="width:140px;text-align:right;">Actie</span>
+        <span style="flex:1.4;">{{ vertaal('Bedrijf') }}</span>
+        <span style="flex:1.2;">{{ vertaal('Referentie') }}</span>
+        <span style="width:100px;text-align:right;">{{ vertaal('Bedrag') }}</span>
+        <span style="width:100px;">{{ vertaal('Vervaldatum') }}</span>
+        <span style="width:100px;">{{ vertaal('Status') }}</span>
+        <span style="width:140px;text-align:right;">{{ vertaal('Actie') }}</span>
     </div>
     {% for f in getoonde_facturen %}
     <div class="fact-rij fact-row">
