@@ -19,7 +19,7 @@ from core import (
     parse_hoeveelheid_getal, parse_ton_intern, bereken_voorraad_status, is_huidige_gebruiker_admin,
     vereist_admin_of_403, render_simple_page, ENF_BEDRIJVEN,
     ALBLASSERDAM_NAAM, bepaal_shipment_flow_type, shipment_hoeveelheid, SHIPMENT_STATUSSEN,
-    vereist_afdeling_of_403, laad_handelsorders, laad_voorraadwaardering, bewaar_voorraadwaardering,
+    vereist_afdeling_of_403, laad_handelsorders, laad_voorraadwaardering, bewaar_voorraadwaardering, vertaal,
     laad_bedrijfseenheden, laad_marktprijzen, laad_logistieke_orders, laad_transport_planning,
     laad_voorraadmutaties_periode, bewaar_voorraadmutaties_periode,
     laad_voorraadlocaties, bewaar_voorraadlocaties,
@@ -330,9 +330,9 @@ def voorraad_mutatielog_pagina():
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Voorraadmutaties</span>
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Voorraad') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Voorraadmutaties') }}</span>
 </div>
-<div class="page-title">Voorraadmutaties</div>
+<div class="page-title">{{ vertaal('Voorraadmutaties') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Elke individuele voorraadbeweging, chronologisch: ontvangsten, uitgaand, productie en correcties — met bron en gebruiker.</p>
 
 <form method="GET" style="margin-bottom:16px;">
@@ -402,7 +402,7 @@ def voorraad_pagina():
     ]
 
     inhoud = """
-<div class="page-title">Voorraad — Alblasserdam</div>
+<div class="page-title">{{ vertaal('Voorraad') }} — Alblasserdam</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Hoeveel ton van ieder materiaal ligt er nu fysiek op voorraad. Klik op een materiaal voor de verdeling per locatie.</p>
 
 {% if nog_af_te_handelen %}
@@ -420,8 +420,8 @@ def voorraad_pagina():
 
 <div style="border:none;border-top:1px solid var(--gray-200);overflow-x:auto;margin-bottom:20px;">
     <div style="display:flex;padding:8px 4px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-400);border-bottom:2px solid var(--gray-800);min-width:500px;">
-        <span style="flex:1;">Materiaal</span>
-        <span style="width:140px;text-align:right;">Fysieke voorraad</span>
+        <span style="flex:1;">{{ vertaal('Materiaal') }}</span>
+        <span style="width:140px;text-align:right;">{{ vertaal('Fysieke voorraad') }}</span>
     </div>
     {% for r in rijen %}
     <a href="/voorraad/locaties?materiaal={{ r.materiaal|urlencode }}" style="display:flex;align-items:center;padding:10px 4px;font-size:13px;border-bottom:1px solid var(--gray-100);min-width:500px;text-decoration:none;color:inherit;">
@@ -429,11 +429,11 @@ def voorraad_pagina():
         <span style="width:140px;text-align:right;font-weight:800;color:var(--gray-800);">{{ r.eindvoorraad }} t</span>
     </a>
     {% else %}
-    <div class="lege-staat" style="min-width:500px;">Nog geen materiaal met definitieve orders bij Alblasserdam.</div>
+    <div class="lege-staat" style="min-width:500px;">{{ vertaal('Nog geen materiaal met definitieve orders bij Alblasserdam.') }}</div>
     {% endfor %}
     {% if rijen %}
     <div style="display:flex;align-items:center;padding:10px 4px;font-size:13px;font-weight:800;color:var(--gray-800);border-top:2px solid var(--gray-800);min-width:500px;">
-        <span style="flex:1;">Totaal</span>
+        <span style="flex:1;">{{ vertaal('Totaal') }}</span>
         <span style="width:140px;text-align:right;">{{ totaal_voorraad }} t</span>
     </div>
     {% endif %}
@@ -508,9 +508,9 @@ def voorraad_locaties_pagina():
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Locaties</span>
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Voorraad') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Locaties') }}</span>
 </div>
-<div class="page-title">Locaties</div>
+<div class="page-title">{{ vertaal('Locaties') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Verdeling van de voorraad per materiaal over fysieke locaties binnen Alblasserdam.</p>
 
 {% for m in materialen_overzicht %}
@@ -533,7 +533,7 @@ def voorraad_locaties_pagina():
     {% endif %}
     {% if m.gekoppelde_verkoop %}
     <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--gray-100);">
-        <div style="font-size:10.5px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Gekoppelde verkoop</div>
+        <div style="font-size:10.5px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">{{ vertaal('Gekoppelde verkoop') }}</div>
         {% for v in m.gekoppelde_verkoop %}
         <a href="/handelsorders/{{ v.id }}" style="display:flex;align-items:center;padding:3px 0;font-size:11.5px;text-decoration:none;color:var(--gray-600);">
             <span style="flex:1;">{{ v.klant }} <span style="color:var(--gray-300);">({{ v.status }})</span></span>
@@ -550,7 +550,7 @@ def voorraad_locaties_pagina():
     </form>
 </div>
 {% else %}
-<div class="lege-staat">Geen materiaal gevonden.</div>
+<div class="lege-staat">{{ vertaal('Geen materiaal gevonden.') }}</div>
 {% endfor %}
     """
     pagina = render_simple_page("Locaties", "voorraad", inhoud)
@@ -600,13 +600,13 @@ def voorraad_productie_pagina():
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Productie / verwerking</span>
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Voorraad') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Productie / verwerking') }}</span>
 </div>
-<div class="page-title">Productie / verwerking</div>
+<div class="page-title">{{ vertaal('Productie / verwerking') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Eén materiaal wordt omgezet in één of meer andere materialen — bijvoorbeeld Mixed Paper dat gesorteerd wordt tot OCC 1.04, balen en productieverlies. Alles telt automatisch mee in de mutatiestaat.</p>
 
 <form method="POST" style="max-width:600px;margin-bottom:32px;border:none;border-top:1px solid var(--gray-200);padding-top:16px;">
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Input</div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ vertaal('Input') }}</div>
     <div style="display:flex;gap:10px;margin-bottom:16px;">
         <input type="text" name="input_materiaal" placeholder="Materiaal (bv. Mixed Paper)" list="materiaal_lijst_productie" required style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
         <input type="text" name="input_hoeveelheid" placeholder="ton" required style="width:100px;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;">
@@ -627,10 +627,10 @@ def voorraad_productie_pagina():
     <button type="button" onclick="voegOutputToe()" style="background:none;border:none;color:var(--brand-600);font-size:12px;font-weight:600;cursor:pointer;padding:0;margin-bottom:16px;">+ Nog een output toevoegen</button>
 
     <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;"></textarea>
-    <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Mutatie vastleggen</button>
+    <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Mutatie vastleggen') }}</button>
 </form>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Eerder vastgelegde mutaties</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ vertaal('Eerder vastgelegde mutaties') }}</div>
 <div style="border:none;border-top:1px solid var(--gray-200);">
     {% for m in alle_mutaties %}
     <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
@@ -642,7 +642,7 @@ def voorraad_productie_pagina():
         <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">{{ m.gebruiker }} &middot; {{ m.aangemaakt }}{% if m.notitie %} &middot; {{ m.notitie }}{% endif %}</div>
     </div>
     {% else %}
-    <div class="lege-staat">Nog geen productiemutaties vastgelegd.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen productiemutaties vastgelegd.') }}</div>
     {% endfor %}
 </div>
 
@@ -1029,7 +1029,7 @@ def voorraad_beheer_pagina():
 .vrd-tab { padding:7px 16px; border-radius:6px; border:1px solid var(--gray-200); background:#fff; color:var(--gray-600); font-size:13px; font-weight:600; cursor:pointer; text-decoration:none; }
 .vrd-tab.actief { background:var(--brand-600); color:#fff; border-color:var(--brand-600); }
 </style>
-<div class="page-title">Voorraad</div>
+<div class="page-title">{{ vertaal('Voorraad') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Handelsvoorraad op de werf, alles in <b>ton</b>. Binnenkomend materiaal telt pas mee zodra het is goedgekeurd. Verkocht/vrij wordt live berekend uit je Orders en shipments.</p>
 
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:28px;padding:16px 4px;">
@@ -1079,16 +1079,16 @@ def voorraad_beheer_pagina():
 </div>
 
 <div class="vrd-kaart" style="margin-bottom:24px;overflow-x:auto;">
-    <div class="dg-kaart-titel" style="margin-bottom:10px;">Voorraad per commodity</div>
+    <div class="dg-kaart-titel" style="margin-bottom:10px;">{{ vertaal('Voorraad per commodity') }}</div>
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
         <thead>
             <tr style="text-align:left;color:var(--gray-400);font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px;">
-                <th style="padding:6px 8px;">Commodity</th>
-                <th style="padding:6px 8px;text-align:right;">Fysiek</th>
+                <th style="padding:6px 8px;">{{ vertaal('Commodity') }}</th>
+                <th style="padding:6px 8px;text-align:right;">{{ vertaal('Fysiek') }}</th>
                 <th style="padding:6px 8px;text-align:right;">In transit</th>
-                <th style="padding:6px 8px;text-align:right;">Binnenkort binnen</th>
-                <th style="padding:6px 8px;text-align:right;">Verkocht</th>
-                <th style="padding:6px 8px;text-align:right;">Vrij beschikbaar</th>
+                <th style="padding:6px 8px;text-align:right;">{{ vertaal('Binnenkort binnen') }}</th>
+                <th style="padding:6px 8px;text-align:right;">{{ vertaal('Verkocht') }}</th>
+                <th style="padding:6px 8px;text-align:right;">{{ vertaal('Vrij beschikbaar') }}</th>
             </tr>
         </thead>
         <tbody>
@@ -1102,7 +1102,7 @@ def voorraad_beheer_pagina():
                 <td style="padding:7px 8px;text-align:right;font-weight:700;color:{{ 'var(--brand-600)' if c.vrij >= 0 else '#dc2626' }};">{{ "{:,.1f}".format(c.vrij) }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="6" style="padding:16px 8px;color:var(--gray-300);">Nog geen data.</td></tr>
+            <tr><td colspan="6" style="padding:16px 8px;color:var(--gray-300);">{{ vertaal('Nog geen data.') }}</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -1110,14 +1110,14 @@ def voorraad_beheer_pagina():
 
 <div class="vrd-2koloms" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
     <div class="vrd-kaart">
-        <div class="dg-kaart-titel" style="margin-bottom:10px;">Voorraad per locatie</div>
+        <div class="dg-kaart-titel" style="margin-bottom:10px;">{{ vertaal('Voorraad per locatie') }}</div>
         {% for loc, aantal in stock_per_locatie_lijst %}
         <div class="vrd-transactie" style="padding:7px 0;">
             <span>{{ loc }}</span>
             <b>{{ "{:,.1f}".format(aantal) }} ton</b>
         </div>
         {% else %}
-        <div style="color:var(--gray-300);font-size:12.5px;">Nog geen locatiedata.</div>
+        <div style="color:var(--gray-300);font-size:12.5px;">{{ vertaal('Nog geen locatiedata.') }}</div>
         {% endfor %}
     </div>
     <div class="vrd-kaart">
@@ -1164,7 +1164,7 @@ def voorraad_beheer_pagina():
         {% if te_keuren_per_materiaal.get(naam) %}<div class="vrd-te-keuren">⏳ {{ "{:,.1f}".format(te_keuren_per_materiaal[naam]) }} ton te keuren</div>{% endif %}
     </div>
     {% else %}
-    <div class="lege-staat">Nog geen voorraadtransacties.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen voorraadtransacties.') }}</div>
     {% endfor %}
 </div>
 
@@ -1214,12 +1214,12 @@ def voorraad_beheer_pagina():
         <div class="form-rij-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <input type="text" name="transport" placeholder="Transport (Truck/Container/MSC)" value="{{ prefill.transport if prefill else '' }}">
             <select name="gekoppelde_shipment_id">
-                <option value="">Geen gekoppelde leg</option>
+                <option value="">{{ vertaal('Geen gekoppelde leg') }}</option>
                 {% for s in alle_shipments_dropdown %}<option value="{{ s.id }}" {% if prefill and prefill.get("gekoppelde_shipment_id") == s.id %}selected{% endif %}>{{ s.referentie or s.id[:8] }} ({{ s.origin_land }} → {{ s.destination_land }})</option>{% endfor %}
             </select>
         </div>
         <select name="contract_id" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
-            <option value="">Geen contract koppelen</option>
+            <option value="">{{ vertaal('Geen contract koppelen') }}</option>
             {% for c in alle_handelsorder_contracten %}<option value="{{ c.contractnummer }}">{{ c.contractnummer }} — {{ c.tegenpartij }} ({{ c.materiaal }}, {{ c.richting }})</option>{% endfor %}
         </select>
         <textarea name="notitie" placeholder="Notitie (optioneel)" rows="2"></textarea>
@@ -1229,7 +1229,7 @@ def voorraad_beheer_pagina():
 
 <div class="vrd-kaart" id="shipments" style="margin-bottom:24px;overflow-x:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-        <div class="dg-kaart-titel" style="margin-bottom:0;">Alle actieve shipments</div>
+        <div class="dg-kaart-titel" style="margin-bottom:0;">{{ vertaal('Alle actieve shipments') }}</div>
         <form method="GET" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
             <select name="filter_flow_type" onchange="this.form.submit()" style="padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;">
                 <option value="">Alle types</option>
@@ -1901,9 +1901,9 @@ def voorraad_mutaties_pagina():
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Voorraad Alblasserdam</span>
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Voorraad') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Voorraad') }} Alblasserdam</span>
 </div>
-<div class="page-title">Voorraad Alblasserdam</div>
+<div class="page-title">{{ vertaal('Voorraad') }} Alblasserdam</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Beginvoorraad + ontvangsten + productie/verwerking − uitgaand ± correcties = eindvoorraad.</p>
 
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
@@ -2063,9 +2063,9 @@ def voorraad_waardering_pagina():
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">Voorraad</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Voorraadwaardering</span>
+    <a href="/voorraad" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Voorraad') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Voorraadwaardering') }}</span>
 </div>
-<div class="page-title">Voorraadwaardering</div>
+<div class="page-title">{{ vertaal('Voorraadwaardering') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:16px;font-size:0.85rem;">Elk veld is direct te overschrijven. Standaardwaarden: ton uit de mutatiestaat, kostprijs als gewogen gemiddelde uit Handelsorders, marktprijs uit Marktprijzen.</p>
 
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
