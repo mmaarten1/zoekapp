@@ -21,7 +21,7 @@ from core import (
     shipment_hoeveelheid, render_simple_page, ENF_BEDRIJVEN, LANDEN,
     effectieve_afdeling, laad_weegbrug, laad_logistieke_orders, laad_transport_planning,
     laad_containers, vereist_afdeling_of_403, laad_handelsorders, laad_facturen, bepaal_factuur_status,
-    laad_layout_voorkeuren, laad_taken,
+    laad_layout_voorkeuren, laad_taken, vertaal,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -99,7 +99,7 @@ def _logistiek_dashboard():
     recente_weegrecords = sorted(alle_weegrecords, key=lambda r: r.get("aangemaakt",""), reverse=True)[:8]
 
     inhoud = """
-<div class="page-title">Dashboard — Logistiek</div>
+<div class="page-title">{{ vertaal('Dashboard') }} — {{ vertaal('Logistiek') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Overzicht specifiek voor Logistiek/Weegbrug — geen omzet- of margecijfers.</p>
 
 <style>
@@ -130,12 +130,12 @@ def _logistiek_dashboard():
 </div>
 
 {% if recente_weegrecords %}
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Recente weegrecords</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">{{ vertaal('Recente weegrecords') }}</div>
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="ld-tabel-kop">
-        <span style="width:110px;">Weegnummer</span>
-        <span style="width:100px;">Kenteken</span>
-        <span style="flex:1;">Leverancier</span>
+        <span style="width:110px;">{{ vertaal('Weegnummer') }}</span>
+        <span style="width:100px;">{{ vertaal('Kenteken') }}</span>
+        <span style="flex:1;">{{ vertaal('Leverancier') }}</span>
         <span style="width:160px;">Status</span>
     </div>
     {% for r in recente_weegrecords %}
@@ -233,7 +233,7 @@ def _backoffice_finance_dashboard():
     <a href="/certificeringen" style="font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;border:1px solid var(--gray-200);padding:7px 14px;border-radius:6px;">Certificeringen →</a>
 </div>
 
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Recent gekoppeld aan contract</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">{{ vertaal('Recent gekoppeld aan contract') }}</div>
 {% if recent_gekoppeld_bf %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     {% for o in recent_gekoppeld_bf %}
@@ -245,7 +245,7 @@ def _backoffice_finance_dashboard():
     {% endfor %}
 </div>
 {% else %}
-<div class="lege-staat">Nog geen leveringen aan een contract gekoppeld.</div>
+<div class="lege-staat">{{ vertaal('Nog geen leveringen aan een contract gekoppeld.') }}</div>
 {% endif %}
     """
     pagina = render_simple_page("Dashboard", "dashboard", inhoud)
@@ -610,7 +610,7 @@ def dashboard():
             <span class="db-hbar-getal">{{ "{:,.0f}".format(k[1]).replace(",", ".") }}t</span>
         </div>
         {% else %}
-        <div class="db-leeg">Nog geen goedgekeurde inkoop.</div>
+        <div class="db-leeg">{{ vertaal('Nog geen goedgekeurde inkoop.') }}</div>
         {% endfor %}
     </div>
     <div class="db-kol">
@@ -622,11 +622,11 @@ def dashboard():
             <span class="db-hbar-getal">€{{ "{:,.0f}".format(t.waarde).replace(",", ".") }}</span>
         </div>
         {% else %}
-        <div class="db-leeg">Nog geen accountmanagers of orders toegewezen.</div>
+        <div class="db-leeg">{{ vertaal('Nog geen accountmanagers of orders toegewezen.') }}</div>
         {% endfor %}
     </div>
     <div class="db-kol">
-        <div class="db-sectie-titel">Vraagt om aandacht</div>
+        <div class="db-sectie-titel">{{ vertaal('Vraagt om aandacht') }}</div>
         {% if aandacht_items %}
         {% for a in aandacht_items %}
         <a class="db-att-item" href="{{ a.url }}">
@@ -635,7 +635,7 @@ def dashboard():
         </a>
         {% endfor %}
         {% else %}
-        <div class="db-leeg">Niets dat aandacht vraagt.</div>
+        <div class="db-leeg">{{ vertaal('Niets dat aandacht vraagt.') }}</div>
         {% endif %}
     </div>
 </div>
@@ -643,7 +643,7 @@ def dashboard():
         "progressie_klanten": '''
 <div class="db-rij">
     <div class="db-kol">
-        <div class="db-sectie-titel">Progressie met bedrijven</div>
+        <div class="db-sectie-titel">{{ vertaal('Progressie met bedrijven') }}</div>
         {% for f in progressie_funnel %}
         <div class="db-hbar-rij">
             <span class="db-hbar-naam">{{ f.label }}</span>
@@ -653,14 +653,14 @@ def dashboard():
         {% endfor %}
     </div>
     <div class="db-kol">
-        <div class="db-sectie-titel">Topklanten</div>
+        <div class="db-sectie-titel">{{ vertaal('Topklanten') }}</div>
         {% for b in topklanten %}
         <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
             <span><span class="db-lijst-naam">{{ b.naam }}</span><br><span class="db-lijst-sub">{{ b.land }}</span></span>
             <span class="db-lijst-getal">{{ b.volume }} t/j</span>
         </a>
         {% else %}
-        <div class="db-leeg">Nog geen klanten.</div>
+        <div class="db-leeg">{{ vertaal('Nog geen klanten.') }}</div>
         {% endfor %}
     </div>
     <div class="db-kol">
@@ -671,11 +671,11 @@ def dashboard():
             <span class="db-lijst-getal">{% if k.dagen is not none %}{{ k.dagen }} dagen{% else %}nooit contact{% endif %}</span>
         </a>
         {% else %}
-        <div class="db-leeg">Alle klanten recent gesproken.</div>
+        <div class="db-leeg">{{ vertaal('Alle klanten recent gesproken.') }}</div>
         {% endfor %}
     </div>
     <div class="db-kol">
-        <div class="db-sectie-titel">Recent gekoppeld aan contract</div>
+        <div class="db-sectie-titel">{{ vertaal('Recent gekoppeld aan contract') }}</div>
         {% for o in recent_gekoppelde_contracten %}
         <a class="db-lijst-item" href="/logistiek/orders/{{ o.id }}">
             <span><span class="db-lijst-naam">{{ o.leverancier }}</span><br><span class="db-lijst-sub">{{ o.contract_referentie }} — {{ o.materiaal }}</span></span>
@@ -705,34 +705,34 @@ def dashboard():
         "leads_prijzen": '''
 <div class="db-rij">
     <div class="db-kol">
-        <div class="db-sectie-titel">Nieuwe leads</div>
+        <div class="db-sectie-titel">{{ vertaal('Nieuwe leads') }}</div>
         {% for b in nieuwe_leads_lijst %}
         <a class="db-lijst-item" href="/bedrijf/{{ b.naam|urlencode }}">
             <span><span class="db-lijst-naam">{{ b.naam }}</span><br><span class="db-lijst-sub">{{ b.land }}</span></span>
             <span class="db-lijst-getal">{{ b.volume|default("—", true) }} t/j</span>
         </a>
         {% else %}
-        <div class="db-leeg">Geen nieuwe leads zonder status.</div>
+        <div class="db-leeg">{{ vertaal('Geen nieuwe leads zonder status.') }}</div>
         {% endfor %}
     </div>
     <div class="db-kol">
-        <div class="db-sectie-titel">Marktprijzen</div>
+        <div class="db-sectie-titel">{{ vertaal('Marktprijzen') }}</div>
         {% for p in marktprijzen_recent %}
         <div class="db-lijst-item">
             <span class="db-lijst-naam">{{ p.materiaal }}</span>
             <span class="db-lijst-getal">€{{ "{:,.2f}".format(p.prijs_per_ton) }}/t</span>
         </div>
         {% else %}
-        <div class="db-leeg">Nog geen marktprijzen ingevoerd.</div>
+        <div class="db-leeg">{{ vertaal('Nog geen marktprijzen ingevoerd.') }}</div>
         {% endfor %}
     </div>
     <div class="db-kol">
-        <div class="db-sectie-titel">Transportkosten</div>
+        <div class="db-sectie-titel">{{ vertaal('Transportkosten') }}</div>
         {% if aantal_forwarders %}
         <div class="db-lijst-item"><span class="db-lijst-naam">Forwarders</span><span class="db-lijst-getal">{{ aantal_forwarders }}</span></div>
         <div class="db-lijst-item"><span class="db-lijst-naam">Steden gedekt</span><span class="db-lijst-getal">{{ aantal_transport_steden }}</span></div>
         {% else %}
-        <div class="db-leeg">Nog geen transportprijzen geimporteerd.</div>
+        <div class="db-leeg">{{ vertaal('Nog geen transportprijzen geimporteerd.') }}</div>
         {% endif %}
     </div>
 </div>
@@ -816,29 +816,29 @@ def dashboard():
         <div class="db-substaat">Stand van zaken, week {{ huidige_week }} · bijgewerkt vanochtend {{ bijgewerkt_tijd }}</div>
     </div>
     <div class="db-acties">
-        <a href="/dashboard" class="db-btn">Deze maand</a>
-        <a href="/export-csv" class="db-btn db-btn-primair">Rapport delen</a>
+        <a href="/dashboard" class="db-btn">{{ vertaal('Deze maand') }}</a>
+        <a href="/export-csv" class="db-btn db-btn-primair">{{ vertaal('Rapport delen') }}</a>
     </div>
 </div>
 
 <div class="db-kpi-rij">
     <div class="db-kpi">
-        <div class="db-kpi-label">Eigen klanten</div>
+        <div class="db-kpi-label">{{ vertaal('Eigen klanten') }}</div>
         <div class="db-kpi-getal">{{ "{:,}".format(eigen_klanten_aantal).replace(",", ".") }}</div>
         <div class="db-kpi-sub">gekoppeld als accountmanager</div>
     </div>
     <div class="db-kpi">
-        <div class="db-kpi-label">Gedekt volume</div>
+        <div class="db-kpi-label">{{ vertaal('Gedekt volume') }}</div>
         <div class="db-kpi-getal">{{ volume_totaal_label }}</div>
         <div class="db-kpi-sub">persoonlijk ingekocht deze maand</div>
     </div>
     <div class="db-kpi">
-        <div class="db-kpi-label">Actieve leads</div>
+        <div class="db-kpi-label">{{ vertaal('Actieve leads') }}</div>
         <div class="db-kpi-getal">{{ eigen_actieve_leads }}</div>
         <div class="db-kpi-sub">eigen leads, gekoppeld als accountmanager</div>
     </div>
     <div class="db-kpi">
-        <div class="db-kpi-label">Geplande orders</div>
+        <div class="db-kpi-label">{{ vertaal('Geplande orders') }}</div>
         <div class="db-kpi-getal">{{ geplande_orders_aantal }}</div>
         <div class="db-kpi-sub">eigen orders, nog concept</div>
     </div>
@@ -850,17 +850,17 @@ def dashboard():
         <div class="db-kpi-sub">eigen marge uit inkoop</div>
     </div>
     <div class="db-kpi">
-        <div class="db-kpi-label">Ton verkocht</div>
+        <div class="db-kpi-label">{{ vertaal('Ton verkocht') }}</div>
         <div class="db-kpi-getal">{{ "{:,.0f}".format(ton_verkocht_totaal).replace(",", ".") }}</div>
         <div class="db-kpi-sub">eigen, definitieve verkooporders</div>
     </div>
     <div class="db-kpi">
-        <div class="db-kpi-label">Gem. marge per ton</div>
+        <div class="db-kpi-label">{{ vertaal('Gem. marge per ton') }}</div>
         <div class="db-kpi-getal">€{{ "{:,.2f}".format(gemiddelde_marge_per_ton).replace(",", ".") }}</div>
         <div class="db-kpi-sub">gemiddeld dit jaar, eigen inkoop</div>
     </div>
     <div class="db-kpi">
-        <div class="db-kpi-label">Openstaande facturen</div>
+        <div class="db-kpi-label">{{ vertaal('Openstaande facturen') }}</div>
         <div class="db-kpi-getal">{{ lopende_orders_aantal }}</div>
         <div class="db-kpi-sub">te laat, bij eigen klanten</div>
     </div>
@@ -868,7 +868,7 @@ def dashboard():
 
 WIDGETS_HIER
 
-<div class="db-ph-titel">Nog te koppelen</div>
+<div class="db-ph-titel">{{ vertaal('Nog te koppelen') }}</div>
 <div class="db-ph-sub">Deze onderdelen staan klaar in het dashboard maar hebben nog geen datamodel — geen verzonnen cijfers, wel alvast de plek.</div>
 <div class="db-ph-grid">
     {% for p in placeholders %}
@@ -880,7 +880,7 @@ WIDGETS_HIER
     {% endfor %}
 </div>
 
-<div class="db-sectie-titel">Activiteit van het team</div>
+<div class="db-sectie-titel">{{ vertaal('Activiteit van het team') }}</div>
 {% if activiteit %}
 {% for a in activiteit %}
 <div class="db-act-item">
@@ -889,7 +889,7 @@ WIDGETS_HIER
 </div>
 {% endfor %}
 {% else %}
-<div class="db-leeg">Nog geen teamactiviteit.</div>
+<div class="db-leeg">{{ vertaal('Nog geen teamactiviteit.') }}</div>
 {% endif %}
     """
     inhoud = inhoud.replace("WIDGETS_HIER", widgets_html)
@@ -1220,18 +1220,18 @@ def inzichten():
 
         resultaat_html = render_template_string("""
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Omzet</div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">{{ vertaal('Omzet') }}</div>
     <a href="/inzichten/export/omzet?materiaal={{ gekozen_materiaal|urlencode }}&land={{ gekozen_land|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV exporteren</a>
 </div>
 <div class="ci-grid" style="margin-bottom:24px;">
     <div class="ci-kaart">
         <div class="ci-getal">€{{ "{:,.0f}".format(omzet_deze_maand).replace(",", ".") }}</div>
-        <div class="ci-label">Omzet deze maand</div>
+        <div class="ci-label">{{ vertaal('Omzet deze maand') }}</div>
         {% if omzet_verschil_pct is not none %}<div style="font-size:11.5px;color:{{ '#16a34a' if omzet_verschil_pct >= 0 else '#dc2626' }};margin-top:4px;">{{ '+' if omzet_verschil_pct >= 0 else '' }}{{ omzet_verschil_pct }}% t.o.v. vorige maand</div>{% endif %}
     </div>
     <div class="ci-kaart">
         <div class="ci-getal">€{{ "{:,.0f}".format(omzet_vorige_maand).replace(",", ".") }}</div>
-        <div class="ci-label">Omzet vorige maand</div>
+        <div class="ci-label">{{ vertaal('Omzet vorige maand') }}</div>
     </div>
     <div class="ci-kaart">
         <div class="ci-getal">{% if gem_verkoopprijs_per_ton %}€{{ gem_verkoopprijs_per_ton }}{% else %}—{% endif %}</div>
@@ -1240,7 +1240,7 @@ def inzichten():
 </div>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Volumeontwikkeling per maand</div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">{{ vertaal('Volumeontwikkeling per maand') }}</div>
     <a href="/inzichten/export/volumeontwikkeling?materiaal={{ gekozen_materiaal|urlencode }}&land={{ gekozen_land|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV exporteren</a>
 </div>
 <div style="margin-bottom:24px;height:180px;">
@@ -1354,7 +1354,7 @@ def inzichten():
 {% endif %}
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Gemiddeld laadgewicht per leverancier</div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">{{ vertaal('Gemiddeld laadgewicht per leverancier') }}</div>
     <a href="/inzichten/export/laadgewicht?materiaal={{ gekozen_materiaal|urlencode }}&land={{ gekozen_land|urlencode }}" style="font-size:11.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">↓ CSV</a>
 </div>
 {% if gem_laadgewicht_per_leverancier %}
@@ -1368,7 +1368,7 @@ def inzichten():
     {% endfor %}
 </div>
 {% else %}
-<div class="lege-staat">Geen weegrecords voor deze combinatie.</div>
+<div class="lege-staat">{{ vertaal('Geen weegrecords voor deze combinatie.') }}</div>
 {% endif %}
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -1387,7 +1387,7 @@ def inzichten():
     {% endfor %}
 </div>
 {% else %}
-<div class="lege-staat">Geen goedgekeurde inkoopcontracten voor deze combinatie.</div>
+<div class="lege-staat">{{ vertaal('Geen goedgekeurde inkoopcontracten voor deze combinatie.') }}</div>
 {% endif %}
         """, omzet_deze_maand=omzet_deze_maand, omzet_vorige_maand=omzet_vorige_maand,
              omzet_verschil_pct=omzet_verschil_pct, gem_verkoopprijs_per_ton=gem_verkoopprijs_per_ton,
@@ -1397,8 +1397,8 @@ def inzichten():
              contractvoortgang_lijst=contractvoortgang_lijst)
 
     inhoud = """
-<div class="page-title">Commerciële Inzichten</div>
-<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Kies materiaal en land om rapportages te zien.</p>
+<div class="page-title">{{ vertaal('Commerciële Inzichten') }}</div>
+<p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">{{ vertaal('Kies materiaal en land om rapportages te zien.') }}</p>
 
 <style>
 .ci-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
@@ -1409,18 +1409,18 @@ def inzichten():
 
 <form method="GET" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <select name="materiaal" required style="padding:8px 12px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-        <option value="">Materiaal kiezen...</option>
+        <option value="">{{ vertaal('Materiaal kiezen...') }}</option>
         {% for m in materiaal_opties %}<option value="{{ m }}" {% if gekozen_materiaal == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
     </select>
     <select name="land" required style="padding:8px 12px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
-        <option value="">Land kiezen...</option>
+        <option value="">{{ vertaal('Land kiezen...') }}</option>
         {% for land in landen_keuze %}<option value="{{ land }}" {% if gekozen_land == land %}selected{% endif %}>{{ land_labels[land] }}</option>{% endfor %}
     </select>
-    <button type="submit" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Tonen</button>
+    <button type="submit" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Tonen') }}</button>
 </form>
 
 {% if not gekozen_materiaal or not gekozen_land %}
-<div class="lege-staat">Kies hierboven een materiaal én land om de commerciële inzichten te zien.</div>
+<div class="lege-staat">{{ vertaal('Kies hierboven een materiaal én land om de commerciële inzichten te zien.') }}</div>
 {% else %}
 """ + resultaat_html + """
 {% endif %}

@@ -4573,7 +4573,7 @@ def financiele_inzichten():
     contract_vergelijking = _bereken_contractvergelijking_financieel()
 
     inhoud = """
-<div class="page-title">Financiële Inzichten</div>
+<div class="page-title">{{ vertaal('Financiële Inzichten') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Rapportages voor Finance — facturen, cashflow, nog te factureren.</p>
 
 <style>
@@ -4608,11 +4608,11 @@ def financiele_inzichten():
 </div>
 
 <div class="fi-sectie">
-    <div class="fi-kop">Nog te factureren orders</div>
+    <div class="fi-kop">{{ vertaal('Nog te factureren orders') }}</div>
     {% for o in nog_te_factureren %}
     <div class="fi-rij"><a href="/logistiek/orders/{{ o.id }}" style="flex:1;color:var(--brand-600);text-decoration:none;font-weight:600;">{{ o.ordernummer }}</a><span style="color:var(--gray-500);">{{ o.leverancier or '—' }}</span><span style="width:100px;text-align:right;color:var(--gray-600);">{{ o.werkelijke_hoeveelheid or '—' }}{% if o.werkelijke_hoeveelheid %} ton{% endif %}</span></div>
     {% else %}
-    <div class="fi-rij" style="color:var(--gray-300);">Niets openstaand.</div>
+    <div class="fi-rij" style="color:var(--gray-300);">{{ vertaal('Niets openstaand.') }}</div>
     {% endfor %}
 </div>
 
@@ -4665,7 +4665,7 @@ def financiele_inzichten():
         <span style="width:100px;text-align:right;font-weight:700;color:{{ '#16a34a' if c.verschil >= 0 else '#dc2626' }};">{{ '+' if c.verschil >= 0 else '' }}{{ c.verschil }}t</span>
     </div>
     {% else %}
-    <div class="fi-rij" style="color:var(--gray-300);">Geen contracten geregistreerd.</div>
+    <div class="fi-rij" style="color:var(--gray-300);">{{ vertaal('Geen contracten geregistreerd.') }}</div>
     {% endfor %}
 </div>
     """
