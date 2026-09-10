@@ -27,7 +27,7 @@ from core import (
     LOGISTIEKE_ORDER_STATUSSEN, laad_weegbrug, bewaar_weegbrug, WEEGBRUG_STATUS_BADGES,
     ENF_BEDRIJVEN, PAPIERFABRIEKEN, is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     laad_documenten, laad_orders, laad_shipments, bereken_voorraad_status, parse_hoeveelheid_getal, parse_ton_intern,
-    laad_handelsorders, laad_marktprijzen, laad_transport_planning, land_afkorting, mag_pagina_zien,
+    laad_handelsorders, laad_marktprijzen, laad_transport_planning, land_afkorting, mag_pagina_zien, vertaal,
 )
 
 logistieke_orders_bp = Blueprint("logistieke_orders", __name__)
@@ -537,12 +537,12 @@ def logistiek_planning_pagina():
         for sleutel, titel, _ in _toegestane_tabbladen
     )
 
-    inhoud = f"""
-<div class="page-title">Planning</div>
+    inhoud = """
+<div class="page-title">{{ vertaal('Planning') }}</div>
 <div style="display:flex;gap:4px;border-bottom:1px solid var(--gray-200);margin-bottom:16px;">
-    {_tabbladen_html}
+    """ + _tabbladen_html + """
 </div>
-{_tab_inhoud}
+""" + _tab_inhoud + """
     """
     pagina = render_simple_page("Planning", "logistiek_planning", inhoud)
     return render_template_string(pagina, **_tab_context)
@@ -583,7 +583,7 @@ def logistieke_orders_pagina():
     kpi_wacht_afhandeling = [o for o in alle_orders if o.get("status") == "Afhandeling"]
 
     inhoud = """
-<div class="page-title">Orders (logistiek)</div>
+<div class="page-title">{{ vertaal('Orders (logistiek)') }}</div>
 """ + _operaties_tabbladen_html("logistieke_orders") + """
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Volgt de fysieke aflevering van inkomende vrachten van order tot Finance-overdracht.</p>
 
@@ -690,7 +690,7 @@ def logistieke_order_nieuw():
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
     <a href="/logistiek/orders" style="color:var(--gray-400);text-decoration:none;">Orders (logistiek)</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw</span>
 </div>
-<div class="page-title">Nieuwe order aanmaken</div>
+<div class="page-title">{{ vertaal('Nieuwe order aanmaken') }}</div>
 
 <form method="POST" style="max-width:640px;">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
@@ -747,7 +747,7 @@ def logistieke_order_detail(order_id):
     orders = laad_logistieke_orders()
     order = next((o for o in orders if o["id"] == order_id), None)
     if not order:
-        pagina = render_simple_page("Niet gevonden", "logistieke_orders", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/logistiek/orders">Terug naar Orders</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "logistieke_orders", '<div class="page-title">' + vertaal("Order niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze order bestaat niet (meer).") + ' <a href="/logistiek/orders">' + vertaal("Terug naar Orders") + '</a></div>')
         return render_template_string(pagina), 404
 
     gekoppeld_weegrecord = None
@@ -937,9 +937,9 @@ def _operaties_tabbladen_html(actief):
     accountmanager (wel Orders, geen Live Operations/Afhandeling) ziet dus een
     kortere balk dan logistiek/weegbrug/backoffice."""
     _tabblad_config = [
-        ("live_operations", "/live-operations", "Live Operations"),
-        ("logistieke_orders", "/logistiek/orders", "Orders"),
-        ("afhandeling", "/logistiek/afhandeling", "Afhandeling"),
+        ("live_operations", "/live-operations", vertaal("Live Operaties")),
+        ("logistieke_orders", "/logistiek/orders", vertaal("Orders")),
+        ("afhandeling", "/logistiek/afhandeling", vertaal("Afhandeling")),
     ]
     _toegestaan = [(pagina_key, url, titel) for pagina_key, url, titel in _tabblad_config if mag_pagina_zien(pagina_key)]
     if len(_toegestaan) <= 1:
@@ -968,7 +968,7 @@ def afhandeling_pagina():
     afgehandeld = [o for o in alle_orders if o.get("status") in ("Gefactureerd", "Afgerond")]
 
     inhoud = """
-<div class="page-title">Afhandeling</div>
+<div class="page-title">{{ vertaal('Afhandeling') }}</div>
 """ + _operaties_tabbladen_html("afhandeling") + """
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Vrachten die fysiek zijn afgerond maar administratief nog verwerkt moeten worden — vóórdat ze naar Finance gaan.</p>
 
@@ -1107,7 +1107,7 @@ def live_operations_pagina():
     alle_statussen_voor_filter = sorted({r["status"] for r in rijen})
 
     inhoud = """
-<div class="page-title">Live Operations</div>
+<div class="page-title">{{ vertaal('Live Operaties') }}</div>
 """ + _operaties_tabbladen_html("live_operations") + """
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Control tower: alle inkomende vrachten in één overzicht — Weegbrug en Orders gecombineerd.</p>
 
@@ -1133,24 +1133,24 @@ def live_operations_pagina():
     <input type="text" name="materiaal" value="{{ f_materiaal }}" placeholder="Materiaal" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:100px;">
     <input type="text" name="ordernummer" value="{{ f_ordernummer }}" placeholder="Ordernr." style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:100px;">
     <select name="status" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;">
-        <option value="">Alle statussen</option>
+        <option value="">{{ vertaal('Alle statussen') }}</option>
         {% for st in alle_statussen_voor_filter %}<option value="{{ st }}" {% if f_status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
     </select>
     <input type="text" name="herkomst" value="{{ f_herkomst }}" placeholder="Herkomst" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:100px;">
     <input type="text" name="bestemming" value="{{ f_bestemming }}" placeholder="Bestemming" style="padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;font-family:inherit;width:100px;">
-    <button type="submit" style="padding:6px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;background:#fff;cursor:pointer;">Filteren</button>
+    <button type="submit" style="padding:6px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:11.5px;background:#fff;cursor:pointer;">{{ vertaal('Filteren') }}</button>
 </form>
 
 {% if getoond %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="lv-tabel-kop">
-        <span style="width:90px;">Datum</span>
-        <span style="width:110px;">Referentie</span>
-        <span style="flex:1;">Leverancier</span>
-        <span style="width:90px;">Kenteken</span>
-        <span style="flex:1;">Materiaal</span>
-        <span style="width:160px;">Status</span>
-        <span style="width:130px;">Contract</span>
+        <span style="width:90px;">{{ vertaal('Datum') }}</span>
+        <span style="width:110px;">{{ vertaal('Referentie') }}</span>
+        <span style="flex:1;">{{ vertaal('Leverancier') }}</span>
+        <span style="width:90px;">{{ vertaal('Kenteken') }}</span>
+        <span style="flex:1;">{{ vertaal('Materiaal') }}</span>
+        <span style="width:160px;">{{ vertaal('Status') }}</span>
+        <span style="width:130px;">{{ vertaal('Contract') }}</span>
     </div>
     {% for r in getoond %}
     <div class="lv-tabel-rij">
@@ -1525,7 +1525,7 @@ def logistieke_inzichten_pagina():
     ]
 
     inhoud = """
-<div class="page-title">Logistieke Inzichten</div>
+<div class="page-title">{{ vertaal('Logistieke Inzichten') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Operationele rapportages voor Logistiek — voorraad, vraag/aanbod, transportkosten.</p>
 
 <style>
@@ -1824,7 +1824,7 @@ def weegrecord_afhandelen(record_id):
     weegrecords = laad_weegbrug()
     record = next((r for r in weegrecords if r["id"] == record_id), None)
     if not record or record.get("status") != "Compleet":
-        pagina = render_simple_page("Niet beschikbaar", "live_operations", '<div class="page-title">Nog niet beschikbaar</div><div class="lege-staat">Deze weging is nog niet volledig afgerond (in- én uitgewogen). <a href="/live-operations">Terug naar Live Operaties</a></div>')
+        pagina = render_simple_page(vertaal("Nog niet beschikbaar"), "live_operations", '<div class="page-title">' + vertaal("Nog niet beschikbaar") + '</div><div class="lege-staat">' + vertaal("Deze weging is nog niet volledig afgerond (in- én uitgewogen).") + ' <a href="/live-operations">' + vertaal("Terug naar Live Operaties") + '</a></div>')
         return render_template_string(pagina), 404
 
     orders = laad_logistieke_orders()
@@ -2000,7 +2000,7 @@ def logistieke_order_koppel_contract(order_id):
     orders = laad_logistieke_orders()
     order = next((o for o in orders if o["id"] == order_id), None)
     if not order:
-        pagina = render_simple_page("Niet gevonden", "live_operations", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/live-operations">Terug naar Live Operaties</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "live_operations", '<div class="page-title">' + vertaal("Order niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze order bestaat niet (meer).") + ' <a href="/live-operations">' + vertaal("Terug naar Live Operaties") + '</a></div>')
         return render_template_string(pagina), 404
 
     passende_contracten, overige_contracten = _contract_opties_voor_order(order, alle_orders=orders)
