@@ -13,7 +13,7 @@ from flask import Blueprint, request, jsonify, render_template_string
 from core import (
     laad_materiaal_taxonomie, bewaar_materiaal_taxonomie, vereist_admin_of_403,
     render_simple_page, ENF_BEDRIJVEN, laad_accountmanagers, laad_cert_vervaldatums,
-    bewaar_cert_vervaldatums, _cert_sleutel, parse_hoeveelheid_getal, vereist_afdeling_of_403,
+    bewaar_cert_vervaldatums, _cert_sleutel, parse_hoeveelheid_getal, vereist_afdeling_of_403, vertaal,
 )
 
 materialen_bp = Blueprint("materialen", __name__)
@@ -82,14 +82,14 @@ def materialen_beheer():
 
     taxonomie = laad_materiaal_taxonomie()
     inhoud = """
-    <div class="page-title">Materialen beheren</div>
+    <div class="page-title">{{ vertaal('Materialen beheren') }}</div>
     <p style="color:var(--gray-400);font-size:0.85rem;margin-top:0;margin-bottom:20px;max-width:600px;">
         Deze grondstofgroepen en kwaliteiten gelden voor <b>alle</b> bedrijven in FTNext — pas je hier iets aan, dan zie je dat overal terug (zoekfilter, bedrijfsprofielen, fotomappen).
     </p>
     {% if bericht %}<div style="background:#f0fdf4;color:#16a34a;padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;max-width:600px;">{{ bericht }}</div>{% endif %}
 
     <div class="info-kaart" style="max-width:500px;margin-bottom:20px;">
-        <div class="dg-kaart-titel">Nieuwe grondstofgroep</div>
+        <div class="dg-kaart-titel">{{ vertaal('Nieuwe grondstofgroep') }}</div>
         <form method="POST" style="display:flex;gap:8px;">
             <input type="hidden" name="actie" value="categorie_toevoegen">
             <input type="text" name="categorie_naam" placeholder="bv. Textiel, Hout, E-waste..." required style="flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;font-family:inherit;">
@@ -119,7 +119,7 @@ def materialen_beheer():
                 </form>
             </span>
             {% else %}
-            <span style="font-size:0.78rem;color:var(--gray-300);">Nog geen kwaliteiten toegevoegd.</span>
+            <span style="font-size:0.78rem;color:var(--gray-300);">{{ vertaal('Nog geen kwaliteiten toegevoegd.') }}</span>
             {% endfor %}
         </div>
         <form method="POST" style="display:flex;gap:8px;">
@@ -190,7 +190,7 @@ def certificeringen_pagina():
 .cert-status.verlopen { border-color:#e6d3b8; background:#fdf6ea; color:#8a6320; }
 </style>
 
-<div class="page-title">Certifications</div>
+<div class="page-title">{{ vertaal('Certifications') }}</div>
 
 {% if cert_rijen %}
 <div class="kpi-mini-cert">
@@ -200,11 +200,11 @@ def certificeringen_pagina():
 </div>
 
 <div class="data-thead" style="border-radius:var(--radius-md) var(--radius-md) 0 0;">
-    <span style="flex:1.6;" data-sort="bedrijf">Bedrijf</span>
-    <span style="flex:1;" data-sort="certificaat">Certificaat</span>
-    <span style="flex:1;" data-sort="land">Land</span>
-    <span style="width:130px;" data-sort="geldig_tot">Geldig tot</span>
-    <span style="width:130px;" data-sort="status">Status</span>
+    <span style="flex:1.6;" data-sort="bedrijf">{{ vertaal('Bedrijf') }}</span>
+    <span style="flex:1;" data-sort="certificaat">{{ vertaal('Certificaat') }}</span>
+    <span style="flex:1;" data-sort="land">{{ vertaal('Land') }}</span>
+    <span style="width:130px;" data-sort="geldig_tot">{{ vertaal('Geldig tot') }}</span>
+    <span style="width:130px;" data-sort="status">{{ vertaal('Status') }}</span>
     <span style="width:120px;" data-sort="accountmanager">Accountmgr.</span>
 </div>
 <div id="certLijst" style="border:1px solid var(--gray-200);border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);overflow:hidden;">
@@ -301,16 +301,16 @@ def materialen():
         m["aandeel"] = f"{round(m['bedrijven'] / max_bedrijven * 100, 1) if max_bedrijven else 0}%"
 
     inhoud = """
-<div class="page-title">Materials</div>
+<div class="page-title">{{ vertaal('Materials') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Alle materialen en kwaliteiten in de database, met dekking en volume</p>
 
 <div class="data-thead" style="border-radius:var(--radius-md) var(--radius-md) 0 0;">
-    <span style="flex:1.4;" data-sort="naam">Materiaal</span>
-    <span style="flex:1.6;" data-sort="kwaliteiten">Kwaliteiten</span>
-    <span style="width:110px;text-align:right;" data-sort="bedrijven">Bedrijven</span>
+    <span style="flex:1.4;" data-sort="naam">{{ vertaal('Materiaal') }}</span>
+    <span style="flex:1.6;" data-sort="kwaliteiten">{{ vertaal('Kwaliteiten') }}</span>
+    <span style="width:110px;text-align:right;" data-sort="bedrijven">{{ vertaal('Bedrijven') }}</span>
     <span style="width:120px;text-align:right;" data-sort="volume">Volume t/j</span>
-    <span style="width:180px;">Aandeel</span>
-    <span style="width:80px;text-align:right;" data-sort="landen">Landen</span>
+    <span style="width:180px;">{{ vertaal('Aandeel') }}</span>
+    <span style="width:80px;text-align:right;" data-sort="landen">{{ vertaal('Landen') }}</span>
 </div>
 <div id="matLijst" style="border:1px solid var(--gray-200);border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);overflow:hidden;">
     {% for m in materialen_data %}

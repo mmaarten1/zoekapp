@@ -453,6 +453,19 @@ VERTALINGEN = {
     "Nog te factureren orders": {"en": "Orders still to be invoiced", "fr": "Commandes encore à facturer", "it": "Ordini ancora da fatturare", "es": "Pedidos aún por facturar"},
     "Niets openstaand.":     {"en": "Nothing outstanding.", "fr": "Rien en attente.", "it": "Niente in sospeso.", "es": "Nada pendiente."},
     "Geen contracten geregistreerd.": {"en": "No contracts registered.", "fr": "Aucun contrat enregistré.", "it": "Nessun contratto registrato.", "es": "No hay contratos registrados."},
+    # --- Materialen / Certificeringen ---
+    "Materialen beheren":    {"en": "Manage materials", "fr": "Gérer les matériaux", "it": "Gestisci materiali", "es": "Gestionar materiales"},
+    "Nieuwe grondstofgroep": {"en": "New material category", "fr": "Nouvelle catégorie de matériau", "it": "Nuova categoria di materiale", "es": "Nueva categoría de material"},
+    "Nog geen kwaliteiten toegevoegd.": {"en": "No qualities added yet.", "fr": "Aucune qualité ajoutée pour l'instant.", "it": "Ancora nessuna qualità aggiunta.", "es": "Aún no se han añadido calidades."},
+    "Certificaat":           {"en": "Certificate", "fr": "Certificat", "it": "Certificato", "es": "Certificado"},
+    "Geldig tot":            {"en": "Valid until", "fr": "Valide jusqu'au", "it": "Valido fino al", "es": "Válido hasta"},
+    "Materials":             {"en": "Materials", "fr": "Matériaux", "it": "Materiali", "es": "Materiales"},
+    "Bedrijven":             {"en": "Companies", "fr": "Entreprises", "it": "Aziende", "es": "Empresas"},
+    "Alleen admins kunnen gebruikers beheren. Vraag een admin om je rechten aan te passen.": {"en": "Only admins can manage users. Ask an admin to adjust your permissions.", "fr": "Seuls les administrateurs peuvent gérer les utilisateurs. Demandez à un administrateur d'ajuster vos droits.", "it": "Solo gli amministratori possono gestire gli utenti. Chiedi a un amministratore di modificare i tuoi permessi.", "es": "Solo los administradores pueden gestionar usuarios. Pide a un administrador que ajuste tus permisos."},
+    "Gebruikers beheren":    {"en": "Manage users", "fr": "Gérer les utilisateurs", "it": "Gestisci utenti", "es": "Gestionar usuarios"},
+    "Nieuwe gebruiker toevoegen": {"en": "Add new user", "fr": "Ajouter un nouvel utilisateur", "it": "Aggiungi nuovo utente", "es": "Añadir nuevo usuario"},
+    "Geen team":             {"en": "No team", "fr": "Aucune équipe", "it": "Nessun team", "es": "Sin equipo"},
+    "Geen toegangsrol":      {"en": "No access role", "fr": "Aucun rôle d'accès", "it": "Nessun ruolo di accesso", "es": "Sin rol de acceso"},
 }
 
 def huidige_taal():

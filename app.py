@@ -4980,7 +4980,7 @@ def layout_instellingen():
 @app.route("/gebruikers-beheer", methods=["GET", "POST"])
 def gebruikers_beheer():
     if not is_huidige_gebruiker_admin():
-        pagina = render_simple_page("Geen toegang", "instellingen", '<div class="page-title">Geen toegang</div><div class="lege-staat">Alleen admins kunnen gebruikers beheren. Vraag een admin om je rechten aan te passen.</div>')
+        pagina = render_simple_page(vertaal("Geen toegang"), "instellingen", '<div class="page-title">' + vertaal("Geen toegang") + '</div><div class="lege-staat">' + vertaal("Alleen admins kunnen gebruikers beheren. Vraag een admin om je rechten aan te passen.") + '</div>')
         return render_template_string(pagina), 403
 
     bericht = None
@@ -5047,14 +5047,14 @@ def gebruikers_beheer():
 
     users = laad_users()
     inhoud = """
-    <div class="page-title">Gebruikers beheren</div>
+    <div class="page-title">{{ vertaal('Gebruikers beheren') }}</div>
     <a href="/organisatie-beheer" style="display:inline-block;margin-bottom:16px;font-size:12.5px;font-weight:600;color:var(--brand-600);text-decoration:none;">Afdelingen &amp; Teams beheren →</a>
     {% if bericht %}<div style="background:{{ '#f0fdf4' if nieuw_wachtwoord or 'verwijderd' in bericht or 'nu' in bericht else '#fef2f2' }};color:{{ '#16a34a' if nieuw_wachtwoord or 'verwijderd' in bericht or 'nu' in bericht else '#dc2626' }};padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;">{{ bericht }}
         {% if nieuw_wachtwoord %}<br><b>Wachtwoord: <code style="background:#fff;padding:3px 8px;border-radius:4px;">{{ nieuw_wachtwoord }}</code></b><br><span style="font-size:12px;">Bewaar dit nu — dit wordt niet nogmaals getoond. Geef het handmatig door aan de gebruiker.</span>{% endif %}
     </div>{% endif %}
 
     <div class="info-kaart" style="max-width:420px;margin-bottom:20px;">
-        <div class="dg-kaart-titel">Nieuwe gebruiker toevoegen</div>
+        <div class="dg-kaart-titel">{{ vertaal('Nieuwe gebruiker toevoegen') }}</div>
         <form method="POST">
             <input type="hidden" name="actie" value="toevoegen">
             <input type="text" name="gebruikersnaam" placeholder="Gebruikersnaam (bv. leander)" required style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
@@ -5063,10 +5063,10 @@ def gebruikers_beheer():
                 {% for a in organisatiestructuur.keys() %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
             </select>
             <select name="team" id="org_team_select" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
-                <option value="">Geen team</option>
+                <option value="">{{ vertaal('Geen team') }}</option>
             </select>
             <select name="afdeling" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
-                <option value="">Geen toegangsrol</option>
+                <option value="">{{ vertaal('Geen toegangsrol') }}</option>
                 {% for a in afdelingen %}<option value="{{ a }}">{{ afdeling_labels[a] }}</option>{% endfor %}
             </select>
             <select name="rol" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;">
@@ -5114,11 +5114,11 @@ def gebruikers_beheer():
                     {% for a in organisatiestructuur.keys() %}<option value="{{ a }}" {% if info.get("org_afdeling") == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
                 </select>
                 <select name="team" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
-                    <option value="">Geen team</option>
+                    <option value="">{{ vertaal('Geen team') }}</option>
                     {% for t in organisatiestructuur.get(info.get("org_afdeling",""), []) %}<option value="{{ t }}" {% if info.get("team") == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
                 </select>
                 <select name="afdeling" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
-                    <option value="">Geen toegangsrol</option>
+                    <option value="">{{ vertaal('Geen toegangsrol') }}</option>
                     {% for a in afdelingen %}<option value="{{ a }}" {% if info.get("afdeling") == a %}selected{% endif %}>{{ afdeling_labels[a] }}</option>{% endfor %}
                 </select>
                 <select name="rol" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
@@ -5133,7 +5133,7 @@ def gebruikers_beheer():
     function verversOrgTeamsVoorRij(afdelingSelect) {
         var teamSelect = afdelingSelect.parentElement.querySelector('select[name="team"]');
         var teams = ORGANISATIESTRUCTUUR[afdelingSelect.value] || [];
-        teamSelect.innerHTML = '<option value="">Geen team</option>';
+        teamSelect.innerHTML = '<option value="">{{ vertaal('Geen team') }}</option>';
         teams.forEach(function(t) {
             var optie = document.createElement("option");
             optie.value = t;
@@ -5147,7 +5147,7 @@ def gebruikers_beheer():
         var teamSelect = document.getElementById("org_team_select");
         if (!afdelingSelect || !teamSelect) return;
         var teams = ORGANISATIESTRUCTUUR[afdelingSelect.value] || [];
-        teamSelect.innerHTML = '<option value="">Geen team</option>';
+        teamSelect.innerHTML = '<option value="">{{ vertaal('Geen team') }}</option>';
         teams.forEach(function(t) {
             var optie = document.createElement("option");
             optie.value = t;
