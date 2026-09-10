@@ -30,7 +30,7 @@ from core import (
     laad_accountmanagers, laad_status, laad_materiaal_taxonomie, ENF_BEDRIJVEN,
     is_huidige_gebruiker_admin, vereist_afdeling_of_403, render_simple_page,
     parse_hoeveelheid_getal, laad_logistieke_orders, bewaar_logistieke_orders,
-    DOCUMENTEN_MAP, laad_documenten, bewaar_documenten, laad_bedrijfslogo_instelling, LOGO_MAP,
+    DOCUMENTEN_MAP, laad_documenten, bewaar_documenten, laad_bedrijfslogo_instelling, LOGO_MAP, vertaal,
     laad_meldingen, bewaar_meldingen,
 )
 
@@ -112,7 +112,7 @@ def weegbrug_pagina():
     kpi_probleem = [r for r in alle_records if r.get("status") == "Probleem"]
 
     inhoud = """
-<div class="page-title">Weegbrug</div>
+<div class="page-title">{{ vertaal('Weegbrug') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">In- en uitwegen van vrachtwagens.</p>
 
 <style>
@@ -128,24 +128,24 @@ def weegbrug_pagina():
 </style>
 
 <div class="dg-grid" style="margin-bottom:24px;">
-    <div class="dg-kaart"><div class="dg-getal">{{ voertuigen_op_locatie|length }}</div><div class="dg-label">Nu op locatie</div></div>
-    <div class="dg-kaart"><div class="dg-getal">{{ opdrachten_klaar_voor_wegen|length }}</div><div class="dg-label">Klaar om in te wegen</div></div>
-    <div class="dg-kaart"><div class="dg-getal">{{ kpi_vandaag|length }}</div><div class="dg-label">Vandaag</div></div>
-    <div class="dg-kaart"><div class="dg-getal">{{ kpi_compleet_vandaag|length }}</div><div class="dg-label">Compleet vandaag</div></div>
-    <div class="dg-kaart"><div class="dg-getal" style="{% if kpi_probleem %}color:#dc2626;{% endif %}">{{ kpi_probleem|length }}</div><div class="dg-label">Afwijkingen</div></div>
+    <div class="dg-kaart"><div class="dg-getal">{{ voertuigen_op_locatie|length }}</div><div class="dg-label">{{ vertaal('Nu op locatie') }}</div></div>
+    <div class="dg-kaart"><div class="dg-getal">{{ opdrachten_klaar_voor_wegen|length }}</div><div class="dg-label">{{ vertaal('Klaar om in te wegen') }}</div></div>
+    <div class="dg-kaart"><div class="dg-getal">{{ kpi_vandaag|length }}</div><div class="dg-label">{{ vertaal('Vandaag') }}</div></div>
+    <div class="dg-kaart"><div class="dg-getal">{{ kpi_compleet_vandaag|length }}</div><div class="dg-label">{{ vertaal('Compleet vandaag') }}</div></div>
+    <div class="dg-kaart"><div class="dg-getal" style="{% if kpi_probleem %}color:#dc2626;{% endif %}">{{ kpi_probleem|length }}</div><div class="dg-label">{{ vertaal('Afwijkingen') }}</div></div>
 </div>
 
-<a href="/weegbrug/opdracht" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:9px 18px;border-radius:6px;">Nieuwe weegopdracht</a>
+<a href="/weegbrug/opdracht" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:9px 18px;border-radius:6px;">{{ vertaal('Nieuwe weegopdracht') }}</a>
 
 {% if voertuigen_op_locatie or opdrachten_klaar_voor_wegen %}
-<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Actie vereist</div>
+<div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">{{ vertaal('Actie vereist') }}</div>
 <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:24px;">
     {% for r in opdrachten_klaar_voor_wegen %}
     <a href="/weegbrug/inwegen/{{ r.id }}" style="display:flex;align-items:center;gap:14px;background:transparent;border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);padding:10px 4px;text-decoration:none;color:inherit;">
         <span style="font-weight:700;color:var(--gray-800);font-family:var(--font-mono);width:100px;">{{ r.kenteken or "—" }}</span>
         <span style="color:var(--gray-600);flex:1;">{{ r.leverancier or '—' }} — {{ r.materiaal or '—' }}</span>
         <span style="color:var(--gray-400);font-size:11.5px;">{{ r.weegnummer }}</span>
-        <span style="color:var(--brand-600);font-weight:700;font-size:12px;">Inwegen</span>
+        <span style="color:var(--brand-600);font-weight:700;font-size:12px;">{{ vertaal('Inwegen') }}</span>
     </a>
     {% endfor %}
     {% for r in voertuigen_op_locatie %}
@@ -153,7 +153,7 @@ def weegbrug_pagina():
         <span style="font-weight:700;color:var(--gray-800);font-family:var(--font-mono);width:100px;">{{ r.kenteken }}</span>
         <span style="color:var(--gray-600);flex:1;">{{ r.leverancier or '—' }} — {{ r.materiaal or '—' }}</span>
         <span style="color:var(--gray-400);font-size:11.5px;">{{ r.weegnummer }}</span>
-        <span style="color:var(--brand-600);font-weight:700;font-size:12px;">Uitwegen</span>
+        <span style="color:var(--brand-600);font-weight:700;font-size:12px;">{{ vertaal('Uitwegen') }}</span>
     </a>
     {% endfor %}
 </div>
@@ -161,27 +161,27 @@ def weegbrug_pagina():
 
 <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
     <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle statussen</option>
+        <option value="">{{ vertaal('Alle statussen') }}</option>
         {% for st in statussen %}<option value="{{ st }}" {% if filter_status == st %}selected{% endif %}>{{ badges[st].kort }}</option>{% endfor %}
     </select>
     <input type="text" name="filter_weegnummer" value="{{ filter_weegnummer }}" placeholder="Zoek op weegnummer" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
     <input type="date" name="filter_datum" value="{{ filter_datum }}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
     <input type="text" name="filter_leverancier" value="{{ filter_leverancier }}" placeholder="Zoek op leverancier" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
     <input type="text" name="kenteken" value="{{ filter_kenteken }}" placeholder="Zoek op kenteken" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;">
-    <button type="submit" style="padding:7px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;background:#fff;cursor:pointer;">Filteren</button>
-    {% if filter_status or filter_weegnummer or filter_datum or filter_leverancier or filter_kenteken %}<a href="/weegbrug" style="padding:7px 14px;font-size:12.5px;color:var(--gray-400);text-decoration:none;align-self:center;">Wissen</a>{% endif %}
+    <button type="submit" style="padding:7px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;background:#fff;cursor:pointer;">{{ vertaal('Filteren') }}</button>
+    {% if filter_status or filter_weegnummer or filter_datum or filter_leverancier or filter_kenteken %}<a href="/weegbrug" style="padding:7px 14px;font-size:12.5px;color:var(--gray-400);text-decoration:none;align-self:center;">{{ vertaal('Wissen') }}</a>{% endif %}
 </form>
 
 {% if getoonde %}
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="wb-tabel-kop">
-        <span style="width:120px;">Datum weging</span>
-        <span style="width:110px;">Weegnummer</span>
-        <span style="width:100px;">Kenteken</span>
-        <span style="flex:1;">Leverancier</span>
-        <span style="flex:1;">Materiaal</span>
-        <span style="width:130px;text-align:right;">Netto</span>
-        <span style="width:140px;">Status</span>
+        <span style="width:120px;">{{ vertaal('Datum weging') }}</span>
+        <span style="width:110px;">{{ vertaal('Weegnummer') }}</span>
+        <span style="width:100px;">{{ vertaal('Kenteken') }}</span>
+        <span style="flex:1;">{{ vertaal('Leverancier') }}</span>
+        <span style="flex:1;">{{ vertaal('Materiaal') }}</span>
+        <span style="width:130px;text-align:right;">{{ vertaal('Netto') }}</span>
+        <span style="width:140px;">{{ vertaal('Status') }}</span>
         <span style="width:110px;"></span>
     </div>
     {% for r in getoonde %}
@@ -201,12 +201,12 @@ def weegbrug_pagina():
         </span>
         </a>
         <span style="width:110px;">
-            {% if r.status == "Opdracht" %}<a href="/weegbrug/inwegen/{{ r.id }}" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Inwegen</a>
-            {% elif r.status == "Ingewogen" %}<a href="/weegbrug/uitwegen/{{ r.id }}" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Uitwegen</a>
-            {% elif r.status == "Compleet" %}<a href="/weegbrug/weegbon/{{ r.id }}" target="_blank" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Weegbon</a>{% endif %}
+            {% if r.status == "Opdracht" %}<a href="/weegbrug/inwegen/{{ r.id }}" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">{{ vertaal('Inwegen') }}</a>
+            {% elif r.status == "Ingewogen" %}<a href="/weegbrug/uitwegen/{{ r.id }}" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">{{ vertaal('Uitwegen') }}</a>
+            {% elif r.status == "Compleet" %}<a href="/weegbrug/weegbon/{{ r.id }}" target="_blank" style="font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">{{ vertaal('Weegbon') }}</a>{% endif %}
             <form method="POST" action="/weegbrug/verwijderen" onsubmit="return confirm('Deze weging definitief verwijderen? Dit kan niet ongedaan gemaakt worden.');" style="display:inline;margin:0;margin-left:6px;">
                 <input type="hidden" name="record_id" value="{{ r.id }}">
-                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:11px;" title="Verwijderen">Verwijderen</button>
+                <button type="submit" style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:11px;" title="Verwijderen">{{ vertaal('Verwijderen') }}</button>
             </form>
         </span>
     </div>
@@ -214,10 +214,10 @@ def weegbrug_pagina():
 </div>
 <div style="padding:10px 4px;font-size:0.8rem;color:var(--gray-400);">{{ getoonde|length }} weegrecords</div>
 {% else %}
-<div class="lege-staat">Nog geen weegrecords.</div>
+<div class="lege-staat">{{ vertaal('Nog geen weegrecords.') }}</div>
 {% endif %}
     """
-    pagina = render_simple_page("Weegbrug", "weegbrug", inhoud)
+    pagina = render_simple_page(vertaal("Weegbrug"), "weegbrug", inhoud)
     return render_template_string(pagina, getoonde=getoonde, statussen=list(WEEGBRUG_STATUS_BADGES.keys()),
                                     badges=WEEGBRUG_STATUS_BADGES, filter_status=filter_status, filter_kenteken=filter_kenteken,
                                     filter_weegnummer=filter_weegnummer, filter_datum=filter_datum, filter_leverancier=filter_leverancier,
@@ -296,72 +296,72 @@ def weegbrug_opdracht():
 def _opdracht_formulier_html():
     return """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/weegbrug" style="color:var(--gray-400);text-decoration:none;">Weegbrug</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Weegopdracht</span>
+    <a href="/weegbrug" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Weegbrug') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Weegopdracht') }}</span>
 </div>
-<div class="page-title">Nieuwe weegopdracht</div>
+<div class="page-title">{{ vertaal('Nieuwe weegopdracht') }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Stap 1 van 2 — leverancier, materiaal en kwaliteit. Het gewicht volgt in de volgende stap.</p>
 
 {% if fout %}<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;">{{ fout }}</div>{% endif %}
 
 <form method="POST" style="max-width:640px;">
     <div style="margin-bottom:12px;">
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Leverancier *</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Leverancier') }} *</label>
         <input type="text" name="leverancier" list="leveranciers_datalist" required autocomplete="off" placeholder="Begin te typen..." value="{{ vi_leverancier|default('') }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         <datalist id="leveranciers_datalist">{% for naam in leverancier_namen %}<option value="{{ naam }}">{% endfor %}</datalist>
         <div style="font-size:10.5px;color:var(--gray-300);margin-top:2px;">Alleen bestaande, erkende leveranciers. Nieuwe leverancier? Vraag Backoffice.</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Materiaal *</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Materiaal') }} *</label>
             <input type="text" name="materiaal" id="materiaal_input" list="materiaal_datalist" required autocomplete="off" placeholder="Begin te typen..." oninput="verversKwaliteiten()" value="{{ vi_materiaal|default('') }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
             <datalist id="materiaal_datalist">{% for m in materiaal_namen %}<option value="{{ m }}">{% endfor %}</datalist>
         </div>
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Kwaliteit *</label>
-            <input type="text" name="kwaliteit" id="kwaliteit_input" list="kwaliteit_datalist" required autocomplete="off" placeholder="Kies eerst materiaal..." value="{{ vi_kwaliteit|default('') }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Kwaliteit') }} *</label>
+            <input type="text" name="kwaliteit" id="kwaliteit_input" list="kwaliteit_datalist" required autocomplete="off" placeholder="{{ vertaal('Kies eerst materiaal...') }}" value="{{ vi_kwaliteit|default('') }}" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
             <datalist id="kwaliteit_datalist"></datalist>
         </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Kenteken</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Kenteken') }}</label>
             <input type="text" name="kenteken" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;text-transform:uppercase;font-family:inherit;">
         </div>
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Ordernummer</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Ordernummer') }}</label>
             <input type="text" name="ordernummer" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Chauffeur</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Chauffeur') }}</label>
             <input type="text" name="chauffeur" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Transporteur</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Transporteur') }}</label>
             <input type="text" name="transporteur" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Herkomst</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Herkomst') }}</label>
             <input type="text" name="herkomst" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
         <div>
-            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bestemming</label>
+            <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Bestemming') }}</label>
             <input type="text" name="bestemming" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
         </div>
     </div>
     <div style="margin-bottom:12px;">
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Referentienummer leverancier</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Referentienummer leverancier') }}</label>
         <input type="text" name="referentienummer_leverancier" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
     </div>
     <div style="margin-bottom:18px;">
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Opmerkingen</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Opmerkingen') }}</label>
         <textarea name="opmerkingen" rows="2" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;"></textarea>
     </div>
-    <button type="submit" style="padding:10px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Verder naar inwegen</button>
-    <a href="/weegbrug" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+    <button type="submit" style="padding:10px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Verder naar inwegen') }}</button>
+    <a href="/weegbrug" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">{{ vertaal('Annuleren') }}</a>
 </form>
 
 <script>
@@ -396,7 +396,7 @@ def weegbrug_inwegen(record_id):
     records = laad_weegbrug()
     record = next((r for r in records if r["id"] == record_id), None)
     if not record:
-        pagina = render_simple_page("Niet gevonden", "weegbrug", '<div class="page-title">Weegopdracht niet gevonden</div><div class="lege-staat">Deze weegopdracht bestaat niet (meer). <a href="/weegbrug">Terug naar Weegbrug</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "weegbrug", '<div class="page-title">' + vertaal("Weegopdracht niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze weegopdracht bestaat niet (meer).") + ' <a href="/weegbrug">' + vertaal("Terug naar Weegbrug") + '</a></div>')
         return render_template_string(pagina), 404
 
     if request.method == "POST":
@@ -427,7 +427,7 @@ def weegbrug_inwegen(record_id):
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/weegbrug" style="color:var(--gray-400);text-decoration:none;">Weegbrug</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Inwegen</span>
+    <a href="/weegbrug" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Weegbrug') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Inwegen') }}</span>
 </div>
 <div class="page-title">Inwegen — {{ record.weegnummer }}</div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Stap 2 van 2.</p>
@@ -439,16 +439,16 @@ def weegbrug_inwegen(record_id):
 
 <form method="POST" style="max-width:400px;">
     {% if not record.kenteken %}
-    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Kenteken</label>
+    <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Kenteken') }}</label>
     <input type="text" name="kenteken" style="width:100%;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;text-transform:uppercase;margin-bottom:16px;font-family:inherit;">
     {% endif %}
     <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Bruto gewicht (kg) *</label>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
         <input type="text" name="bruto_gewicht" id="bruto_veld" required autofocus style="flex:1;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-        <button type="button" onclick="alert('De koppeling met de weegbrug is nog niet actief. Vul het gewicht voorlopig handmatig in.'); document.getElementById('herkomst_veld').value='weegbrug';" style="padding:9px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12px;background:#fff;color:var(--gray-500);cursor:pointer;white-space:nowrap;">Ophalen van weegbrug</button>
+        <button type="button" onclick="alert('De koppeling met de weegbrug is nog niet actief. Vul het gewicht voorlopig handmatig in.'); document.getElementById('herkomst_veld').value='weegbrug';" style="padding:9px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12px;background:#fff;color:var(--gray-500);cursor:pointer;white-space:nowrap;">{{ vertaal('Ophalen van weegbrug') }}</button>
     </div>
     <input type="hidden" name="herkomst_bron" id="herkomst_veld" value="handmatig">
-    <button type="submit" style="padding:10px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Inwegen registreren</button>
+    <button type="submit" style="padding:10px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Inwegen registreren') }}</button>
     <a href="/weegbrug" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
 </form>
     """
@@ -463,7 +463,7 @@ def weegbrug_uitwegen(record_id):
     records = laad_weegbrug()
     record = next((r for r in records if r["id"] == record_id), None)
     if not record:
-        pagina = render_simple_page("Niet gevonden", "weegbrug", '<div class="page-title">Weegrecord niet gevonden</div><div class="lege-staat">Dit weegrecord bestaat niet (meer). <a href="/weegbrug">Terug naar Weegbrug</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "weegbrug", '<div class="page-title">' + vertaal("Weegrecord niet gevonden") + '</div><div class="lege-staat">' + vertaal("Dit weegrecord bestaat niet (meer).") + ' <a href="/weegbrug">' + vertaal("Terug naar Weegbrug") + '</a></div>')
         return render_template_string(pagina), 404
 
     if request.method == "POST":
@@ -507,7 +507,7 @@ def weegbrug_uitwegen(record_id):
 
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/weegbrug" style="color:var(--gray-400);text-decoration:none;">Weegbrug</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Uitwegen</span>
+    <a href="/weegbrug" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Weegbrug') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Uitwegen') }}</span>
 </div>
 <div class="page-title">Uitwegen — {{ record.weegnummer }}</div>
 
@@ -521,10 +521,10 @@ def weegbrug_uitwegen(record_id):
     <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Tarra gewicht (kg, leeggewicht bij vertrek) *</label>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
         <input type="text" name="tarra_gewicht" required autofocus style="flex:1;padding:9px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-        <button type="button" onclick="alert('De koppeling met de weegbrug is nog niet actief. Vul het gewicht voorlopig handmatig in.'); document.getElementById('herkomst_veld_uit').value='weegbrug';" style="padding:9px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12px;background:#fff;color:var(--gray-500);cursor:pointer;white-space:nowrap;">Ophalen van weegbrug</button>
+        <button type="button" onclick="alert('De koppeling met de weegbrug is nog niet actief. Vul het gewicht voorlopig handmatig in.'); document.getElementById('herkomst_veld_uit').value='weegbrug';" style="padding:9px 14px;border:1px solid var(--gray-200);border-radius:6px;font-size:12px;background:#fff;color:var(--gray-500);cursor:pointer;white-space:nowrap;">{{ vertaal('Ophalen van weegbrug') }}</button>
     </div>
     <input type="hidden" name="herkomst_bron" id="herkomst_veld_uit" value="handmatig">
-    <button type="submit" style="padding:10px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Uitwegen registreren</button>
+    <button type="submit" style="padding:10px 22px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Uitwegen registreren') }}</button>
     <a href="/weegbrug" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
 </form>
     """
@@ -541,7 +541,7 @@ def weegbrug_detail(record_id):
     records = laad_weegbrug()
     record = next((r for r in records if r["id"] == record_id), None)
     if not record:
-        pagina = render_simple_page("Niet gevonden", "weegbrug", '<div class="page-title">Weegrecord niet gevonden</div><div class="lege-staat">Dit weegrecord bestaat niet (meer). <a href="/weegbrug">Terug naar Weegbrug</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "weegbrug", '<div class="page-title">' + vertaal("Weegrecord niet gevonden") + '</div><div class="lege-staat">' + vertaal("Dit weegrecord bestaat niet (meer).") + ' <a href="/weegbrug">' + vertaal("Terug naar Weegbrug") + '</a></div>')
         return render_template_string(pagina), 404
 
     inhoud = """
@@ -575,7 +575,7 @@ def weegbrug_detail(record_id):
 
 <div style="flex:1;min-width:280px;">
     <div style="background:var(--gray-50);border-radius:8px;padding:16px 18px;font-size:12.5px;color:var(--gray-600);">
-        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Weging</div>
+        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ vertaal('Weging') }}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div><b>Bruto:</b> {{ record.bruto_gewicht or '—' }}{% if record.bruto_gewicht %} kg{% endif %}</div>
             <div><b>Tarra:</b> {{ record.tarra_gewicht or '—' }}{% if record.tarra_gewicht %} kg{% endif %}</div>
@@ -598,12 +598,12 @@ def weegbrug_detail(record_id):
     {% if record.status in ("Opdracht", "Ingewogen") %}
     <form method="POST" action="/weegbrug/annuleren" onsubmit="return confirm('Deze weegopdracht annuleren?');" style="margin:0;">
         <input type="hidden" name="record_id" value="{{ record.id }}">
-        <button type="submit" style="padding:9px 16px;background:#fff;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;font-size:13px;cursor:pointer;">Annuleren</button>
+        <button type="submit" style="padding:9px 16px;background:#fff;color:var(--gray-500);border:1px solid var(--gray-200);border-radius:6px;font-size:13px;cursor:pointer;">{{ vertaal('Annuleren') }}</button>
     </form>
     {% endif %}
     <form method="POST" action="/weegbrug/verwijderen" onsubmit="return confirm('Deze weging definitief verwijderen? Dit kan niet ongedaan gemaakt worden.');" style="margin:0;">
         <input type="hidden" name="record_id" value="{{ record.id }}">
-        <button type="submit" style="padding:9px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:13px;cursor:pointer;">Verwijderen</button>
+        <button type="submit" style="padding:9px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:13px;cursor:pointer;">{{ vertaal('Verwijderen') }}</button>
     </form>
 </div>
     """
@@ -721,7 +721,7 @@ def weegbrug_weegbon(record_id):
     records = laad_weegbrug()
     record = next((r for r in records if r["id"] == record_id), None)
     if not record or record.get("status") != "Compleet":
-        pagina = render_simple_page("Weegbon niet beschikbaar", "weegbrug", '<div class="page-title">Weegbon nog niet beschikbaar</div><div class="lege-staat">Deze weegbon kan pas gegenereerd worden zodra het voertuig volledig in- én uitgewogen is. <a href="/weegbrug">Terug naar Weegbrug</a></div>')
+        pagina = render_simple_page(vertaal("Weegbon nog niet beschikbaar"), "weegbrug", '<div class="page-title">' + vertaal("Weegbon nog niet beschikbaar") + '</div><div class="lege-staat">' + vertaal("Deze weegbon kan pas gegenereerd worden zodra het voertuig volledig in- én uitgewogen is.") + ' <a href="/weegbrug">' + vertaal("Terug naar Weegbrug") + '</a></div>')
         return render_template_string(pagina), 404
 
     pdf_bytes = _genereer_weegbon_pdf(record)
