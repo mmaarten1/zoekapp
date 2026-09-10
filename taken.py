@@ -23,7 +23,7 @@ from flask import Blueprint, request, session, redirect, url_for, render_templat
 
 from core import (
     laad_taken, bewaar_taken, TAAK_STATUSSEN, laad_users, laad_organisatiestructuur,
-    render_simple_page, is_huidige_gebruiker_admin,
+    render_simple_page, is_huidige_gebruiker_admin, vertaal,
 )
 
 taken_bp = Blueprint("taken", __name__)
@@ -64,7 +64,7 @@ def taken_pagina():
 
     inhoud = """
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-    <div class="page-title" style="margin-bottom:0;">Mijn takenlijst</div>
+    <div class="page-title" style="margin-bottom:0;">{{ vertaal('Mijn takenlijst') }}</div>
     <a href="/taken/nieuw" style="padding:8px 16px;background:var(--brand-600);color:#fff;text-decoration:none;border-radius:6px;font-size:12.5px;font-weight:700;">+ Taak toevoegen</a>
 </div>
 <p style="color:var(--gray-400);margin-top:0;margin-bottom:20px;font-size:0.85rem;">Persoonlijke taken, teamtaken (iedereen in je team kan ze aannemen) en gedeelde taken (van je teamgenoten, ter info).</p>
@@ -85,7 +85,7 @@ def taken_pagina():
             </div>
         </a>
         {% else %}
-        <div style="font-size:11.5px;color:var(--gray-300);padding:8px 0;">Geen taken.</div>
+        <div style="font-size:11.5px;color:var(--gray-300);padding:8px 0;">{{ vertaal('Geen taken.') }}</div>
         {% endfor %}
     </div>
     {% endfor %}
@@ -132,13 +132,13 @@ def taken_nieuw():
     alle_users = laad_users()
     inhoud = """
 <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-    <a href="/taken" style="color:var(--gray-400);text-decoration:none;">Takenlijst</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">Nieuw</span>
+    <a href="/taken" style="color:var(--gray-400);text-decoration:none;">{{ vertaal('Takenlijst') }}</a> &nbsp;/&nbsp; <span style="color:var(--gray-600);">{{ vertaal('Nieuw') }}</span>
 </div>
-<div class="page-title">Taak toevoegen</div>
+<div class="page-title">{{ vertaal('Taak toevoegen') }}</div>
 
 <form method="POST" style="max-width:520px;">
     <div style="margin-bottom:10px;">
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Titel</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Titel') }}</label>
         <input type="text" name="titel" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
     </div>
     <div style="margin-bottom:10px;">
@@ -150,7 +150,7 @@ def taken_nieuw():
         <input type="date" name="vervaldatum" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
     </div>
 
-    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Voor wie</div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ vertaal('Voor wie') }}</div>
     <div style="margin-bottom:10px;display:flex;gap:14px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;">
             <input type="radio" name="toewijzing_type" value="persoonlijk" checked onchange="wisselToewijzing()"> Persoonlijk
@@ -164,7 +164,7 @@ def taken_nieuw():
     </div>
 
     <div id="persoonlijk_blok" style="margin-bottom:16px;">
-        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Toewijzen aan</label>
+        <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Toewijzen aan') }}</label>
         <select name="toegewezen_aan_gebruiker" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
             <option value="">Mezelf ({{ eigen_gebruikersnaam }})</option>
             {% for gnaam in alle_users.keys() %}{% if gnaam != eigen_gebruikersnaam %}<option value="{{ gnaam }}">{{ gnaam }}</option>{% endif %}{% endfor %}
@@ -173,14 +173,14 @@ def taken_nieuw():
     <div id="team_blok" style="display:none;margin-bottom:16px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div>
-                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Afdeling</label>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Afdeling') }}</label>
                 <select name="toegewezen_aan_org_afdeling" id="taak_org_afdeling_select" onchange="verversTaakTeams()" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
                     <option value="">— kies —</option>
                     {% for a in organisatiestructuur.keys() %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
                 </select>
             </div>
             <div>
-                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">Team</label>
+                <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;">{{ vertaal('Team') }}</label>
                 <select name="toegewezen_aan_team" id="taak_team_select" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;">
                     <option value="">— kies eerst een afdeling —</option>
                 </select>
@@ -188,8 +188,8 @@ def taken_nieuw():
         </div>
     </div>
 
-    <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Taak aanmaken</button>
-    <a href="/taken" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">Annuleren</a>
+    <button type="submit" style="padding:9px 20px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Taak aanmaken') }}</button>
+    <a href="/taken" style="margin-left:10px;font-size:12.5px;color:var(--gray-400);text-decoration:none;">{{ vertaal('Annuleren') }}</a>
 </form>
 
 <script>
@@ -222,13 +222,13 @@ def taken_detail(taak_id):
     taken = laad_taken()
     taak = next((t for t in taken if t["id"] == taak_id), None)
     if not taak:
-        pagina = render_simple_page("Niet gevonden", "taken", '<div class="page-title">Taak niet gevonden</div><div class="lege-staat">Deze taak bestaat niet (meer). <a href="/taken">Terug naar de takenlijst</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "taken", '<div class="page-title">' + vertaal("Taak niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze taak bestaat niet (meer).") + ' <a href="/taken">' + vertaal("Terug naar de takenlijst") + '</a></div>')
         return render_template_string(pagina), 404
 
     gebruikersnaam = session.get("gebruikersnaam", "")
     eigen_org_afdeling, eigen_team = _eigen_team()
     if not _taak_zichtbaar_voor_mij(taak, gebruikersnaam, eigen_org_afdeling, eigen_team):
-        pagina = render_simple_page("Geen toegang", "taken", '<div class="page-title">Geen toegang</div><div class="lege-staat">Deze taak is niet voor jou of je team. <a href="/taken">Terug naar de takenlijst</a></div>')
+        pagina = render_simple_page(vertaal("Geen toegang"), "taken", '<div class="page-title">' + vertaal("Geen toegang") + '</div><div class="lege-staat">' + vertaal("Deze taak is niet voor jou of je team.") + ' <a href="/taken">' + vertaal("Terug naar de takenlijst") + '</a></div>')
         return render_template_string(pagina), 403
 
     # Wat kan ik met deze taak: een team-taak (nog niemand toegewezen) kan
@@ -258,7 +258,7 @@ def taken_detail(taak_id):
 
     {% if mag_aannemen %}
     <form method="POST" action="/taken/{{ taak.id }}/aannemen" style="margin-bottom:10px;">
-        <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Taak aannemen</button>
+        <button type="submit" style="padding:9px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Taak aannemen') }}</button>
     </form>
     {% endif %}
 

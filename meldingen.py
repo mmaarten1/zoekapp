@@ -10,7 +10,7 @@ import uuid
 import datetime
 from flask import Blueprint, request, session, jsonify, render_template_string
 
-from core import laad_meldingen, bewaar_meldingen, render_simple_page
+from core import laad_meldingen, bewaar_meldingen, render_simple_page, vertaal
 
 meldingen_bp = Blueprint("meldingen", __name__)
 
@@ -81,7 +81,7 @@ def meldingen_overzicht():
     aantal_ongelezen = sum(1 for m in van_mij if not m.get("gelezen"))
 
     inhoud = """
-    <div class="page-title">Meldingen</div>
+    <div class="page-title">{{ vertaal('Meldingen') }}</div>
     {% if aantal_ongelezen > 0 %}
     <button onclick="alleMeldingenGelezen()" style="padding:6px 14px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:12.5px;margin-top:0;margin-bottom:16px;">Alles gelezen markeren ({{ aantal_ongelezen }})</button>
     <script>
@@ -102,7 +102,7 @@ def meldingen_overzicht():
         {% endfor %}
     </div>
     {% else %}
-    <div class="lege-staat">Nog geen meldingen.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen meldingen.') }}</div>
     {% endif %}
     """
     pagina = render_simple_page("Meldingen", "instellingen", inhoud)

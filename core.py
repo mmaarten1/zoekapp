@@ -370,6 +370,35 @@ VERTALINGEN = {
     "Gebruiker":             {"en": "User", "fr": "Utilisateur", "it": "Utente", "es": "Usuario"},
     "Nog geen materiaal met definitieve orders bij Alblasserdam.": {"en": "No material with definitive orders at Alblasserdam yet.", "fr": "Pas encore de matériau avec des commandes définitives à Alblasserdam.", "it": "Ancora nessun materiale con ordini definitivi ad Alblasserdam.", "es": "Aún no hay material con pedidos definitivos en Alblasserdam."},
     "Voorraadwaardering":    {"en": "Inventory valuation", "fr": "Évaluation des stocks", "it": "Valutazione del magazzino", "es": "Valoración de inventario"},
+    # --- Notities ---
+    "Notities":              {"en": "Notes", "fr": "Notes", "it": "Note", "es": "Notas"},
+    "Nieuwe teamnotitie":    {"en": "New team note", "fr": "Nouvelle note d'équipe", "it": "Nuova nota del team", "es": "Nueva nota de equipo"},
+    "Leverancier kiezen...": {"en": "Choose supplier...", "fr": "Choisir un fournisseur...", "it": "Scegli fornitore...", "es": "Elegir proveedor..."},
+    "Klant kiezen...":       {"en": "Choose customer...", "fr": "Choisir un client...", "it": "Scegli cliente...", "es": "Elegir cliente..."},
+    "Afdeling kiezen...":    {"en": "Choose department...", "fr": "Choisir un département...", "it": "Scegli reparto...", "es": "Elegir departamento..."},
+    "Team kiezen...":        {"en": "Choose team...", "fr": "Choisir une équipe...", "it": "Scegli team...", "es": "Elegir equipo..."},
+    "Persoon kiezen...":     {"en": "Choose person...", "fr": "Choisir une personne...", "it": "Scegli persona...", "es": "Elegir persona..."},
+    "Notitie toevoegen":     {"en": "Add note", "fr": "Ajouter une note", "it": "Aggiungi nota", "es": "Añadir nota"},
+    "Nog geen teamnotities.": {"en": "No team notes yet.", "fr": "Aucune note d'équipe pour l'instant.", "it": "Ancora nessuna nota del team.", "es": "Aún no hay notas de equipo."},
+    "Afdeling":              {"en": "Department", "fr": "Département", "it": "Reparto", "es": "Departamento"},
+    "Persoon":               {"en": "Person", "fr": "Personne", "it": "Persona", "es": "Persona"},
+    # --- Takenlijst ---
+    "Mijn takenlijst":       {"en": "My task list", "fr": "Ma liste de tâches", "it": "La mia lista di attività", "es": "Mi lista de tareas"},
+    "Geen taken.":           {"en": "No tasks.", "fr": "Aucune tâche.", "it": "Nessuna attività.", "es": "Sin tareas."},
+    "Takenlijst":            {"en": "Task list", "fr": "Liste de tâches", "it": "Elenco attività", "es": "Lista de tareas"},
+    "Taak toevoegen":        {"en": "Add task", "fr": "Ajouter une tâche", "it": "Aggiungi attività", "es": "Añadir tarea"},
+    "Titel":                 {"en": "Title", "fr": "Titre", "it": "Titolo", "es": "Título"},
+    "Voor wie":              {"en": "For whom", "fr": "Pour qui", "it": "Per chi", "es": "Para quién"},
+    "Toewijzen aan":         {"en": "Assign to", "fr": "Assigner à", "it": "Assegna a", "es": "Asignar a"},
+    "Taak aanmaken":         {"en": "Create task", "fr": "Créer une tâche", "it": "Crea attività", "es": "Crear tarea"},
+    "Taak niet gevonden":    {"en": "Task not found", "fr": "Tâche introuvable", "it": "Attività non trovata", "es": "Tarea no encontrada"},
+    "Deze taak bestaat niet (meer).": {"en": "This task no longer exists.", "fr": "Cette tâche n'existe plus.", "it": "Questa attività non esiste più.", "es": "Esta tarea ya no existe."},
+    "Terug naar de takenlijst": {"en": "Back to the task list", "fr": "Retour à la liste de tâches", "it": "Torna all'elenco attività", "es": "Volver a la lista de tareas"},
+    "Deze taak is niet voor jou of je team.": {"en": "This task is not for you or your team.", "fr": "Cette tâche n'est pas pour vous ou votre équipe.", "it": "Questa attività non è per te o il tuo team.", "es": "Esta tarea no es para ti ni para tu equipo."},
+    "Taak aannemen":         {"en": "Accept task", "fr": "Accepter la tâche", "it": "Accetta attività", "es": "Aceptar tarea"},
+    # --- Meldingen ---
+    "Meldingen":             {"en": "Notifications", "fr": "Notifications", "it": "Notifiche", "es": "Notificaciones"},
+    "Nog geen meldingen.":   {"en": "No notifications yet.", "fr": "Aucune notification pour l'instant.", "it": "Ancora nessuna notifica.", "es": "Aún no hay notificaciones."},
 }
 
 def huidige_taal():

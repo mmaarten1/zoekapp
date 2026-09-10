@@ -14,7 +14,7 @@ from flask import Blueprint, request, session, jsonify, render_template_string, 
 from core import (
     get_user_id, laad_notities, bewaar_notities, laad_accountmanagers,
     laad_meldingen, bewaar_meldingen, is_huidige_gebruiker_admin, render_simple_page,
-    ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_users, AFDELINGEN, FOTOS_MAP,
+    ENF_BEDRIJVEN, PAPIERFABRIEKEN, laad_status, laad_users, AFDELINGEN, FOTOS_MAP, vertaal,
 )
 
 notities_bp = Blueprint("notities", __name__)
@@ -181,16 +181,16 @@ def notities_overzicht():
     persoon_namen = sorted(laad_users().keys())
 
     inhoud = """
-    <div class="page-title">Notities</div>
+    <div class="page-title">{{ vertaal('Notities') }}</div>
 
     <div id="notitieKnopRij" style="margin-bottom:24px;">
-        <button type="button" onclick="document.getElementById('notitieKnopRij').style.display='none'; document.getElementById('notitieFormulier').style.display='block';" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">+ Notitie toevoegen</button>
+        <button type="button" onclick="document.getElementById('notitieKnopRij').style.display='none'; document.getElementById('notitieFormulier').style.display='block';" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">+ {{ vertaal('Notitie toevoegen') }}</button>
     </div>
     <div id="notitieFormulier" style="display:none;max-width:560px;margin-bottom:24px;background:var(--gray-50);border-radius:10px;padding:16px;">
-        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Nieuwe teamnotitie</div>
+        <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">{{ vertaal('Nieuwe teamnotitie') }}</div>
         <form method="POST" enctype="multipart/form-data">
             <div style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;">
-                {% for waarde, label in [("leverancier","Leverancier"),("klant","Klant"),("afdeling","Afdeling"),("team","Team"),("persoon","Persoon")] %}
+                {% for waarde, label in [("leverancier",vertaal("Leverancier")),("klant",vertaal("Klant")),("afdeling",vertaal("Afdeling")),("team",vertaal("Team")),("persoon",vertaal("Persoon"))] %}
                 <label style="font-size:12px;padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;">
                     <input type="radio" name="entiteit_type" value="{{ waarde }}" onchange="wisselEntiteitType('{{ waarde }}')" {% if loop.first %}checked{% endif %} style="margin-right:4px;">{{ label }}
                 </label>
@@ -198,23 +198,23 @@ def notities_overzicht():
             </div>
             <div style="margin-bottom:10px;">
                 <select name="entiteit_naam" id="entiteit_select_leverancier" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-                    <option value="">Leverancier kiezen...</option>
+                    <option value="">{{ vertaal('Leverancier kiezen...') }}</option>
                     {% for naam in leverancier_namen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
                 </select>
                 <select name="entiteit_naam" id="entiteit_select_klant" disabled style="display:none;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-                    <option value="">Klant kiezen...</option>
+                    <option value="">{{ vertaal('Klant kiezen...') }}</option>
                     {% for naam in klant_namen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
                 </select>
                 <select name="entiteit_naam" id="entiteit_select_afdeling" disabled style="display:none;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-                    <option value="">Afdeling kiezen...</option>
+                    <option value="">{{ vertaal('Afdeling kiezen...') }}</option>
                     {% for naam in afdeling_namen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
                 </select>
                 <select name="entiteit_naam" id="entiteit_select_team" disabled style="display:none;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-                    <option value="">Team kiezen...</option>
+                    <option value="">{{ vertaal('Team kiezen...') }}</option>
                     {% for naam in team_namen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
                 </select>
                 <select name="entiteit_naam" id="entiteit_select_persoon" disabled style="display:none;width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;">
-                    <option value="">Persoon kiezen...</option>
+                    <option value="">{{ vertaal('Persoon kiezen...') }}</option>
                     {% for naam in persoon_namen %}<option value="{{ naam }}">{{ naam }}</option>{% endfor %}
                 </select>
                 {% if not leverancier_namen %}<div style="font-size:11px;color:var(--gray-400);margin-top:4px;">Nog geen bedrijven met status 'leverancier' — zet die status bij Klanten/Leveranciers.</div>{% endif %}
@@ -226,8 +226,8 @@ def notities_overzicht():
                 <label style="font-size:11.5px;color:var(--gray-500);font-weight:600;display:block;margin-bottom:4px;">Foto (optioneel)</label>
                 <input type="file" name="foto" accept="image/*" style="font-size:12.5px;">
             </div>
-            <button type="submit" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Notitie toevoegen</button>
-            <button type="button" onclick="document.getElementById('notitieFormulier').style.display='none'; document.getElementById('notitieKnopRij').style.display='block';" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:12.5px;margin-left:8px;">Annuleren</button>
+            <button type="submit" style="padding:8px 18px;background:var(--brand-600);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">{{ vertaal('Notitie toevoegen') }}</button>
+            <button type="button" onclick="document.getElementById('notitieFormulier').style.display='none'; document.getElementById('notitieKnopRij').style.display='block';" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:12.5px;margin-left:8px;">{{ vertaal('Annuleren') }}</button>
         </form>
     </div>
     <script>
@@ -260,7 +260,7 @@ def notities_overzicht():
         {% endfor %}
     </div>
     {% else %}
-    <div class="lege-staat">Nog geen teamnotities.</div>
+    <div class="lege-staat">{{ vertaal('Nog geen teamnotities.') }}</div>
     {% endif %}
     """
     pagina = render_simple_page("Notities", "notities", inhoud)
