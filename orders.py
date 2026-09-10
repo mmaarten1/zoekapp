@@ -14,7 +14,7 @@ from core import (
     laad_orders, bewaar_orders, laad_accountmanagers, laad_meldingen, bewaar_meldingen,
     laad_marktprijzen, bewaar_marktprijzen, parse_hoeveelheid_getal, laad_shipments,
     laad_status, laad_materiaal_taxonomie, render_simple_page,
-    ORDER_STATUSSEN, ORDER_KLEUREN, vereist_afdeling_of_403, laad_handelsorders,
+    ORDER_STATUSSEN, ORDER_KLEUREN, vereist_afdeling_of_403, laad_handelsorders, vertaal,
 )
 
 orders_bp = Blueprint("orders", __name__)
@@ -238,7 +238,7 @@ def orders_pagina():
 .kpi-mini .getal { font-size:1.4rem; font-weight:800; color:var(--brand-600); }
 .kpi-mini .label { font-size:0.75rem; color:var(--gray-400); }
 </style>
-<div class="page-title">Orders</div>
+<div class="page-title">{{ vertaal('Orders') }}</div>
 
 <div style="font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Overzicht — alle orders</div>
 <style>
@@ -262,8 +262,8 @@ def orders_pagina():
 <a href="/handelsorders/nieuw" style="display:inline-block;margin-bottom:20px;font-size:12.5px;font-weight:700;color:#fff;background:var(--brand-600);text-decoration:none;padding:9px 18px;border-radius:6px;">+ Nieuwe order</a>
 
 <div class="oo-tabs">
-    <button type="button" class="oo-tab actief" onclick="wisselIndeling('am')" id="tab_am">Per accountmanager</button>
-    <button type="button" class="oo-tab" onclick="wisselIndeling('be')" id="tab_be">Per bedrijfseenheid</button>
+    <button type="button" class="oo-tab actief" onclick="wisselIndeling('am')" id="tab_am">{{ vertaal('Per accountmanager') }}</button>
+    <button type="button" class="oo-tab" onclick="wisselIndeling('be')" id="tab_be">{{ vertaal('Per bedrijfseenheid') }}</button>
 </div>
 
 <div id="indeling_am" style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);margin-bottom:32px;">
@@ -315,15 +315,15 @@ function wisselIndeling(welke) {
 <form method="GET" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
     <a href="/orders?filter_verantwoordelijke={{ gebruikersnaam }}" style="padding:6px 12px;border-radius:6px;font-size:12.5px;font-weight:600;text-decoration:none;{% if filter_verantwoordelijke == gebruikersnaam %}background:var(--brand-600);color:#fff;{% else %}background:var(--brand-50);color:var(--brand-700);{% endif %}">🙋 Mijn orders</a>
     <select name="filter_status" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle statussen</option>
+        <option value="">{{ vertaal('Alle statussen') }}</option>
         {% for s in statussen %}<option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
     </select>
     <select name="filter_materiaal" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Alle materialen</option>
+        <option value="">{{ vertaal('Alle materialen') }}</option>
         {% for m in alle_materialen_in_orders %}<option value="{{ m }}" {% if filter_materiaal == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
     </select>
     <select name="filter_verantwoordelijke" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:12.5px;">
-        <option value="">Iedereen</option>
+        <option value="">{{ vertaal('Iedereen') }}</option>
         {% for v in alle_verantwoordelijken %}<option value="{{ v }}" {% if filter_verantwoordelijke == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
     </select>
     {% if filter_status or filter_materiaal or filter_verantwoordelijke %}<a href="/orders" style="font-size:12px;color:var(--gray-400);text-decoration:none;">Wis filters</a>{% endif %}
@@ -335,10 +335,10 @@ function wisselIndeling(welke) {
 <div style="border:none;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
     <div class="data-thead">
         <span style="flex:1.6;">Bedrijf &amp; materiaal</span>
-        <span style="width:110px;text-align:right;">Waarde</span>
-        <span style="width:100px;">Verwacht</span>
-        <span style="width:150px;">Status</span>
-        <span style="width:100px;">Verantw.</span>
+        <span style="width:110px;text-align:right;">{{ vertaal('Waarde') }}</span>
+        <span style="width:100px;">{{ vertaal('Verwacht') }}</span>
+        <span style="width:150px;">{{ vertaal('Status') }}</span>
+        <span style="width:100px;">{{ vertaal('Verantw.') }}</span>
     </div>
     {% for o in getoonde_orders %}
     <a href="/orders/{{ o.id }}" class="data-row">
@@ -381,7 +381,7 @@ def order_detail(order_id):
     alle_orders = laad_orders()
     order = next((o for o in alle_orders if o["id"] == order_id), None)
     if not order:
-        pagina = render_simple_page("Niet gevonden", "orders", '<div class="page-title">Order niet gevonden</div><div class="lege-staat">Deze order bestaat niet (meer). <a href="/orders">Terug naar Orders</a></div>')
+        pagina = render_simple_page(vertaal("Niet gevonden"), "orders", '<div class="page-title">' + vertaal("Order niet gevonden") + '</div><div class="lege-staat">' + vertaal("Deze order bestaat niet (meer).") + ' <a href="/orders">' + vertaal("Terug naar Orders") + '</a></div>')
         return render_template_string(pagina), 404
 
     if request.method == "POST":
@@ -469,7 +469,7 @@ def order_detail(order_id):
 
 <form method="POST" onsubmit="return confirm('Deze order definitief verwijderen?');">
     <input type="hidden" name="actie" value="verwijderen">
-    <button type="submit" style="padding:8px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:12.5px;cursor:pointer;">Verwijderen</button>
+    <button type="submit" style="padding:8px 16px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:12.5px;cursor:pointer;">{{ vertaal('Verwijderen') }}</button>
 </form>
     """
     pagina = render_simple_page(order["bedrijf"], "orders", inhoud)

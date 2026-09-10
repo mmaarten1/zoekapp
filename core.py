@@ -487,6 +487,14 @@ VERTALINGEN = {
     "Commerciële instellingen": {"en": "Commercial settings", "fr": "Paramètres commerciaux", "it": "Impostazioni commerciali", "es": "Configuración comercial"},
     "Nog niets toegevoegd.": {"en": "Nothing added yet.", "fr": "Rien n'a encore été ajouté.", "it": "Non è stato ancora aggiunto nulla.", "es": "Aún no se ha añadido nada."},
     "Eigen bedrijfsgegevens": {"en": "Own company details", "fr": "Coordonnées de l'entreprise", "it": "Dati aziendali propri", "es": "Datos propios de la empresa"},
+    # --- Orders (algemeen) / Wereldkaart ---
+    "Per accountmanager":    {"en": "Per account manager", "fr": "Par chargé de compte", "it": "Per account manager", "es": "Por gestor de cuentas"},
+    "Per bedrijfseenheid":   {"en": "Per business unit", "fr": "Par unité commerciale", "it": "Per unità aziendale", "es": "Por unidad de negocio"},
+    "Iedereen":              {"en": "Everyone", "fr": "Tout le monde", "it": "Tutti", "es": "Todos"},
+    "Waarde":                {"en": "Value", "fr": "Valeur", "it": "Valore", "es": "Valor"},
+    "Verwacht":              {"en": "Expected", "fr": "Prévu", "it": "Previsto", "es": "Previsto"},
+    "Verantw.":              {"en": "Owner", "fr": "Responsable", "it": "Responsabile", "es": "Responsable"},
+    "Zichtbaar op kaart":    {"en": "Visible on map", "fr": "Visible sur la carte", "it": "Visibile sulla mappa", "es": "Visible en el mapa"},
 }
 
 def huidige_taal():

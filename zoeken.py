@@ -2450,16 +2450,16 @@ def wereldkaart():
     <aside class="wk-filters">
         <div class="filters-title" style="margin-bottom:14px;">🎚️ Filters</div>
         <div class="filter-group">
-            <label class="filter-label">Land</label>
+            <label class="filter-label">{{ vertaal('Land') }}</label>
             <select class="filter-select" id="wkLand" onchange="wkFilter()">
-                <option value="">Alle landen</option>
+                <option value="">{{ vertaal('Alle landen') }}</option>
                 {% for l in landen %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
             </select>
         </div>
         <div class="filter-group">
-            <label class="filter-label">Materiaal</label>
+            <label class="filter-label">{{ vertaal('Materiaal') }}</label>
             <select class="filter-select" id="wkMateriaal" onchange="wkFilter()">
-                <option value="">Alle materialen</option>
+                <option value="">{{ vertaal('Alle materialen') }}</option>
                 <option value="Paper">Paper</option>
                 <option value="Plastic">Plastic</option>
                 <option value="Metal">Metal</option>
@@ -2469,16 +2469,16 @@ def wereldkaart():
             </select>
         </div>
         <div class="filter-group">
-            <label class="filter-label">Status</label>
+            <label class="filter-label">{{ vertaal('Status') }}</label>
             <select class="filter-select" id="wkStatus" onchange="wkFilter()">
-                <option value="">Alle statussen</option>
-                <option value="klant">🟢 Klant</option>
-                <option value="potentie">🟡 Potentie</option>
-                <option value="in_proces">🔵 In Proces</option>
+                <option value="">{{ vertaal('Alle statussen') }}</option>
+                <option value="klant">🟢 {{ vertaal('Klant') }}</option>
+                <option value="potentie">🟡 {{ vertaal('Potentie') }}</option>
+                <option value="in_proces">🔵 {{ vertaal('In Proces') }}</option>
             </select>
         </div>
         <hr class="filter-divider">
-        <div class="wk-stat">Zichtbaar op kaart<strong id="wkAantal">0</strong></div>
+        <div class="wk-stat">{{ vertaal('Zichtbaar op kaart') }}<strong id="wkAantal">0</strong></div>
         <div class="wk-stat">Totaal bedrijven<strong>{{ kaart_data|length }}</strong></div>
         <hr class="filter-divider">
         <div class="wk-legenda"><span class="stip" style="background:#22c55e;"></span> Klant</div>
